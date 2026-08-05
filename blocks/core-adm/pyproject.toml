@@ -2,7 +2,7 @@
 name = "vai-core-adm"
 version = "0.1.0"
 description = "CORE-ADM — 운영 콘솔 (블록 상태·라이선스 현황·감사 조회)"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "vai-contracts",
     "vai-common",

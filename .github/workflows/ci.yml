@@ -32,6 +32,8 @@ jobs:
           enable-cache: true
 
       - name: 의존성 설치
+        # 인터프리터는 .python-version 한 곳에서만 정한다. uv가 그것을 읽으므로
+        # 여기에 버전을 또 적지 않는다 — 두 번 적으면 두 번째가 언젠가 어긋난다.
         run: uv sync --all-packages
 
       - name: 린트 · 포맷

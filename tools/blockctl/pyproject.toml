@@ -2,7 +2,7 @@
 name = "blockctl"
 version = "0.1.0"
 description = "블록 매니페스트 검증·스캐폴딩 CLI"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = ["vai-contracts", "pyyaml>=6.0", "typer>=0.12"]
 
 [project.scripts]

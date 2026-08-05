@@ -2,7 +2,7 @@
 name = "evalctl"
 version = "0.1.0"
 description = "골든셋 평가 하네스 — 검색·PII·TTS 품질을 수치로 고정한다"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "vai-contracts",
     "vai-retrieval",
