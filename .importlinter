@@ -1,0 +1,57 @@
+; 블록 경계 강제 — docs/06 §2 "블록 간 코드 import 금지".
+;
+; 이 규칙이 없으면 레고블록은 문서상의 약속일 뿐이다. 블록 하나를 떼어
+; 단독 판매하거나 교체할 수 있으려면, 다른 블록의 내부를 import 하지 않는다는
+; 것이 기계적으로 보장되어야 한다.
+
+[importlinter]
+include_external_packages = True
+root_packages =
+    vai_contracts
+    vai_common
+    vai_core_bus
+    vai_core_gw
+    vai_aud_vad
+    vai_stt_core
+    blockctl
+
+[importlinter:contract:block-independence]
+name = 블록은 서로를 import 하지 않는다 (공유는 계약/공통 라이브러리로만)
+type = independence
+modules =
+    vai_core_bus
+    vai_core_gw
+    vai_aud_vad
+    vai_stt_core
+
+[importlinter:contract:layers]
+name = 계층 방향: 블록 → 공통 → 계약 (역방향 금지)
+type = layers
+layers =
+    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | blockctl
+    vai_common
+    vai_contracts
+
+; Model-Agnostic Abstraction(사양서 §1)의 기계적 보증.
+; 워커가 특정 엔진 모듈을 직접 알면 "엔진 코드를 고치지 않고 교체"가 성립하지 않는다.
+; 서비스 로직은 오직 ABC와 레지스트리만 본다.
+[importlinter:contract:engine-agnostic-workers]
+name = 서비스 로직은 구체 엔진 어댑터를 직접 import 하지 않는다
+type = forbidden
+; 레지스트리를 경유하는 간접 참조는 정상이다(레지스트리가 엔진을 아는 것이 그 역할).
+; 금지 대상은 서비스 로직이 엔진을 '직접' 붙잡는 것뿐이다.
+allow_indirect_imports = True
+source_modules =
+    vai_aud_vad.worker
+    vai_aud_vad.segmenter
+    vai_aud_vad.main
+    vai_stt_core.worker
+    vai_stt_core.main
+forbidden_modules =
+    vai_aud_vad.adapters.silero
+    vai_aud_vad.adapters.energy
+    vai_stt_core.adapters.faster_whisper
+    vai_stt_core.adapters.fake
+    torch
+    faster_whisper
+    silero_vad

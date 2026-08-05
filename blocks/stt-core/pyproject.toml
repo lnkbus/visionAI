@@ -1,0 +1,16 @@
+[project]
+name = "vai-stt-core"
+version = "0.1.0"
+description = "STT-CORE — STT 모델 추상화 레이어"
+requires-python = ">=3.11"
+dependencies = ["vai-contracts", "vai-common", "numpy>=1.26"]
+
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vai_stt_core"]

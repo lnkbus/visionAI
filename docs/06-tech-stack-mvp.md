@@ -4,7 +4,7 @@
 
 | 계층 | 선정 | 비고 |
 |------|------|------|
-| 언어/프레임워크 | **Python 3.12 + FastAPI** (asyncio) | 음성 스트리밍·AI 생태계 밀착 |
+| 언어/프레임워크 | **Python + FastAPI** (asyncio) — 코드는 3.11+ 지원, 컨테이너는 3.12 | 음성 스트리밍·AI 생태계 밀착. 고객사 기존 런타임(3.11)에도 얹을 수 있게 하한을 열어 둠 |
 | 오디오 인입 | SIP/RTP 게이트웨이(AICC), WebSocket/gRPC/파일(회의) | G.711/PCM 8k/16k |
 | VAD | **Silero VAD** + 200~500ms 청크 버퍼 | |
 | STT | **Faster-Whisper** (기본) / **Triton Server** (대규모 애드온) | BaseSTTAdapter 핫스왑 |
@@ -27,42 +27,63 @@
 
 ## 2. 모노레포 구조 (블록 = 최상위 단위)
 
+`✅` = 구현 완료(Wave 1~2), 나머지는 예정.
+
 ```
 visionAI/
 ├── blocks/                        # ★ 레고블록 — 1블록 = 1디렉토리 = 1이미지 = 1청구단위
-│   ├── core-bus/                  #   각 블록 내부 구조는 00 문서 §1 참조:
-│   ├── core-gw/                   #   src/ adapters/ contracts/ chart/ block.yaml tests/
-│   ├── core-lic/
-│   ├── core-sec/
-│   ├── core-adm/                  # (frontend 포함)
-│   ├── aud-rtp/
-│   ├── aud-ws/
-│   ├── aud-vad/
-│   ├── stt-core/
-│   ├── stt-trt/
-│   ├── spk-dia/
-│   ├── tts-core/
-│   ├── flt-micro/
-│   ├── rag-kb/
-│   ├── rag-srch/
-│   ├── ta-assist/
-│   ├── llm-gw/
-│   ├── llm-sum/
-│   ├── ui-agent/                  # Next.js
-│   ├── ui-meet/                   # Next.js
-│   ├── bot-voice/                 # (Wave 7)
-│   └── ava-counsel/               # (Wave 7)
+│   ├── core-bus/  ✅              #   블록 내부 구조:
+│   ├── core-gw/   ✅              #   src/ adapters/ contracts/ block.yaml tests/
+│   ├── aud-vad/   ✅
+│   ├── stt-core/  ✅
+│   ├── core-lic/                  # (Wave 6 — 게이트 인터페이스는 libs/common에 선구현)
+│   ├── core-sec/ · core-adm/      # (Wave 6)
+│   ├── aud-rtp/ · aud-ws/         # (Wave 4 / Wave 2 후속)
+│   ├── stt-trt/ · spk-dia/        # (Wave 4~5)
+│   ├── flt-micro/                 # (Wave 3)
+│   ├── rag-kb/ · rag-srch/ · ta-assist/ · llm-gw/ · llm-sum/   # (Wave 3~4)
+│   ├── ui-agent/ · ui-meet/       # (Wave 4~5, Next.js)
+│   └── bot-voice/ · ava-counsel/  # (Wave 7)
 ├── libs/
-│   ├── contracts/                 # 공유 이벤트/API 스키마 (Pydantic + AsyncAPI) — 블록 간 유일한 공유물
-│   ├── common/                    # 로깅·텔레메트리·설정·라이선스 클라이언트
-│   └── testing/                   # fake adapters (fake-stt, fake-llm), 오디오 fixture
-├── deploy/                        # 우산 차트, bundles/, airgap/, compose/ (03 문서)
+│   ├── contracts/ ✅              # 이벤트·프로토콜·매니페스트 스키마 — 블록 간 유일한 공유물
+│   └── common/    ✅              # 설정·로깅·이벤트 버스 클라이언트·라이선스 게이트·워커 골격
+├── deploy/
+│   ├── docker/    ✅              # 전 블록 공용 Dockerfile (BLOCK 인자로 대상 지정)
+│   ├── compose/   ✅              # PoC·데모용 단일 서버 구성
+│   ├── charts/ · bundles/ · airgap/   # (Wave 6 — 03 문서)
 ├── tools/
-│   ├── blockctl/                  # 블록 스캐폴딩·검증 CLI (block.yaml lint, 계약 호환성 체크)
-│   └── licgen/                    # .lic 발급기 (사내용)
+│   ├── blockctl/  ✅              # 블록 매니페스트 검증·카탈로그 CLI
+│   └── licgen/                    # .lic 발급기 (Wave 6, 사내용)
+├── tests/         ✅              # 블록 조립 통합 테스트 + 실프로세스 스택 스모크
 ├── docs/
-└── Makefile                       # make dev / test / bundle BUNDLE=aicc
+└── Makefile       ✅              # make check / up / demo
 ```
+
+### 구현 현황 (Wave 1~2 완료)
+
+| 항목 | 상태 |
+|------|------|
+| 이벤트 계약 v1 (`audio.in` → `audio.segment` → `stt.delta` → …) | ✅ |
+| WebSocket 프로토콜 `/v1/audio/stream` (사양서 §4 규격) | ✅ |
+| 세션 레지스트리 + Dual-Profile(AICC/MEETING) 컨텍스트 전파 | ✅ |
+| VAD 발화 분할기 (패딩·interim·행오버·최대길이·채널 격리) | ✅ |
+| STT 어댑터 ABC + fake/Faster-Whisper 어댑터, 레지스트리 핫스왑 | ✅ |
+| JWT 인증 + 세션 스코프 WS 토큰, 테넌트 격리 | ✅ |
+| 마이크→자막 데모 페이지 (`/demo`) | ✅ |
+| 블록 경계 CI 강제 (import-linter 3개 계약) | ✅ |
+| 라이선스 게이트 인터페이스 (DRM 본체는 Wave 6) | 부분 |
+| FLT-MICRO 이후 블록 | 예정 |
+
+### 로컬 실행
+
+```bash
+make install          # uv 워크스페이스 동기화
+make check            # 린트 + 블록 경계 + 타입 + 테스트 + 카탈로그 검증
+make up && make demo  # compose 기동 후 http://localhost:8080/demo
+```
+
+`make test`는 Redis도 GPU도 요구하지 않는다(인메모리 버스 + fake 어댑터).
+Redis가 떠 있으면 실프로세스 스택 스모크 테스트까지 함께 돈다.
 
 ### 블록 개발 규칙
 
@@ -75,7 +96,9 @@ visionAI/
 
 ## 3. 핵심 인터페이스 (요약)
 
-- 이벤트 버스 토픽: `audio.in.{session}` → `stt.delta.{session}` → `filter.clean.{session}` → `assist.popup.{session}` / `session.closed` → `summary.done`
+- 이벤트 버스 토픽: `audio.in` → `audio.segment` → `stt.delta` → `filter.clean` → `assist.popup` / `session.closed` → `summary.done`
+  - **Stream**(Redis Streams, 컨슈머 그룹): 위 토픽들. 타입별 스트림 1개 + 메시지의 `session_id` 필드로 세션 구분 — 세션마다 스트림을 만들면 워커가 신규 세션을 발견할 방법이 없다
+  - **UI 채널**(Redis Pub/Sub): `vai:ui:{session_id}`. 접속 중인 화면으로의 팬아웃 전용 — 내구성이 불필요하고 UI 렌더 예산(<50ms)에 유리
 - WebSocket `/v1/audio/stream` 프로토콜: [02 문서](02-architecture.md) §4 (사양서 원문 규격 준수)
 - REST(관리): `/v1/kb/*`(지식), `/v1/sessions/*`(이력), `/v1/admin/*`(테넌트·룰셋·라이선스 상태), `/v1/rules/*`(컴플라이언스 룰셋 CRUD)
 

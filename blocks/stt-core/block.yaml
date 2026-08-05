@@ -1,0 +1,23 @@
+id: STT-CORE
+name: STT 어댑터 프레임워크
+tier: speech
+version: 0.1.0
+description: >
+  BaseSTTAdapter 추상화 위에서 음성을 텍스트로 변환한다. 엔진 코드를 고치지 않고
+  Faster-Whisper ↔ Triton ↔ 고객사 자체 엔진을 핫스왑할 수 있다.
+  다국어 인식과 스트리밍 Delta 출력을 지원한다.
+depends_on:
+  - CORE-BUS
+  - AUD-VAD
+adapters:
+  - fake
+  - faster_whisper
+contracts:
+  consumes:
+    - audio.segment
+  produces:
+    - stt.delta
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 2.5
+  included_in_package: false

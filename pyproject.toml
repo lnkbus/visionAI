@@ -1,0 +1,57 @@
+[project]
+name = "visionai-workspace"
+version = "0.1.0"
+description = "VisionAI — 온프레미스/SaaS 하이브리드 음성 AI 플랫폼 (레고블록 모노레포)"
+requires-python = ">=3.11"
+
+[tool.uv.workspace]
+members = ["libs/*", "blocks/*", "tools/*"]
+
+[tool.uv.sources]
+vai-contracts = { workspace = true }
+vai-common = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "import-linter>=2.0",
+    "types-pyyaml>=6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = ["B008"]  # FastAPI Depends() in defaults
+
+[tool.ruff.lint.isort]
+# 워크스페이스 패키지를 서드파티로 분류하면 블록 경계가 import 블록에서 안 보인다.
+known-first-party = [
+    "blockctl",
+    "tests",
+    "vai_aud_vad",
+    "vai_common",
+    "vai_contracts",
+    "vai_core_bus",
+    "vai_core_gw",
+    "vai_stt_core",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["libs", "blocks", "tools", "tests"]
+filterwarnings = ["error::DeprecationWarning:vai_.*"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+# 테스트는 픽스처 제너레이터와 JSON 응답 dict를 많이 다뤄 strict 모드와 마찰이 크고,
+# 정확성은 실행으로 검증된다. 프로덕션 코드의 엄격함을 낮추는 대신 대상에서 뺀다.
+exclude = "(^|/)tests/"

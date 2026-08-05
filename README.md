@@ -37,6 +37,31 @@
 | [05. 데이터·보안·컴플라이언스](docs/05-data-security-compliance.md) | 망분리·KCMVP·개인정보·AI 리스크 통제 |
 | [06. 기술 스택 & MVP 개발 계획](docs/06-tech-stack-mvp.md) | 블록 모노레포 구조, Wave별 개발 계획 — **코딩 착수용** |
 
+## 현재 구현 상태 (Wave 1~2 완료)
+
+마이크 입력이 실시간 자막으로 나오는 경로가 실제로 동작한다.
+
+| 블록 | 역할 | 상태 |
+|------|------|------|
+| `CORE-BUS` | 세션 레지스트리, 이벤트 버스 배선, Dual-Profile 컨텍스트 | ✅ |
+| `CORE-GW` | JWT 인증, `/v1/audio/stream` WebSocket(사양서 §4), 데모 페이지 | ✅ |
+| `AUD-VAD` | 발화 구간 분할(패딩·interim·행오버), VAD 어댑터(energy/silero) | ✅ |
+| `STT-CORE` | `BaseSTTAdapter` ABC, fake/Faster-Whisper 어댑터 핫스왑 | ✅ |
+| `FLT-MICRO` 이후 | 컴플라이언스 필터, RAG, Agent Assist, 요약 | Wave 3~ |
+
+```bash
+make install          # uv 워크스페이스 동기화
+make check            # 린트 · 블록 경계 · 타입 · 테스트 · 카탈로그 검증
+make up && make demo  # compose 기동 → http://localhost:8080/demo
+```
+
+테스트는 **GPU도 Redis도 없이** 파이프라인 전체를 검증한다(인메모리 버스 + fake 어댑터).
+Redis가 있으면 네 블록을 실제 프로세스로 띄우는 스택 스모크 테스트까지 함께 돈다.
+
+레고블록 원칙은 문서상의 약속이 아니라 CI 게이트다 — `import-linter`가 블록 간 직접
+import, 계층 역전, 서비스 로직의 엔진 직접 참조를 차단하고, `blockctl check`가
+매니페스트·의존·토픽 생산자·청구 단위 정합성을 검사한다.
+
 ## 빠른 이해를 위한 그림 한 장
 
 ```mermaid

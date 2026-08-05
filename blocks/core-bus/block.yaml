@@ -1,0 +1,18 @@
+id: CORE-BUS
+name: 세션 오케스트레이터 & 이벤트 버스
+tier: foundation
+version: 0.1.0
+description: >
+  세션 수명주기(생성·조회·종료)를 소유하고 블록 간 이벤트 배선의 기준점이 된다.
+  Dual-Profile(AICC/MEETING) 컨텍스트가 여기서 결정되어 파이프라인 전체로 전파된다.
+depends_on: []
+adapters: []
+contracts:
+  consumes: []
+  produces:
+    - session.closed
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: none
+  dev_effort_mm: 2.0
+  included_in_package: true

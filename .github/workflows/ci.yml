@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: 정적 검사 · 테스트
+    runs-on: ubuntu-latest
+    services:
+      # 스택 스모크 테스트용. 없으면 해당 테스트만 건너뛰므로 CI가 깨지지는 않지만,
+      # Redis 컨슈머 그룹 배선은 인메모리 버스가 대신 검증해 주지 못한다.
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 의존성 설치
+        run: uv sync --all-packages
+
+      - name: 린트 · 포맷
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: 블록 경계 검증
+        # 레고블록이 문서상의 약속이 아니라 실제 제약이 되게 하는 게이트.
+        run: uv run lint-imports
+
+      - name: 타입 검사
+        run: uv run mypy libs blocks tools
+
+      - name: 블록 카탈로그 정합성
+        run: uv run blockctl check --root .
+
+      - name: 테스트
+        # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
+        run: uv run pytest -q
+
+  images:
+    name: 블록 이미지 빌드
+    runs-on: ubuntu-latest
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        block: [core-bus, core-gw, aud-vad, stt-core]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: ${{ matrix.block }} 이미지 빌드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: BLOCK=${{ matrix.block }}
+          push: false
+          tags: visionai/${{ matrix.block }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.block }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.block }}

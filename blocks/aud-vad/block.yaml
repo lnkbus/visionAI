@@ -1,0 +1,22 @@
+id: AUD-VAD
+name: 오디오 라우터 & 스트리밍 버퍼
+tier: speech
+version: 0.1.0
+description: >
+  인입 오디오를 발화 구간으로 잘라 STT에 넘긴다. Silero VAD 기반 음성 검출과
+  200~500ms 청크 분할, 백프레셔 관리를 담당한다. 발화 중에도 부분 인식이
+  가능하도록 중간 구간(interim)을 주기적으로 내보낸다.
+depends_on:
+  - CORE-BUS
+adapters:
+  - energy
+  - silero
+contracts:
+  consumes:
+    - audio.in
+  produces:
+    - audio.segment
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 1.5
+  included_in_package: false

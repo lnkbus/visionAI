@@ -1,0 +1,107 @@
+# PoC·데모·로컬 개발용 단일 서버 구성.
+#
+# 폐쇄망 고객사 PoC는 "GPU 서버 한 대"로 시작하는 경우가 많아, K8s 없이도
+# 전체 파이프라인이 도는 경로를 유지한다. 운영 배포는 Helm/K3s를 쓴다.
+#
+#   docker compose -f deploy/compose/docker-compose.yml up --build
+#   → http://localhost:8080/demo
+
+name: visionai
+
+x-block: &block
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+  environment: &block-env
+    VAI_REDIS_URL: redis://redis:6379/0
+    VAI_CORE_BUS_URL: http://core-bus:8081
+    VAI_LOG_LEVEL: INFO
+    VAI_ENVIRONMENT: compose
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis-data:/data
+
+  core-bus:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: core-bus
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: CORE-BUS
+    ports:
+      - "8081:8081"
+
+  core-gw:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: core-gw
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: CORE-GW
+      # compose는 데모용이라 인증을 열어 둔다. 운영 values에서는 반드시 false.
+      VAI_GW_DEV_AUTH: "true"
+      VAI_GW_DEMO_ENABLED: "true"
+      VAI_GW_JWT_SECRET: compose-dev-secret-not-for-production-use
+    depends_on:
+      redis:
+        condition: service_healthy
+      core-bus:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+  aud-vad:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: aud-vad
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: AUD-VAD
+      VAI_CONSUMER_GROUP: vad
+      VAI_CONSUMER_NAME: vad-1
+      # GPU가 있고 silero extra를 설치했다면 silero로 바꾼다.
+      VAI_VAD_ADAPTER: energy
+
+  stt-core:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: stt-core
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: STT-CORE
+      VAI_CONSUMER_GROUP: stt
+      VAI_CONSUMER_NAME: stt-1
+      # 기본은 GPU 없이 도는 fake. 실제 인식은 아래 두 줄을 바꾼다:
+      #   VAI_STT_ADAPTER: faster_whisper
+      #   VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3
+      VAI_STT_ADAPTER: fake
+    # volumes:
+    #   - /opt/visionai/models:/models:ro   # 폐쇄망 반입 모델 마운트
+
+volumes:
+  redis-data:

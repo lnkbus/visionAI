@@ -1,0 +1,22 @@
+id: CORE-GW
+name: API / WebSocket 게이트웨이
+tier: foundation
+version: 0.1.0
+description: >
+  외부 트래픽의 유일한 진입점. 인증(JWT/SSO), 테넌트 라우팅, 레이트 리밋을 담당하고
+  사양서 §4의 /v1/audio/stream WebSocket 프로토콜을 종단한다. 와이어 규격과
+  내부 이벤트 스키마의 변환이 이 블록 안에서만 일어난다.
+depends_on:
+  - CORE-BUS
+adapters: []
+contracts:
+  # UI로의 팬아웃은 스트림 토픽이 아니라 세션별 Pub/Sub 채널로 받는다.
+  # 화면이 없으면 버려도 되는 데이터라 내구성이 필요 없고 지연이 더 낮다.
+  consumes: []
+  produces:
+    - audio.in
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: none
+  dev_effort_mm: 1.5
+  included_in_package: true

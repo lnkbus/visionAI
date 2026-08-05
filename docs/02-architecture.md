@@ -101,6 +101,7 @@ class BaseSTTAdapter(ABC):
         # yield {"text","is_final","confidence","speaker_id"}
         ...
 
+
 # blocks/tts-core/adapters/base.py
 class BaseTTSAdapter(ABC):
     @abstractmethod

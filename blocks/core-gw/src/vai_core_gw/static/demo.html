@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI — 실시간 자막 데모 (Wave 2)</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --warn:#b45309; --card:#f9fafb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af; --line:#272b33; --accent:#60a5fa; --warn:#fbbf24; --card:#161a21; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--fg);
+         font:15px/1.6 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  button { font:inherit; padding:8px 16px; border-radius:8px; border:1px solid var(--line);
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--fg); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  select { font:inherit; padding:7px 10px; border-radius:8px; border:1px solid var(--line);
+           background:var(--bg); color:var(--fg); }
+  .status { margin-left:auto; font-size:13px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:#16a34a; }
+  section { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:16px; background:var(--card); }
+  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; }
+  #captions { min-height:180px; max-height:340px; overflow-y:auto; }
+  .line { padding:6px 0; border-bottom:1px solid var(--line); }
+  .line:last-child { border-bottom:none; }
+  .line .who { font-size:12px; color:var(--muted); margin-right:8px; }
+  .line.interim { opacity:.6; font-style:italic; }
+  .badge { display:inline-block; font-size:11px; padding:2px 7px; border-radius:99px;
+           border:1px solid var(--warn); color:var(--warn); margin-left:8px; }
+  .hit { border-left:3px solid var(--accent); padding:8px 12px; margin-bottom:8px; }
+  .hit .t { font-weight:600; }
+  .hit .s { color:var(--muted); font-size:13px; }
+  .hit .a { margin-top:4px; }
+  .empty { color:var(--muted); font-size:13px; }
+  code { background:var(--card); padding:1px 5px; border-radius:4px; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VisionAI 실시간 자막 데모</h1>
+  <p class="sub">
+    마이크 → <code>/v1/audio/stream</code> → AUD-VAD → STT-CORE → 화면.
+    Wave 2 파이프라인 검증용이며, 지식 팝업 영역은 Wave 3(TA-ASSIST) 투입 시 채워진다.
+  </p>
+
+  <div class="bar">
+    <button id="start">상담 시작</button>
+    <button id="stop" class="secondary" disabled>종료</button>
+    <select id="profile">
+      <option value="aicc">AICC (초저지연)</option>
+      <option value="meeting">회의록 (고정밀)</option>
+    </select>
+    <select id="channel">
+      <option value="customer">고객 채널</option>
+      <option value="agent">상담원 채널</option>
+    </select>
+    <span class="status"><span class="dot" id="dot"></span><span id="state">대기</span></span>
+  </div>
+
+  <section>
+    <h2>실시간 자막</h2>
+    <div id="captions"><p class="empty">상담을 시작하면 인식 결과가 표시된다.</p></div>
+  </section>
+
+  <section>
+    <h2>지식 팝업</h2>
+    <div id="popups"><p class="empty">TA-ASSIST 블록이 활성화되면 추천이 표시된다.</p></div>
+  </section>
+</main>
+
+<script type="module">
+const TARGET_RATE = 16000;
+const $ = (id) => document.getElementById(id);
+const els = {
+  start: $("start"), stop: $("stop"), profile: $("profile"), channel: $("channel"),
+  dot: $("dot"), state: $("state"), captions: $("captions"), popups: $("popups"),
+};
+
+let ws = null, audioCtx = null, node = null, micStream = null, sessionId = null;
+let interimLine = null;
+
+const setState = (text, live) => { els.state.textContent = text; els.dot.classList.toggle("on", !!live); };
+
+function clearPlaceholder(container) {
+  const empty = container.querySelector(".empty");
+  if (empty) empty.remove();
+}
+
+function renderCaption({ speaker, text, is_final }, compliance) {
+  clearPlaceholder(els.captions);
+  // 중간 결과는 한 줄을 계속 덮어쓰고, 확정되면 그 줄을 고정한 뒤 새 줄로 넘어간다.
+  const line = (!is_final && interimLine) ? interimLine : document.createElement("div");
+  line.className = "line" + (is_final ? "" : " interim");
+  line.innerHTML = "";
+
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = speaker === "agent" ? "상담원" : speaker === "customer" ? "고객" : speaker;
+  line.append(who, document.createTextNode(text));
+
+  if (compliance?.pii_masked) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = "개인정보 마스킹";
+    line.append(badge);
+  }
+  for (const ruleId of compliance?.matched_rules ?? []) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = `룰 ${ruleId}`;
+    line.append(badge);
+  }
+
+  if (!line.isConnected) els.captions.append(line);
+  interimLine = is_final ? null : line;
+  els.captions.scrollTop = els.captions.scrollHeight;
+}
+
+function renderPopups(hits) {
+  if (!hits?.length) return;
+  clearPlaceholder(els.popups);
+  els.popups.innerHTML = "";
+  for (const hit of hits) {
+    const box = document.createElement("div");
+    box.className = "hit";
+    box.innerHTML = `<div class="t"></div><div class="s"></div><div class="a"></div>`;
+    box.querySelector(".t").textContent = `${hit.title} (${hit.score.toFixed(2)})`;
+    box.querySelector(".s").textContent = hit.snippet;
+    box.querySelector(".a").textContent = hit.recommended_answer;
+    els.popups.append(box);
+  }
+}
+
+/** Float32 [-1,1] → 16bit PCM little-endian. */
+function toPcm16(float32) {
+  const out = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+
+function base64(bytes) {
+  let binary = "";
+  const chunk = 0x8000; // 인자 개수 상한을 피하려고 나눠 넣는다
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/** 브라우저가 16kHz 컨텍스트를 거부한 경우를 위한 선형 보간 다운샘플. */
+function resample(input, fromRate, toRate) {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const out = new Float32Array(Math.floor(input.length / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const pos = i * ratio;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    out[i] = (input[idx] ?? 0) * (1 - frac) + (input[idx + 1] ?? input[idx] ?? 0) * frac;
+  }
+  return out;
+}
+
+const WORKLET = `
+class Capture extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (ch && ch.length) this.port.postMessage(new Float32Array(ch));
+    return true;
+  }
+}
+registerProcessor('capture', Capture);
+`;
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+  audioCtx = new AudioContext({ sampleRate: TARGET_RATE });
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await audioCtx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+
+  node = new AudioWorkletNode(audioCtx, "capture");
+  node.port.onmessage = (ev) => {
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    const frames = resample(ev.data, audioCtx.sampleRate, TARGET_RATE);
+    ws.send(JSON.stringify({
+      event: "audio_data",
+      session_id: sessionId,
+      format: "pcm_16k",
+      channel: els.channel.value,
+      audio_base64: base64(new Uint8Array(toPcm16(frames).buffer)),
+    }));
+  };
+  audioCtx.createMediaStreamSource(micStream).connect(node);
+  // 워크릿을 목적지에 연결하지 않으면 브라우저가 그래프를 놀리는 경우가 있어
+  // 무음 게인으로 목적지에 붙인다(스피커로는 아무 소리도 나가지 않는다).
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  node.connect(mute).connect(audioCtx.destination);
+}
+
+function stopMic() {
+  node?.disconnect();
+  micStream?.getTracks().forEach((t) => t.stop());
+  audioCtx?.close();
+  node = audioCtx = micStream = null;
+}
+
+els.start.addEventListener("click", async () => {
+  els.start.disabled = true;
+  try {
+    setState("세션 생성 중…");
+    const res = await fetch("/v1/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profile: els.profile.value, audio_format: "pcm_16k" }),
+    });
+    if (!res.ok) throw new Error(`세션 생성 실패 (${res.status})`);
+    const { session, ws_token } = await res.json();
+    sessionId = session.session_id;
+
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${scheme}://${location.host}/v1/audio/stream?token=${encodeURIComponent(ws_token)}`);
+    ws.addEventListener("open", async () => {
+      await startMic();
+      setState(`연결됨 · ${sessionId}`, true);
+      els.stop.disabled = false;
+    });
+    ws.addEventListener("message", (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.event === "agent_assist_update") {
+        if (msg.stt_result) renderCaption(msg.stt_result, msg.compliance);
+        renderPopups(msg.knowledge_popup);
+      } else if (msg.event === "error") {
+        setState(`오류: ${msg.message}`);
+      }
+    });
+    ws.addEventListener("close", () => { setState("연결 종료"); teardown(); });
+    ws.addEventListener("error", () => setState("연결 오류"));
+  } catch (err) {
+    setState(err.message);
+    els.start.disabled = false;
+  }
+});
+
+function teardown() {
+  stopMic();
+  els.start.disabled = false;
+  els.stop.disabled = true;
+  interimLine = null;
+}
+
+els.stop.addEventListener("click", () => {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ event: "close_session", session_id: sessionId }));
+    ws.close();
+  }
+  teardown();
+  setState("대기");
+});
+</script>
+</body>
+</html>
