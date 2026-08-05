@@ -8,8 +8,9 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from vai_contracts.retrieval import DocumentStatus, SearchRequest
+from vai_contracts.retrieval import Document, DocumentStatus, SearchRequest
 from vai_rag_kb.app import create_app
+from vai_rag_kb.indexer import InMemoryDocumentStore
 from vai_retrieval.embedding import HashingEmbedder
 from vai_retrieval.hybrid import HybridSearchEngine
 from vai_retrieval.rerank import LexicalOverlapReranker
@@ -38,7 +39,7 @@ async def engine() -> HybridSearchEngine:
 
 @pytest.fixture
 async def client(engine: HybridSearchEngine):
-    app = create_app(engine)
+    app = create_app(engine, InMemoryDocumentStore())
     async with (
         httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://kb") as http,
         app.router.lifespan_context(app),
@@ -208,3 +209,76 @@ async def test_지원_형식을_알려_준다(client: httpx.AsyncClient) -> None
     """고객사가 반입 전에 확인한다."""
     body = (await client.get("/internal/v1/parsers")).json()
     assert "hwp" in body["parsers"] and "pdf" in body["parsers"]
+
+
+# ── 재기동을 넘는 파기 가능성 ────────────────────────────────────────────────
+
+
+async def test_redis_document_store_survives_restart() -> None:
+    """메타데이터를 잃으면 파기가 불가능해진다.
+
+    벡터 저장소에는 청크가 그대로 남아 검색은 계속 그 문서로 답하는데,
+    목록에는 없어서 지울 대상을 특정할 수 없다 — "그런 문서 없습니다"라면서
+    그 내용으로 답변하는 상태가 된다.
+    """
+    import redis.asyncio as aioredis
+
+    from vai_rag_kb.indexer import RedisDocumentStore
+
+    client = aioredis.Redis(db=14)
+    try:
+        await client.ping()
+    except Exception:
+        pytest.skip("Redis가 없다")
+
+    try:
+        await client.flushdb()
+        document = Document(doc_id="doc_x", tenant_id="t1", kb_id="kb", title="개인정보 문서")
+        await RedisDocumentStore(client).put(document)
+
+        # 블록 재기동 — 새 인스턴스가 이전 메타데이터를 이어 본다.
+        restarted = RedisDocumentStore(client)
+
+        assert (await restarted.get("doc_x")) is not None
+        assert [d.doc_id for d in await restarted.list_for("t1", "kb")] == ["doc_x"]
+        assert (await restarted.delete("doc_x")) is not None
+        assert await restarted.list_for("t1", "kb") == []
+    finally:
+        await client.flushdb()
+        await client.aclose()
+
+
+async def test_purge_works_without_metadata(engine: HybridSearchEngine) -> None:
+    """파기 요구는 거절할 수 없다 — 메타데이터가 없어도 지울 수 있어야 한다."""
+    app = create_app(engine, InMemoryDocumentStore())
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://rag-kb") as client,
+        app.router.lifespan_context(app),
+    ):
+        created = await client.post(
+            "/internal/v1/kb/kb1/documents/sync",
+            json={"tenant_id": "t1", "title": "약관", "text": "재발급 수수료는 3,000원이다. " * 5},
+        )
+        doc_id = created.json()["doc_id"]
+
+        # 메타데이터만 사라진 상태를 만든다(재기동으로 인메모리 저장소를 잃은 경우).
+        await app.state.documents.delete(doc_id)
+
+        blind = await client.request(
+            "DELETE", f"/internal/v1/documents/{doc_id}", params={"tenant_id": "t1", "kb_id": "kb1"}
+        )
+
+        assert blind.status_code == 200
+        assert blind.json()["removed_chunks"] > 0, "청크가 실제로 지워져야 한다"
+
+
+async def test_delete_without_hints_still_404s(engine: HybridSearchEngine) -> None:
+    """아무 단서 없이 지우라고 하면 무엇을 지울지 알 수 없다."""
+    app = create_app(engine, InMemoryDocumentStore())
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://rag-kb") as client,
+        app.router.lifespan_context(app),
+    ):
+        response = await client.delete("/internal/v1/documents/doc_없음")
+
+    assert response.status_code == 404

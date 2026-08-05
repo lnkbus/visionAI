@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 02b064b5b7d86a15af54ceaae603005c3926f2b0c2809c91894407459a427c09
+configuration_hash: 4df45ae948d39428d3a84ff0a3e11fc99d22d7f3cd33b2ac2138930668b78659
 component_count: 23
 components:
 - id: AUD-VAD
@@ -48,9 +48,9 @@ components:
   - CORE-SEC
 - id: CORE-BUS
   name: 세션 오케스트레이터 & 이벤트 버스
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: eb57ed237ce6904f
+  source_hash: 89c2a9e8bc7b43a9
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
@@ -110,9 +110,9 @@ components:
   - LLM-GW
 - id: RAG-KB
   name: 지식베이스 수집기
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 6d0ba64c008c37c1
+  source_hash: 2b078e64b5afbcca
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:

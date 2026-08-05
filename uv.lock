@@ -3933,7 +3933,7 @@ wheels = [
 
 [[package]]
 name = "vai-aud-rtp"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/aud-rtp" }
 dependencies = [
     { name = "fastapi" },
@@ -4077,7 +4077,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-core-bus"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/core-bus" }
 dependencies = [
     { name = "fastapi" },
@@ -4227,7 +4227,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-rag-kb"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/rag-kb" }
 dependencies = [
     { name = "fastapi" },
@@ -4449,7 +4449,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-ui-meet"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/ui-meet" }
 dependencies = [
     { name = "fastapi" },

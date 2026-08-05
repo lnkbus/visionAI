@@ -1,7 +1,7 @@
 id: UI-MEET
 name: 스마트 회의록 UI
 tier: experience
-version: 0.1.0
+version: 0.2.0
 description: >
   회의 참가자가 보는 화면. 실시간 자막에 화자 라벨이 뒤따라 붙고, 참석자별
   발언량이 집계되며, 회의 종료 후 안건·결정사항·Action Item이 정리된다.

@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 63f45346c01f4e2ea07433eac4f82a3794664ea767e158c182a3f68906411000
+configuration_hash: 64d214e3443cff11790014debb2dee6df178f18f583948b8aa548e690d6f5303
 component_count: 21
 components:
 - id: AUD-RTP
   name: SIP/RTP 인입 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: e4b7f74a61da6be5
+  source_hash: 023465e0458c517c
   license_key: AUD-RTP
   capacity_unit: concurrent_channels
   depends_on:
@@ -37,9 +37,9 @@ components:
   - CORE-SEC
 - id: CORE-BUS
   name: 세션 오케스트레이터 & 이벤트 버스
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: eb57ed237ce6904f
+  source_hash: 89c2a9e8bc7b43a9
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
@@ -99,9 +99,9 @@ components:
   - LLM-GW
 - id: RAG-KB
   name: 지식베이스 수집기
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 6d0ba64c008c37c1
+  source_hash: 2b078e64b5afbcca
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:

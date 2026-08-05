@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport
 
 from vai_common.bus import InMemoryEventBus
+from vai_common.license import BlockGrant, LicenseGate
 from vai_contracts.events import SessionClosed
 from vai_contracts.session import SessionProfile, SessionState
 from vai_contracts.topics import Topic
 from vai_core_bus.app import create_app
-from vai_core_bus.store import InMemorySessionStore
+from vai_core_bus.store import InMemorySessionStore, SessionStore
 
 
 @pytest.fixture
@@ -283,3 +287,74 @@ async def test_TTL을_넘긴_세션은_걷어낸다(redis_store) -> None:
     await redis_store.save(_session("fresh"))
 
     assert await redis_store.active_count() == 1
+
+
+# ── 동시 인입에서의 한도 ─────────────────────────────────────────────────────
+
+
+def _limited_app(store: SessionStore, limit: int) -> FastAPI:
+    app = create_app(store=store, bus=InMemoryEventBus())
+    app.state.store = store
+    app.state.bus = InMemoryEventBus()
+    app.state.license = LicenseGate(
+        {"CORE-BUS": BlockGrant(True, {"concurrent_channels": limit})}, None, dev_mode=False
+    )
+    return app
+
+
+async def _burst(app: FastAPI, count: int) -> list[int]:
+    body = {"tenant_id": "t1", "profile": "aicc"}
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://core-bus"
+    ) as client:
+        responses = await asyncio.gather(
+            *[client.post("/internal/v1/sessions", json=body) for _ in range(count)]
+        )
+    return [response.status_code for response in responses]
+
+
+async def test_burst_arrival_cannot_exceed_the_licensed_limit() -> None:
+    """착신이 몰릴 때만 뚫리는 한도는 한도가 아니다.
+
+    세고 나서 따로 저장하면 그 사이에 다른 요청이 끼어든다. 콜센터의 인입이
+    정확히 그런 모양이라, 재현이 어려운 채로 라이선스가 장식이 된다.
+    """
+    store = InMemorySessionStore()
+
+    codes = await _burst(_limited_app(store, limit=2), count=8)
+
+    assert await store.active_count() == 2, f"한도를 넘겼다: {codes}"
+    assert codes.count(201) == 2
+    assert codes.count(429) == 6
+
+
+async def test_closing_a_session_frees_a_channel() -> None:
+    """한도가 지켜지되 돌아오지 않으면 그건 그것대로 장애다."""
+    store = InMemorySessionStore()
+    app = _limited_app(store, limit=1)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://core-bus"
+    ) as client:
+        body = {"tenant_id": "t1", "profile": "aicc"}
+        first = await client.post("/internal/v1/sessions", json=body)
+        assert first.status_code == 201
+        assert (await client.post("/internal/v1/sessions", json=body)).status_code == 429
+
+        session_id = first.json()["session_id"]
+        await client.post(f"/internal/v1/sessions/{session_id}/close")
+
+        assert (await client.post("/internal/v1/sessions", json=body)).status_code == 201
+
+
+async def test_no_limit_means_no_reservation_failure() -> None:
+    """라이선스에 채널 한도가 없으면(개발 모드 등) 막지 않는다."""
+    store = InMemorySessionStore()
+    app = create_app(store=store, bus=InMemoryEventBus())
+    app.state.store = store
+    app.state.bus = InMemoryEventBus()
+    app.state.license = LicenseGate({}, None, dev_mode=True)
+
+    codes = await _burst(app, count=5)
+
+    assert codes == [201] * 5

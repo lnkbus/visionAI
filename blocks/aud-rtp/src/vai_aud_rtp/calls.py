@@ -17,6 +17,7 @@ SIP UA가 필요한 고객사는 이 제어 API를 호출하는 어댑터를 추
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 from vai_aud_rtp.rtp import JitterBuffer, JitterBufferConfig
@@ -46,6 +47,20 @@ class CallLeg:
     seq: int = 0
     ssrc: int | None = None
     """첫 패킷의 SSRC를 기억한다. 바뀌면 다른 통화가 같은 포트로 들어온 것이다."""
+
+    last_packet_at: float = field(default_factory=time.monotonic)
+    """마지막 RTP 수신 시각(단조 시계).
+
+    통화 개설 시각으로 시작한다 — 미디어가 한 번도 안 온 레그도 같은 기준으로
+    회수되게 하기 위해서다. 벽시계가 아니라 단조 시계를 쓴다: NTP 보정으로
+    시간이 뒤로 가면 멀쩡한 통화가 끊긴다."""
+
+    def touch(self) -> None:
+        self.last_packet_at = time.monotonic()
+
+    def idle_for(self) -> float:
+        """마지막 패킷 이후 흐른 초."""
+        return time.monotonic() - self.last_packet_at
 
     def next_seq(self) -> int:
         self.seq += 1
@@ -146,6 +161,19 @@ class CallRegistry:
             },
         )
         return legs
+
+    def idle_sessions(self, timeout_s: float) -> list[str]:
+        """모든 레그가 ``timeout_s`` 이상 조용한 세션들.
+
+        레그 하나만 조용한 것으로는 끊지 않는다 — 한쪽이 말을 안 하는 통화는
+        정상이다. 양쪽 미디어가 모두 멈춘 것이 "통화가 끝났는데 아무도
+        알려 주지 않은" 상태다.
+        """
+        return [
+            session_id
+            for session_id, legs in self._by_session.items()
+            if legs and all(leg.idle_for() >= timeout_s for leg in legs)
+        ]
 
     def leg_for_port(self, port: int) -> CallLeg | None:
         return self._by_port.get(port)

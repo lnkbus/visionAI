@@ -1,6 +1,6 @@
 [project]
 name = "vai-rag-kb"
-version = "0.1.0"
+version = "0.2.0"
 description = "RAG-KB — 지식베이스 수집기"
 requires-python = ">=3.11"
 dependencies = [

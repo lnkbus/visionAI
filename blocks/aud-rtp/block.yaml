@@ -1,7 +1,7 @@
 id: AUD-RTP
 name: SIP/RTP 인입 게이트웨이
 tier: speech
-version: 0.1.0
+version: 0.2.0
 description: >
   전화망 오디오(G.711 μ-law/A-law 8kHz)를 받아 파이프라인에 넣는다. RTP 파싱,
   지터 버퍼(재정렬·손실 보정), 채널 분리(고객/상담원)를 담당한다.

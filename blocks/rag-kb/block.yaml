@@ -1,7 +1,7 @@
 id: RAG-KB
 name: 지식베이스 수집기
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   약관·FAQ·매뉴얼을 조항 경계를 존중해 청킹하고 임베딩해 색인한다.
   문서 버전을 관리해 "당시 어느 판본으로 답했는지" 추적할 수 있게 한다.
