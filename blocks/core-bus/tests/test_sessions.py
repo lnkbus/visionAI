@@ -91,3 +91,195 @@ async def test_healthz_reports_block_identity(client: httpx.AsyncClient) -> None
 
     assert response.status_code == 200
     assert response.json()["block"] == "CORE-BUS"
+
+
+# --- 라이선스 동시 채널 한도 ---------------------------------------------
+#
+# 여기서 세지 않으면 .lic의 채널 수는 장식이고, "산 만큼만 쓴다"는 계약을
+# 지킬 수단이 없다. 반대로 잘못 세면 정상 상담이 거부된다 — 둘 다 계약 사고다.
+
+
+def _gated_app(limit: int, block_id: str = "TA-ASSIST"):
+    from vai_common.license import BlockGrant, LicenseGate
+
+    bus = InMemoryEventBus()
+    store = InMemorySessionStore()
+    app = create_app(bus=bus, store=store)
+    app.state.license = LicenseGate(
+        {
+            block_id: BlockGrant(True, {"concurrent_channels": limit}),
+            "STT-CORE": BlockGrant(True, {"concurrent_channels": limit * 10}),
+        },
+        None,
+        dev_mode=False,
+    )
+    return app, bus, store
+
+
+async def _open(client: httpx.AsyncClient) -> httpx.Response:
+    return await client.post("/internal/v1/sessions", json={"tenant_id": "acme", "profile": "aicc"})
+
+
+async def test_한도까지는_세션이_열린다() -> None:
+    app, _, _ = _gated_app(2)
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        assert (await _open(client)).status_code == 201
+        assert (await _open(client)).status_code == 201
+
+
+async def test_한도를_넘으면_429로_거부한다() -> None:
+    app, _, _ = _gated_app(2)
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        await _open(client)
+        await _open(client)
+        denied = await _open(client)
+
+    assert denied.status_code == 429
+    # 어느 블록이 상한을 정했는지 알려 줘야 증설 견적으로 이어진다.
+    assert "TA-ASSIST" in denied.json()["detail"]
+
+
+async def test_가장_빡빡한_블록이_상한을_정한다() -> None:
+    """TA-ASSIST를 50채널만 샀는데 STT를 100채널 샀다고 100건을 받으면
+    51번째부터 팝업 없는 상담이 된다. 계약과 동작이 어긋나는 쪽이 훨씬 나쁘다."""
+    app, _, _ = _gated_app(1, block_id="FLT-MICRO")
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        await _open(client)
+        denied = await _open(client)
+    assert denied.status_code == 429
+    assert "FLT-MICRO" in denied.json()["detail"]
+
+
+async def test_세션을_닫으면_채널이_돌아온다() -> None:
+    """닫힌 세션이 계속 채널을 잡고 있으면 한도가 조금씩 새어 나가고,
+    결국 라이선스 안에서 상담을 못 받는 상태가 된다."""
+    app, _, _ = _gated_app(1)
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        first = (await _open(client)).json()
+        assert (await _open(client)).status_code == 429
+
+        await client.post(f"/internal/v1/sessions/{first['session_id']}/close")
+        assert (await _open(client)).status_code == 201
+
+
+async def test_거부가_감사에_남는다() -> None:
+    """거부는 로그가 아니라 감사에 남아야 한다. 운영자가 '왜 통화가 안 받아졌나'를
+    물었을 때 답이 있어야 한다."""
+    app, bus, _ = _gated_app(1)
+    bus.register_group(Topic.AUDIT_LOG, "probe")
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        await _open(client)
+        await _open(client)
+
+    queue = bus._queues[(Topic.AUDIT_LOG, "probe")]
+    events = [queue.get_nowait() for _ in range(queue.qsize())]
+    denied = [e for e in events if e.outcome == "denied"]
+    assert len(denied) == 1
+    assert denied[0].detail["limit"] == "1"
+    assert denied[0].detail["limiting_block"] == "TA-ASSIST"
+
+
+async def test_개발_모드에서는_한도가_없다() -> None:
+    """라이선스 없이 도는 개발·데모 구성에서 채널 한도로 막히면 아무것도 못 한다."""
+    app = create_app(bus=InMemoryEventBus(), store=InMemorySessionStore())
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        for _ in range(5):
+            assert (await _open(client)).status_code == 201
+        capacity = (await client.get("/internal/v1/capacity")).json()
+    assert capacity["limit"] is None
+    assert capacity["active"] == 5
+
+
+async def test_사용률을_보고한다() -> None:
+    """상한에 부딪힌 뒤에 아는 것은 이미 상담을 놓친 뒤다."""
+    app, _, _ = _gated_app(4)
+    async with (
+        httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://bus") as client,
+        app.router.lifespan_context(app),
+    ):
+        await _open(client)
+        await _open(client)
+        capacity = (await client.get("/internal/v1/capacity")).json()
+
+    assert capacity["active"] == 2 and capacity["limit"] == 4
+    assert capacity["utilization"] == 0.5
+    assert capacity["limiting_block"] == "TA-ASSIST"
+
+
+# --- Redis 저장소의 활성 집계 --------------------------------------------
+
+
+@pytest.fixture
+async def redis_store():
+    """실제 Redis가 있을 때만 돈다. 정렬 집합 연산은 인메모리 구현으로 대체할 수 없다."""
+    import os
+
+    from redis.asyncio import Redis
+
+    url = os.environ.get("VAI_TEST_REDIS_URL", "redis://localhost:6379/15")
+    redis = Redis.from_url(url)
+    try:
+        await redis.ping()
+    except Exception:
+        pytest.skip("Redis가 없다")
+    await redis.flushdb()
+    from vai_core_bus.store import RedisSessionStore
+
+    yield RedisSessionStore(redis)
+    await redis.flushdb()
+    await redis.aclose()
+
+
+def _session(sid: str, **kw):
+    from vai_contracts.session import Session
+
+    return Session(session_id=sid, tenant_id="acme", profile=SessionProfile.AICC, **kw)
+
+
+async def test_Redis_활성_수를_센다(redis_store) -> None:
+    await redis_store.save(_session("s1"))
+    await redis_store.save(_session("s2"))
+    assert await redis_store.active_count() == 2
+
+    await redis_store.close("s1")
+    assert await redis_store.active_count() == 1
+
+
+async def test_같은_세션을_두_번_저장해도_한_번만_센다(redis_store) -> None:
+    """상태 갱신(예: 메타데이터 변경)마다 채널이 늘면 한도가 금방 소진된다."""
+    session = _session("s1")
+    await redis_store.save(session)
+    await redis_store.save(session)
+    assert await redis_store.active_count() == 1
+
+
+async def test_TTL을_넘긴_세션은_걷어낸다(redis_store) -> None:
+    """종료 이벤트를 놓친 세션이 집합에 영원히 남으면 채널이 조금씩 새어 나가고,
+    결국 라이선스 안에서 상담을 못 받는 상태가 된다 — 원인을 찾기 가장 어렵다."""
+    from datetime import UTC, datetime, timedelta
+
+    from vai_core_bus.store import TTL_SECONDS
+
+    stale = _session("old", created_at=datetime.now(UTC) - timedelta(seconds=TTL_SECONDS + 60))
+    await redis_store.save(stale)
+    await redis_store.save(_session("fresh"))
+
+    assert await redis_store.active_count() == 1

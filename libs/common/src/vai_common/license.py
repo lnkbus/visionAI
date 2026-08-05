@@ -307,6 +307,29 @@ class LicenseGate:
             raise LicenseError(f"블록 '{block_id}'은 라이선스에 포함되지 않았다")
         return grant
 
+    def channel_limit(self) -> tuple[int | None, str]:
+        """동시 채널 상한과 그것을 정한 블록. 상한이 없으면 ``(None, "")``.
+
+        **허가된 블록 중 가장 작은 값**을 쓴다. 상담 한 건은 파이프라인 전체를
+        지나가므로, 가장 빡빡하게 산 블록이 실제 상한이다 — TA-ASSIST를 50채널만
+        샀는데 STT를 100채널 샀다고 100건을 받으면 51번째부터 팝업 없는 상담이
+        된다. 계약과 동작이 어긋나는 쪽이 훨씬 나쁘다.
+
+        어느 블록이 상한을 정했는지 함께 돌려준다. 운영자가 "왜 51번째가
+        거부됐는지"를 물었을 때 답할 수 있어야 증설 견적으로 이어진다.
+        """
+        if self._dev_mode:
+            return None, ""
+        limits = [
+            (grant.capacity["concurrent_channels"], block_id)
+            for block_id, grant in self._grants.items()
+            if grant.enabled and "concurrent_channels" in grant.capacity
+        ]
+        if not limits:
+            return None, ""
+        limit, block_id = min(limits)
+        return limit, block_id
+
     def status(self) -> LicenseStatus:
         return LicenseStatus(
             customer_id=self._customer_id,

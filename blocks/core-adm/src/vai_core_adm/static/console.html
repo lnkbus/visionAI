@@ -174,6 +174,9 @@ function banners(s) {
   if (s.audit_intact === false) {
     out.push(`<div class="banner bad">감사 로그 무결성이 깨졌습니다 (#${s.audit_broken_at}부터 신뢰할 수 없음).</div>`);
   }
+  if (s.channels_limit && s.channels_active / s.channels_limit >= 0.9) {
+    out.push(`<div class="banner bad">동시 채널이 한도에 근접했습니다 (${s.channels_active}/${s.channels_limit}, ${s.channels_limiting_block} 라이선스 기준) — 초과분은 거부됩니다.</div>`);
+  }
   if (!s.encryption_enabled) {
     out.push(`<div class="banner warn">저장 암호화가 꺼져 있습니다 — 평문으로 저장됩니다.</div>`);
   }
@@ -185,6 +188,11 @@ function renderStatus(s) {
     metric(`${s.ready_count}/${s.total_count}`, "정상 블록", s.ready_count === s.total_count ? "good" : "bad"),
     metric(s.license_expires || "무기한", "라이선스 만료"),
     metric(s.license_days_remaining ?? "—", "잔여일", (s.license_days_remaining ?? 999) <= 30 ? "warn" : ""),
+    metric(
+      s.channels_limit === null ? (s.channels_active ?? "—") : `${s.channels_active}/${s.channels_limit}`,
+      "동시 채널",
+      s.channels_limit && s.channels_active / s.channels_limit >= 0.9 ? "bad"
+        : s.channels_limit && s.channels_active / s.channels_limit >= 0.7 ? "warn" : ""),
     metric(s.audit_total, "감사 레코드"),
     metric(s.audit_intact === null ? "?" : s.audit_intact ? "온전" : "손상", "무결성", s.audit_intact ? "good" : "bad"),
     metric(s.encryption_enabled ? s.encryption_algorithm : "꺼짐", "저장 암호화", s.encryption_enabled ? "good" : "warn"),

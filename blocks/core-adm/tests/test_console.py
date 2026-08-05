@@ -92,6 +92,17 @@ def _mock_platform(*, slow_block: bool = False, audit_broken: bool = False) -> h
                 },
             )
 
+        if path == "/internal/v1/capacity":
+            return httpx.Response(
+                200,
+                json={
+                    "active": 46,
+                    "limit": 50,
+                    "limiting_block": "TA-ASSIST",
+                    "utilization": 0.92,
+                },
+            )
+
         if path == "/internal/v1/crypto/status":
             return httpx.Response(200, json={"enabled": True, "algorithm": "AES-256-GCM"})
 
@@ -129,6 +140,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     }
     monkeypatch.setenv("VAI_ADM_JWT_SECRET", SECRET)
     monkeypatch.setenv("VAI_ADM_ENDPOINTS", json.dumps(endpoints))
+    monkeypatch.setenv("VAI_ADM_BUS_URL", "http://core-bus:8081")
     monkeypatch.setenv("VAI_ADM_LICENSE_URL", "http://core-lic:8095")
     monkeypatch.setenv("VAI_ADM_SECURITY_URL", "http://core-sec:8096")
     yield
@@ -358,3 +370,36 @@ def test_짧은_비밀키도_거부한다(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("VAI_ADM_REQUIRE_AUTH", "true")
     with pytest.raises(RuntimeError, match="짧다"):
         create_app(client=_mock_platform(), bus=InMemoryEventBus())
+
+
+def test_동시_채널_사용률이_한_화면에_모인다(env: None) -> None:
+    """상한에 부딪힌 뒤에 아는 것은 이미 상담을 놓친 뒤다."""
+    app = create_app(client=_mock_platform(), bus=InMemoryEventBus())
+    with TestClient(app) as client:
+        body = client.get(
+            "/v1/admin/status", headers={"Authorization": f"Bearer {_admin_token()}"}
+        ).json()
+    assert body["channels_active"] == 46
+    assert body["channels_limit"] == 50
+    assert body["channels_limiting_block"] == "TA-ASSIST"
+
+
+def test_CORE_BUS가_죽어도_나머지_화면은_그려진다(env: None) -> None:
+    """일부 조회 실패로 화면 전체가 사라지면 운영자는 아무 단서도 못 얻는다."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/internal/v1/capacity":
+            raise httpx.ConnectError("down", request=request)
+        if request.url.path == "/readyz":
+            return httpx.Response(200, json={"status": "ready", "license_expired": False})
+        return httpx.Response(404)
+
+    app = create_app(
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), bus=InMemoryEventBus()
+    )
+    with TestClient(app) as client:
+        response = client.get(
+            "/v1/admin/status", headers={"Authorization": f"Bearer {_admin_token()}"}
+        )
+    assert response.status_code == 200
+    assert response.json()["channels_active"] is None

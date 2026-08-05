@@ -300,3 +300,45 @@ def test_잘린_파일은_원인이_보이는_오류로_바꾼다(tmp_path: Path
     path.write_text('{"payload": {"customer', encoding="utf-8")
     with pytest.raises(LicenseError, match="읽을 수 없다"):
         LicenseGate.load(str(path))
+
+
+# --- 동시 채널 한도 ------------------------------------------------------
+
+
+def test_가장_빡빡한_블록이_상한을_정한다() -> None:
+    """TA-ASSIST를 50채널만 샀는데 STT를 100채널 샀다고 100건을 받으면
+    51번째부터 팝업 없는 상담이 된다. 계약과 동작이 어긋나는 쪽이 훨씬 나쁘다."""
+    gate = LicenseGate(
+        {
+            "STT-CORE": BlockGrant(True, {"concurrent_channels": 100}),
+            "TA-ASSIST": BlockGrant(True, {"concurrent_channels": 50}),
+        },
+        None,
+        dev_mode=False,
+    )
+    assert gate.channel_limit() == (50, "TA-ASSIST")
+
+
+def test_비활성_블록은_상한에_끼지_않는다() -> None:
+    """안 산 블록의 채널 수로 상한이 정해지면 산 만큼도 못 쓴다."""
+    gate = LicenseGate(
+        {
+            "STT-CORE": BlockGrant(True, {"concurrent_channels": 100}),
+            "AVA-COUNSEL": BlockGrant(False, {"concurrent_channels": 1}),
+        },
+        None,
+        dev_mode=False,
+    )
+    assert gate.channel_limit() == (100, "STT-CORE")
+
+
+def test_채널_단위가_없으면_상한이_없다() -> None:
+    """회의록 전용처럼 시간 단위로만 파는 구성에서 0으로 막히면 안 된다."""
+    gate = LicenseGate(
+        {"LLM-SUM": BlockGrant(True, {"audio_hours_monthly": 1000})}, None, dev_mode=False
+    )
+    assert gate.channel_limit() == (None, "")
+
+
+def test_개발_모드에는_상한이_없다() -> None:
+    assert LicenseGate.load(None).channel_limit() == (None, "")

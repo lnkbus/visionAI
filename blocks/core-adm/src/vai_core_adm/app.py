@@ -57,6 +57,7 @@ class AdminSettings(BaseSettings):
     """블록 → URL JSON. 비면 compose 기본 배치를 쓴다. 고객사마다 산 블록이
     다르므로 목록을 코드에 못 박지 않는다."""
 
+    bus_url: str = "http://core-bus:8081"
     license_url: str = "http://core-lic:8095"
     security_url: str = "http://core-sec:8096"
     require_auth: bool = True
@@ -165,6 +166,7 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
         )
         await _fill_license(client_, cfg_.license_url, result)
         await _fill_security(client_, cfg_.security_url, result)
+        await _fill_capacity(client_, cfg_.bus_url, result)
         return result
 
     @app.get("/v1/admin/blocks", response_model=list[BlockHealth], tags=["ops"])
@@ -259,6 +261,22 @@ async def _fill_license(client: httpx.AsyncClient, url: str, result: PlatformSta
     result.license_expires = str(body.get("expires") or "")
     result.license_days_remaining = body.get("days_remaining")
     result.license_signature_verified = bool(body.get("signature_verified"))
+
+
+async def _fill_capacity(client: httpx.AsyncClient, url: str, result: PlatformStatus) -> None:
+    """동시 채널 사용률. 상한에 부딪히기 전에 보여야 예방 조치가 된다."""
+    try:
+        response = await client.get(
+            f"{url.rstrip('/')}/internal/v1/capacity", timeout=httpx.Timeout(3.0)
+        )
+        response.raise_for_status()
+    except httpx.HTTPError:
+        log.warning("채널 사용률 조회 실패", exc_info=True)
+        return
+    body = response.json()
+    result.channels_active = body.get("active")
+    result.channels_limit = body.get("limit")
+    result.channels_limiting_block = str(body.get("limiting_block", ""))
 
 
 async def _fill_security(client: httpx.AsyncClient, url: str, result: PlatformStatus) -> None:

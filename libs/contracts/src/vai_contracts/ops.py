@@ -56,6 +56,11 @@ class PlatformStatus(BaseModel):
     """False면 서명 검증 없이 도는 개발 빌드다. 운영에 이 상태로 나가는 것이
     라이선스 사고의 대표 경로라 첫 화면에서 바로 보이게 한다."""
 
+    channels_active: int | None = None
+    channels_limit: int | None = None
+    channels_limiting_block: str = ""
+    """동시 채널 사용 현황. 상한에 부딪힌 뒤에 아는 것은 이미 상담을 놓친 뒤다."""
+
     audit_intact: bool | None = None
     audit_total: int = 0
     audit_broken_at: int | None = None

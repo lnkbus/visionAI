@@ -16,9 +16,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from vai_common import audit
 from vai_common.bus import EventBus, InMemoryEventBus, RedisEventBus
+from vai_common.license import LicenseGate
 from vai_common.service import create_block_app
 from vai_common.settings import CommonSettings, get_settings
-from vai_contracts.audit import AuditAction
+from vai_contracts.audit import AuditAction, AuditOutcome
 from vai_contracts.events import SessionClosed
 from vai_contracts.session import Session, SessionCreate, SessionState
 from vai_contracts.topics import Topic
@@ -84,9 +85,50 @@ def create_app(
     )
     async def create_session(
         payload: SessionCreate,
+        request: Request,
         store: SessionStore = Depends(get_store),
         bus: EventBus = Depends(get_bus),
     ) -> Session:
+        # 라이선스 동시 채널 한도. 여기서 세지 않으면 .lic의 채널 수는 장식이고,
+        # 고객사는 산 만큼만 쓴다는 계약을 지킬 수단이 없다.
+        gate: LicenseGate = request.app.state.license
+        limit, limiting_block = gate.channel_limit()
+        if limit is not None:
+            active = await store.active_count()
+            if active >= limit:
+                # 거부는 로그가 아니라 감사에 남아야 한다. 운영자가 "왜 통화가
+                # 안 받아졌나"를 물었을 때 답이 있어야 증설 견적으로 이어진다.
+                await audit.emit(
+                    bus,
+                    action=AuditAction.SESSION_START,
+                    actor=BLOCK_ID,
+                    block_id=BLOCK_ID,
+                    outcome=AuditOutcome.DENIED,
+                    tenant_id=payload.tenant_id,
+                    detail={
+                        "reason": "concurrent_channels 한도 도달",
+                        "active": str(active),
+                        "limit": str(limit),
+                        "limiting_block": limiting_block,
+                    },
+                )
+                log.warning(
+                    "동시 채널 한도 도달 — 세션 생성 거부",
+                    extra={
+                        "active": active,
+                        "limit": limit,
+                        "limiting_block": limiting_block,
+                        "tenant_id": payload.tenant_id,
+                    },
+                )
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        f"동시 채널 한도({limit})에 도달했다 — {limiting_block} 라이선스 기준. "
+                        "증설이 필요하면 라이선스를 재발급받는다"
+                    ),
+                )
+
         session = Session(
             session_id=new_session_id(),
             tenant_id=payload.tenant_id,
@@ -117,6 +159,24 @@ def create_app(
             detail={"profile": session.profile.value},
         )
         return session
+
+    @app.get("/internal/v1/capacity", tags=["sessions"])
+    async def capacity(
+        request: Request, store: SessionStore = Depends(get_store)
+    ) -> dict[str, object]:
+        """동시 채널 사용률. 운영 콘솔이 상한 도달 **전에** 경고하는 근거다.
+
+        상한에 부딪힌 뒤에 아는 것은 이미 상담을 놓친 뒤다.
+        """
+        gate: LicenseGate = request.app.state.license
+        limit, limiting_block = gate.channel_limit()
+        active = await store.active_count()
+        return {
+            "active": active,
+            "limit": limit,
+            "limiting_block": limiting_block,
+            "utilization": round(active / limit, 3) if limit else None,
+        }
 
     @app.get("/internal/v1/sessions/{session_id}", response_model=Session, tags=["sessions"])
     async def get_session(session_id: str, store: SessionStore = Depends(get_store)) -> Session:
