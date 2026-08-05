@@ -1,6 +1,6 @@
 [project]
 name = "vai-retrieval"
-version = "0.2.0"
+version = "0.3.0"
 description = "검색 인프라 — 청킹·임베딩·벡터/키워드 색인·리랭킹 (RAG 블록 공유)"
 requires-python = ">=3.11"
 dependencies = ["vai-contracts", "numpy>=1.26"]
@@ -9,6 +9,9 @@ dependencies = ["vai-contracts", "numpy>=1.26"]
 qdrant = ["qdrant-client>=1.11"]
 local-embeddings = ["sentence-transformers>=3.0"]
 rerank = ["FlagEmbedding>=1.2"]
+# 형태소 분석기. 기본값이 아니다 — 골든셋에서 순위는 오르지만 못 찾는
+# 사례가 하나 생겼고, 폐쇄망 반입 대상(모델 파일)이 하나 늘어난다.
+morph = ["kiwipiepy>=0.20"]
 
 [build-system]
 requires = ["hatchling"]
