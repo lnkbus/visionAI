@@ -28,7 +28,7 @@
 |---|---|
 | **Docker Desktop 메모리** | 설정 → Resources → Memory를 **최소 8GB, 권장 12GB**. 기본값(보통 4~8GB)이면 STT 모델을 올리다 컨테이너가 조용히 죽는다 |
 | **디스크** | 이미지 + 모델로 **15GB 이상** 비워 둔다 |
-| **아키텍처** | Apple Silicon(arm64)은 그대로 빌드된다. 로제타 에뮬레이션이 아니다 |
+| **아키텍처** | 애플 실리콘은 arm64, 인텔은 amd64. 둘 다 네이티브로 빌드된다 (로제타 아님) |
 | **최초 빌드 시간** | 블록 21개 + 인식 엔진. **회의 직전에 하지 않는다** — 전날 한 번 돌려 둔다 |
 | **마이크** | `http://localhost` 은 보안 컨텍스트로 취급되어 브라우저가 마이크를 허용한다. Safari보다 Chrome이 덜 까다롭다 |
 
@@ -54,13 +54,56 @@ uv run --with huggingface_hub bash deploy/airgap/fetch_models.sh --out models --
 | `medium` | 1.5 GB | 상담 녹취 |
 | `large-v3-turbo` | 1.6 GB | 품질/속도 균형이 가장 좋다 |
 
-### 1.1 요약을 진짜로 나오게 하려면 (맥 GPU)
+### 1.0.1 인텔 맥 (NVIDIA GPU, 32GB) — 먼저 읽을 것
+
+**그 NVIDIA GPU 는 못 씁니다.** 카드가 꽂혀 있어도 컨테이너는 CPU 만 씁니다.
+이유가 셋 겹칩니다:
+
+| | |
+|---|---|
+| Docker Desktop 은 **리눅스 VM** 안에서 돈다 | macOS 에는 GPU 통과 경로가 없다 (`--gpus` 미지원, NVIDIA Container Toolkit 은 리눅스 전용) |
+| macOS 용 **CUDA 가 끊겼다** | NVIDIA 가 CUDA 10.2(2019) 이후 macOS 를 지원하지 않는다 |
+| NVIDIA 웹 드라이버가 없다 | macOS 10.14 이후 애플이 서명하지 않는다 |
+
+그래서 `device` 를 `cuda` 로 두면 **기동을 거부합니다.** 조용히 CPU 로
+내려가면 "제안서엔 GPU, 현장은 CPU"가 되기 때문입니다. 기본값 `auto` 로 두면
+알아서 CPU 를 고르고 그 사실을 로그에 남깁니다. 설치기 사전 점검도 한 줄로
+알려 줍니다:
+
+```
+· GPU 없음: 맥은 컨테이너에 GPU 를 넘기지 못한다 → CPU 추론
+```
+
+> **GPU 로 시연해야 한다면** 그 노트북에 리눅스를 올리거나(부트캠프/외장 SSD),
+> GPU 가 달린 리눅스 서버를 쓰는 수밖에 없습니다. 리눅스 + NVIDIA Container
+> Toolkit 조합에서는 그대로 `device: cuda` 로 돕니다.
+
+**좋은 소식은 32GB 입니다.** 16GB 맥에서 걱정하던 스왑이 없습니다:
+
+| | 16GB (M1/M2) | **32GB 인텔** |
+|---|---|---|
+| STT 모델 | `small` 권장 | **`large-v3-turbo`** (1.6GB) |
+| 요약 sLLM 동시 실행 | 스왑 위험 → 종료 후 처리 | **같이 올려도 된다** |
+| 인식 지연 | 1~3초 | CPU 세대에 따라 비슷하거나 조금 느리다 |
+
+인텔 CPU 는 코어를 많이 쓸수록 빨라집니다. 워커를 여럿 띄울 때는 스레드를
+나눠 주세요 — 안 나누면 워커를 늘릴수록 느려지는 구간이 생깁니다.
+
+```yaml
+VAI_STT_ADAPTER_CONFIG: '{"device":"auto","compute_type":"int8","language":"ko","cpu_threads":8}'
+```
+
+번들은 **amd64 가 기본값**이라 `--arch` 를 줄 필요가 없습니다(애플 실리콘일
+때만 `--arch arm64`). 설치기가 번들과 장비의 아키텍처를 대조해서, 틀리면
+이미지를 풀기 전에 막습니다.
+
+### 1.1 요약을 진짜로 나오게 하려면 (Ollama)
 
 compose 기본값은 `VAI_LLM_ADAPTER=echo` 다. **echo 면 요약이 프롬프트를 그대로
 돌려준다** — 회의록 검증이 목적이라면 이걸 먼저 바꾼다.
 
 ```bash
-# 맥에서 (Metal 가속)
+# 맥에서 (Apple Silicon 은 Metal 가속, 인텔은 CPU)
 brew install ollama && ollama serve &
 ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
@@ -75,6 +118,15 @@ VAI_LLM_MODEL=qwen2.5:7b-instruct-q4_K_M \
 
 16GB 맥에서 STT 와 sLLM 을 **동시에** 올리면 스왑이 난다. 그래서 요약은 회의
 종료 후에 돌게 해 뒀다(STT 우선, docs/12 §4.1) — 회의 중에는 겹치지 않는다.
+**32GB 라면 이 제약이 없다.** 그래도 기본값은 그대로 두는 편이 낫다 — 시연
+장비가 바뀌어도 같은 순서로 돌기 때문이다.
+
+Apple Silicon 은 Ollama 가 Metal 로 가속하지만, **인텔 맥은 sLLM 도 CPU** 다.
+7B 모델이 무겁게 느껴지면 3B 급으로 내린다:
+
+```bash
+ollama pull qwen2.5:3b-instruct-q4_K_M
+```
 
 ## 2. 기동
 

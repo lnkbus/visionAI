@@ -198,7 +198,13 @@ services:
       # 기본값이 실제 엔진이다. fake 로 돌리려면 VAI_STT_ADAPTER=fake 를 준다.
       VAI_STT_ADAPTER: ${VAI_STT_ADAPTER:-faster_whisper}
       VAI_STT_MODEL_PATH: ${VAI_STT_MODEL_PATH:-/models/faster-whisper-small}
-      VAI_STT_ADAPTER_CONFIG: '{"device":"cpu","compute_type":"int8","language":"ko"}'
+      # device 는 셋 중 하나다:
+      #   auto — 있으면 GPU, 없으면 CPU. 어느 쪽으로 갔는지 로그에 남는다 (기본값)
+      #   cuda — 없으면 **기동을 거부한다.** GPU 로 견적을 낸 설치에서 쓴다 —
+      #          조용히 CPU 로 내려가면 "제안서엔 GPU, 현장은 CPU"가 된다
+      #   cpu  — 그대로
+      # 맥은 카드가 꽂혀 있어도 컨테이너가 GPU 를 못 쓴다(Docker Desktop 은 VM).
+      VAI_STT_ADAPTER_CONFIG: '{"device":"auto","compute_type":"","language":"ko"}'
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
       VAI_STT_PUBLISH_UI: "false"
