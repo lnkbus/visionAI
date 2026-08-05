@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -11,6 +13,15 @@ import yaml
 from blockctl.bundle import licensed_blocks, plan
 from blockctl.catalog import CatalogError, load_catalog, validate
 from blockctl.freeze import FreezeError, diff, freeze_package, render
+from blockctl.history import (
+    HISTORY_PATH,
+    HistoryError,
+    ReleaseEntry,
+    load_history,
+)
+from blockctl.history import append as append_release
+from blockctl.history import render as render_history
+from blockctl.history import verify as verify_history
 from blockctl.release import Severity, blocking, embed_public_key, verify_release
 
 app = typer.Typer(help="VisionAI 블록 카탈로그 도구", no_args_is_help=True)
@@ -210,6 +221,128 @@ def freeze(
         f"해시 {current.configuration_hash[:16]}",
         fg=typer.colors.GREEN,
     )
+
+
+PACKAGES = ("meeting", "aicc", "voicebot", "avatar")
+
+
+def _head_commit(root: Path) -> str:
+    """되돌아갈 좌표. 여기서만 깃을 부른다 — 나머지 계산은 순수 함수다."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise typer.BadParameter("깃 커밋을 읽을 수 없다 — --commit으로 직접 준다") from exc
+    return out.stdout.strip()
+
+
+@app.command()
+def snapshot(
+    version: str = typer.Argument(..., help="릴리스 버전 (0.3.0)"),
+    root: Path = typer.Option(None, help="레포 루트"),
+    note: str = typer.Option("", help="이 시점을 한 줄로"),
+    commit: str = typer.Option("", help="깃 커밋 (기본: HEAD)"),
+    date: str = typer.Option("", help="릴리스 날짜 YYYY-MM-DD (기본: 오늘 UTC)"),
+    write: bool = typer.Option(False, "--write", help="이력에 실제로 추가한다"),
+) -> None:
+    """현재 형상을 하나의 릴리스 시점으로 박제한다.
+
+    "3월에 저 고객사가 받은 게 정확히 무엇인가"에 답하기 위한 기록이다.
+    버전 문자열만으로는 부족하다 — 같은 버전을 표방하는 서로 다른 물건이
+    생길 수 있고, 그것이 형상 관리가 막으려는 상황이다.
+
+    기본 동작은 **미리보기**다. ``--write``를 줘야 이력에 들어가고, 들어간
+    뒤에는 고치지 않는다. 같은 커밋에 ``git tag v<버전>``을 붙인다.
+    """
+    base = root or Path.cwd()
+    chart_dir = base / "deploy" / "charts" / "visionai"
+    try:
+        blocks = load_catalog(_blocks_dir(root))
+        freezes = {
+            name: freeze_package(name, blocks, root=base, chart_dir=chart_dir) for name in PACKAGES
+        }
+    except (CatalogError, FreezeError) as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    # 명세와 어긋난 상태를 박제하면 이력이 거짓이 된다. 여기서 먼저 막는다.
+    drifted = [
+        name
+        for name, current in freezes.items()
+        if diff(current, yaml.safe_load((base / FREEZE_DIR / f"{name}.yaml").read_text("utf-8")))
+        if (base / FREEZE_DIR / f"{name}.yaml").is_file()
+    ]
+    if drifted:
+        typer.secho(
+            f"✗ 형상 명세와 어긋난 패키지가 있다: {', '.join(drifted)} — "
+            "`blockctl freeze <패키지> --write`로 맞춘 뒤 박제한다",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    entry = ReleaseEntry(
+        version=version,
+        released_at=date or datetime.now(UTC).strftime("%Y-%m-%d"),
+        commit=commit or _head_commit(base),
+        packages={name: fz.configuration_hash for name, fz in freezes.items()},
+        blocks={b.manifest.id: b.manifest.version for b in blocks},
+        note=note,
+    )
+
+    target = base / HISTORY_PATH
+    try:
+        entries = append_release(load_history(target), entry)
+    except HistoryError as exc:
+        typer.secho(f"✗ 이력에 추가할 수 없다:\n{exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"버전   {entry.version}  ({entry.released_at})")
+    typer.echo(f"커밋   {entry.commit}")
+    for name, digest in sorted(entry.packages.items()):
+        typer.echo(f"  {name:<9} {digest[:16]}")
+
+    if not write:
+        typer.secho("\n미리보기다. 이력에 넣으려면 --write", fg=typer.colors.YELLOW)
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_history(entries), encoding="utf-8")
+    typer.secho(f"✓ 시점 기록: {HISTORY_PATH}", fg=typer.colors.GREEN)
+    typer.echo(f"  같은 커밋에 태그를 붙인다: git tag v{entry.version} {entry.commit[:12]}")
+
+
+@app.command("history")
+def history_cmd(root: Path = typer.Option(None, help="레포 루트")) -> None:
+    """릴리스 시점 이력을 출력하고 무결성을 검사한다 (CI 게이트)."""
+    base = root or Path.cwd()
+    try:
+        entries = load_history(base / HISTORY_PATH)
+    except HistoryError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    problems = verify_history(entries)
+    if problems:
+        typer.secho("✗ 이력 무결성 위반", fg=typer.colors.RED, err=True)
+        for problem in problems:
+            typer.secho(f"  · {problem}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    if not entries:
+        typer.secho(
+            "기록된 릴리스 시점이 없다 — `blockctl snapshot <버전> --write`", fg=typer.colors.YELLOW
+        )
+        return
+
+    for entry in entries:
+        head = f"{entry.version:<10} {entry.released_at}  {entry.commit[:12]}"
+        typer.echo(f"{head}  {entry.note}" if entry.note else head)
+    typer.secho(f"✓ 시점 {len(entries)}건 무결성 통과", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":

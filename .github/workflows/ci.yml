@@ -59,6 +59,11 @@ jobs:
             uv run blockctl freeze "$package" --root .
           done
 
+      - name: 릴리스 시점 이력
+        # 이력이 깨지면 "그때 무엇을 납품했나"에 답할 수 없다. 버전 중복·
+        # 역행·짧은 커밋 해시는 넣을 때 막지 않으면 나중에 못 고친다.
+        run: uv run blockctl history --root .
+
       - name: 테스트
         # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
         run: uv run pytest -q
@@ -122,6 +127,43 @@ jobs:
               | kubeconform -strict -summary -kubernetes-version 1.29.0
           done
 
+
+  change-control:
+    # 혼합 정책의 기계 부분. 일상 변경은 main 직접 커밋으로 가고, 통제 대상
+    # 경로만 PR을 거치게 한다. 문서로만 적어 두면 지켜지지 않고, 안 지켜진
+    # 사실이 드러나지도 않는다 — 그래서 push 이벤트에서 검사한다.
+    #
+    # 병합 커밋이면 PR을 거친 것이므로 통과시킨다. 부모가 하나인 커밋이
+    # 통제 경로를 건드렸다면 직접 push다.
+    name: 변경 통제
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 통제 대상 경로가 PR을 거쳤는지
+        run: |
+          parents=$(git rev-list --parents -n 1 HEAD | wc -w)
+          if [ "$parents" -ge 3 ]; then
+            echo "병합 커밋 — PR을 거쳤다"
+            exit 0
+          fi
+
+          patterns=$(grep -v '^\s*#' .github/change-control-paths.txt | grep -v '^\s*$')
+          changed=$(git diff --name-only HEAD~1 HEAD -- $patterns)
+          if [ -z "$changed" ]; then
+            echo "통제 대상 경로 변경 없음 — 직접 커밋으로 충분하다"
+            exit 0
+          fi
+
+          echo "::error::통제 대상 경로가 PR 없이 들어왔다. 되돌리고 PR로 다시 올린다."
+          echo "$changed" | sed 's/^/  · /'
+          echo ""
+          echo "이 경로들은 인증 심사의 변경 통제 근거이거나, 틀렸을 때"
+          echo "되돌리기가 비싼 곳이다. 기준은 .github/change-control-paths.txt에 있다."
+          exit 1
 
   images:
     name: 블록 이미지 빌드

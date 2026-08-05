@@ -1,4 +1,4 @@
-.PHONY: help install lint fmt type test check blocks eval eval-gate chart freeze freeze-write up down logs demo
+.PHONY: help install lint fmt type test check blocks eval eval-gate chart freeze freeze-write up down logs demo snapshot history
 
 help:  ## 사용 가능한 타깃
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}'
@@ -45,7 +45,15 @@ freeze:  ## 패키지 형상 대조 (GS인증·납품 검수). PKG=meeting 지�
 freeze-write:  ## 형상 명세 갱신 — 의도한 구성 변경일 때만
 	@for p in $(or $(PKG),meeting aicc voicebot avatar); do uv run blockctl freeze $$p --root . --write; done
 
-check: lint type test blocks eval-gate freeze  ## CI가 도는 전부
+history:  ## 릴리스 시점 이력 조회 + 무결성 검사
+	uv run blockctl history --root .
+
+snapshot:  ## 현재 형상을 릴리스 시점으로 박제 (VERSION=0.2.0 필수, NOTE= 선택)
+	@test -n "$(VERSION)" || (echo "VERSION=0.2.0 이 필요하다"; exit 1)
+	uv run blockctl snapshot $(VERSION) --root . $(if $(NOTE),--note "$(NOTE)",) $(if $(WRITE),--write,)
+	@test -n "$(WRITE)" || echo "\n실제로 기록하려면: make snapshot VERSION=$(VERSION) WRITE=1"
+
+check: lint type test blocks eval-gate freeze history  ## CI가 도는 전부
 
 up:  ## compose 데모 환경 기동
 	docker compose -f deploy/compose/docker-compose.yml up --build -d
