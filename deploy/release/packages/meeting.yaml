@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 572610903f8c9975ba4d698f67c589d9dc0f68962e25eaff4d96406acf55ed83
+configuration_hash: ed833e68bb5ea2c03d92b4eea71703453515ebb41eaac8525ea71aaaaf0e7687
 component_count: 15
 components:
 - id: AUD-VAD
@@ -28,9 +28,9 @@ components:
   - CORE-SEC
 - id: CORE-BUS
   name: 세션 오케스트레이터 & 이벤트 버스
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: eb57ed237ce6904f
+  source_hash: 89c2a9e8bc7b43a9
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW

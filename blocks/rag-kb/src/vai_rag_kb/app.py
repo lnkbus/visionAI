@@ -12,13 +12,19 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common import audit
-from vai_common.bus import build_bus
+from vai_common.bus import RedisEventBus, build_bus
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
 from vai_contracts.audit import AuditAction
 from vai_contracts.retrieval import Document, DocumentStatus, IngestRequest
 from vai_rag_kb import parsers
-from vai_rag_kb.indexer import DocumentStore, IngestionPipeline, new_doc_id
+from vai_rag_kb.indexer import (
+    DocumentStore,
+    IngestionPipeline,
+    InMemoryDocumentStore,
+    RedisDocumentStore,
+    new_doc_id,
+)
 from vai_retrieval.embedding import create_embedder
 from vai_retrieval.hybrid import HybridSearchEngine
 from vai_retrieval.rerank import create_reranker
@@ -43,7 +49,9 @@ class DeleteResponse(BaseModel):
     removed_chunks: int
 
 
-def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
+def create_app(
+    engine: HybridSearchEngine | None = None, documents: DocumentStore | None = None
+) -> FastAPI:
     common = get_settings()
     kb_cfg = KbSettings()
 
@@ -64,13 +72,22 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
             search = HybridSearchEngine(embedder, store, reranker)
             application.state.owns_engine = True
         application.state.engine = search
-        application.state.documents = DocumentStore()
+        # 문서 파기는 감사 대상이다(docs/05 §2.2). "지웠다"를 증명할 수 없으면
+        # 파기 완전성 요구를 충족했다고 말할 수 없다.
+        event_bus = build_bus(common.redis_url)
+        application.state.bus = event_bus
+        # 메타데이터가 재기동을 못 넘기면 파기 자체가 불가능해진다 — 검색은
+        # 계속 그 문서로 답하는데 목록에는 없어서 지울 대상을 특정할 수 없다.
+        # 주입받으면 그쪽을 쓴다: 블록 계약 검증에 Redis가 필요하면 그 테스트는
+        # 인프라 상태에 따라 흔들린다.
+        application.state.documents = documents or (
+            RedisDocumentStore(event_bus.redis)
+            if isinstance(event_bus, RedisEventBus)
+            else InMemoryDocumentStore()
+        )
         application.state.pipeline = IngestionPipeline(
             application.state.documents, search.index_chunks
         )
-        # 문서 파기는 감사 대상이다(docs/05 §2.2). "지웠다"를 증명할 수 없으면
-        # 파기 완전성 요구를 충족했다고 말할 수 없다.
-        application.state.bus = build_bus(common.redis_url)
         log.info("지식베이스 블록 기동", extra={"embedder": kb_cfg.embedder, "store": kb_cfg.store})
         try:
             yield
@@ -104,7 +121,7 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
             title=payload.title,
             source=payload.source,
         )
-        request.app.state.documents.put(document)
+        await request.app.state.documents.put(document)
         background.add_task(request.app.state.pipeline.run, document, payload.text)
         return document
 
@@ -155,7 +172,7 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
         # 온전하지 않게 읽힌 부분은 문서에 남긴다. 조용히 넘기면
         # "왜 이 조항이 검색이 안 되지"를 아무도 설명하지 못한다.
         document.warnings = list(parsed.warnings)
-        request.app.state.documents.put(document)
+        await request.app.state.documents.put(document)
         background.add_task(request.app.state.pipeline.run, document, parsed.text)
         return document
 
@@ -167,39 +184,52 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
     @app.get("/internal/v1/documents/{doc_id}", response_model=Document, tags=["knowledge"])
     async def get_document(doc_id: str, request: Request) -> Document:
         """색인 진행 상태 조회. 관리자 콘솔이 폴링한다."""
-        document: Document | None = request.app.state.documents.get(doc_id)
+        document: Document | None = await request.app.state.documents.get(doc_id)
         if document is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없다")
         return document
 
     @app.get("/internal/v1/kb/{kb_id}/documents", response_model=list[Document], tags=["knowledge"])
     async def list_documents(kb_id: str, tenant_id: str, request: Request) -> list[Document]:
-        documents: list[Document] = request.app.state.documents.list_for(tenant_id, kb_id)
+        documents: list[Document] = await request.app.state.documents.list_for(tenant_id, kb_id)
         return documents
 
     @app.delete(
         "/internal/v1/documents/{doc_id}", response_model=DeleteResponse, tags=["knowledge"]
     )
-    async def delete_document(doc_id: str, request: Request) -> DeleteResponse:
-        """문서 파기. 청크와 색인까지 함께 지운다(docs/05 §2.2 파기 완전성)."""
-        document = request.app.state.documents.get(doc_id)
-        if document is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없다")
-        removed = await request.app.state.engine.remove_document(
-            document.tenant_id, document.kb_id, doc_id
-        )
-        request.app.state.documents.delete(doc_id)
+    async def delete_document(
+        doc_id: str, request: Request, tenant_id: str = "", kb_id: str = ""
+    ) -> DeleteResponse:
+        """문서 파기. 청크와 색인까지 함께 지운다(docs/05 §2.2 파기 완전성).
+
+        ``tenant_id``·``kb_id``를 주면 **메타데이터 없이도 지운다.** 파기 요구는
+        거절할 수 없는데, 메타데이터가 있어야만 지울 수 있게 만들면 그 메타데이터를
+        잃은 순간 파기가 불가능해진다 — 벡터 저장소에는 청크가 그대로 남아
+        검색은 계속 그 문서로 답하는 채로.
+        """
+        document = await request.app.state.documents.get(doc_id)
+        if document is None and not (tenant_id and kb_id):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail="문서를 찾을 수 없다 — tenant_id·kb_id를 주면 메타데이터 없이 지운다",
+            )
+
+        target_tenant = document.tenant_id if document else tenant_id
+        target_kb = document.kb_id if document else kb_id
+        removed = await request.app.state.engine.remove_document(target_tenant, target_kb, doc_id)
+        await request.app.state.documents.delete(doc_id)
         await audit.emit(
             request.app.state.bus,
             action=AuditAction.KB_DELETE,
             actor=BLOCK_ID,
             block_id=BLOCK_ID,
             resource=doc_id,
-            tenant_id=document.tenant_id,
+            tenant_id=target_tenant,
             detail={
-                "kb_id": document.kb_id,
+                "kb_id": target_kb,
                 "removed_chunks": str(removed),
-                "title": document.title,
+                "title": document.title if document else "",
+                "metadata_present": str(document is not None),
             },
         )
         return DeleteResponse(doc_id=doc_id, removed_chunks=removed)

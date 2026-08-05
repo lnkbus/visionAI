@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 3454b2b087668d619ed856c7892daee6739c497d5fae4627bd399b0e3f683917
+configuration_hash: 21103eaf805ef5445166300a59bac14e733d85b4f42c931ea8397e394cff58e6
 component_count: 23
 components:
 - id: AUD-RTP
@@ -47,9 +47,9 @@ components:
   - CORE-SEC
 - id: CORE-BUS
   name: 세션 오케스트레이터 & 이벤트 버스
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: eb57ed237ce6904f
+  source_hash: 89c2a9e8bc7b43a9
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
@@ -109,9 +109,9 @@ components:
   - LLM-GW
 - id: RAG-KB
   name: 지식베이스 수집기
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 6d0ba64c008c37c1
+  source_hash: 2b078e64b5afbcca
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:

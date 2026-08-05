@@ -91,43 +91,13 @@ def create_app(
     ) -> Session:
         # 라이선스 동시 채널 한도. 여기서 세지 않으면 .lic의 채널 수는 장식이고,
         # 고객사는 산 만큼만 쓴다는 계약을 지킬 수단이 없다.
+        #
+        # **검사와 등록을 한 번에 한다.** 세고 나서 따로 저장하면 그 사이에
+        # 다른 요청이 끼어든다 — 실측으로 한도 2에 동시 8건이 전부 통과했다.
+        # 착신이 몰리는 순간에만 뚫리므로 재현도 어렵고, 그동안 라이선스는
+        # 장식이 된다.
         gate: LicenseGate = request.app.state.license
         limit, limiting_block = gate.channel_limit()
-        if limit is not None:
-            active = await store.active_count()
-            if active >= limit:
-                # 거부는 로그가 아니라 감사에 남아야 한다. 운영자가 "왜 통화가
-                # 안 받아졌나"를 물었을 때 답이 있어야 증설 견적으로 이어진다.
-                await audit.emit(
-                    bus,
-                    action=AuditAction.SESSION_START,
-                    actor=BLOCK_ID,
-                    block_id=BLOCK_ID,
-                    outcome=AuditOutcome.DENIED,
-                    tenant_id=payload.tenant_id,
-                    detail={
-                        "reason": "concurrent_channels 한도 도달",
-                        "active": str(active),
-                        "limit": str(limit),
-                        "limiting_block": limiting_block,
-                    },
-                )
-                log.warning(
-                    "동시 채널 한도 도달 — 세션 생성 거부",
-                    extra={
-                        "active": active,
-                        "limit": limit,
-                        "limiting_block": limiting_block,
-                        "tenant_id": payload.tenant_id,
-                    },
-                )
-                raise HTTPException(
-                    status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=(
-                        f"동시 채널 한도({limit})에 도달했다 — {limiting_block} 라이선스 기준. "
-                        "증설이 필요하면 라이선스를 재발급받는다"
-                    ),
-                )
 
         session = Session(
             session_id=new_session_id(),
@@ -137,6 +107,41 @@ def create_app(
             language=payload.language,
             metadata=payload.metadata,
         )
+        rejected_at = await store.reserve(session, limit)
+        if rejected_at is not None:
+            # 거부는 로그가 아니라 감사에 남아야 한다. 운영자가 "왜 통화가
+            # 안 받아졌나"를 물었을 때 답이 있어야 증설 견적으로 이어진다.
+            await audit.emit(
+                bus,
+                action=AuditAction.SESSION_START,
+                actor=BLOCK_ID,
+                block_id=BLOCK_ID,
+                outcome=AuditOutcome.DENIED,
+                tenant_id=payload.tenant_id,
+                detail={
+                    "reason": "concurrent_channels 한도 도달",
+                    "active": str(rejected_at),
+                    "limit": str(limit),
+                    "limiting_block": limiting_block,
+                },
+            )
+            log.warning(
+                "동시 채널 한도 도달 — 세션 생성 거부",
+                extra={
+                    "active": rejected_at,
+                    "limit": limit,
+                    "limiting_block": limiting_block,
+                    "tenant_id": payload.tenant_id,
+                },
+            )
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"동시 채널 한도({limit})에 도달했다 — {limiting_block} 라이선스 기준. "
+                    "증설이 필요하면 라이선스를 재발급받는다"
+                ),
+            )
+
         await store.save(session)
         log.info(
             "세션 생성",
