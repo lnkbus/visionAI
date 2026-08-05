@@ -212,9 +212,21 @@ def load_master_key(path: str | Path) -> bytes:
             f"마스터 키 파일 권한이 느슨하다 (chmod 600 필요): {path} ({mode & 0o777:o})"
         )
 
-    raw = file.read_bytes().strip()
-    # 운영자가 base64로 보관하는 경우가 흔하다. 둘 다 받되 길이는 반드시 맞춘다.
-    key = base64.b64decode(raw, validate=True) if len(raw) != KEY_BYTES else raw
+    raw = file.read_bytes()
+    # 운영자가 base64로 보관하는 경우가 흔하다. 둘 다 받는다.
+    #
+    # **원시 바이트를 먼저 본다.** 무작위 32바이트 중 약 5%는 공백 바이트(0x20,
+    # 0x0a 등)로 시작하거나 끝난다. strip부터 하면 그런 키가 조용히 잘려
+    # 길이가 안 맞고, 결국 "가끔 복호가 안 되는" 설치가 된다.
+    if len(raw) == KEY_BYTES:
+        return raw
+
+    try:
+        key = base64.b64decode(raw.strip(), validate=True)
+    except ValueError as exc:
+        raise CryptoError(
+            f"마스터 키를 해석할 수 없다: {path} (원시 {KEY_BYTES}바이트 또는 base64)"
+        ) from exc
     _require_key(key)
     return key
 

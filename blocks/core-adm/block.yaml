@@ -1,0 +1,25 @@
+id: CORE-ADM
+name: 운영 콘솔
+tier: foundation
+version: 0.1.0
+description: >
+  고객사 운영자가 스스로 플랫폼을 확인하는 화면. 블록 상태(동시 프로브), 라이선스
+  만료 잔여일, 감사 로그 무결성과 조회, 암호화 활성 여부를 한 화면에 모은다.
+  폐쇄망에서는 공급사가 원격으로 볼 수 없으므로, 이 화면이 없으면 모든 확인이
+  출동으로 이어져 유지보수 원가가 라이선스 수익을 잠식한다.
+  집계만 하고 상태를 따로 저장하지 않는다 — 저장하면 원본과 갈라져
+  "화면은 정상인데 실제로는 죽어 있는" 상태가 된다.
+depends_on:
+  - CORE-BUS
+  - CORE-LIC
+  - CORE-SEC
+adapters: []
+contracts:
+  consumes: []
+  produces:
+    # 콘솔 접근 거부와 감사 열람 자체도 감사 대상이다.
+    - audit.log
+billing:
+  capacity_unit: seats
+  dev_effort_mm: 3.0
+  included_in_package: false

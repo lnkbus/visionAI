@@ -21,17 +21,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from vai_common.bus import EventBus, build_bus
-from vai_common.service import create_block_app
-from vai_common.settings import get_settings
-from vai_contracts.session import AudioFormat, Session, SessionCreate, SessionProfile, SessionState
-from vai_core_gw.auth import (
+from vai_common.auth import (
     AuthError,
     Principal,
     issue_session_token,
     verify_access_token,
     verify_session_token,
 )
+from vai_common.bus import EventBus, build_bus
+from vai_common.service import create_block_app
+from vai_common.settings import get_settings
+from vai_contracts.session import AudioFormat, Session, SessionCreate, SessionProfile, SessionState
 from vai_core_gw.bus_client import CoreBusClient, CoreBusError
 from vai_core_gw.stream import AudioStreamHandler
 

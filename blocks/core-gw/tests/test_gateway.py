@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport
 
+from vai_common.auth import issue_access_token, issue_session_token
 from vai_common.bus import InMemoryEventBus
 from vai_contracts.events import AudioChunk
 from vai_contracts.session import ChannelRole, SessionProfile
@@ -19,7 +20,6 @@ from vai_contracts.topics import Topic
 from vai_core_bus.app import create_app as create_bus_app
 from vai_core_bus.store import InMemorySessionStore
 from vai_core_gw.app import GatewaySettings, create_app
-from vai_core_gw.auth import issue_access_token, issue_session_token
 from vai_core_gw.bus_client import CoreBusClient
 
 SECRET = "test-secret-long-enough-for-hmac-sha256"

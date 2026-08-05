@@ -155,6 +155,25 @@ def test_원시_바이트_키도_읽는다(tmp_path: Path) -> None:
     assert load_master_key(path) == key
 
 
+def test_공백_바이트로_시작하는_원시_키도_온전히_읽는다(tmp_path: Path) -> None:
+    """무작위 32바이트 중 약 5%는 공백 바이트로 시작하거나 끝난다.
+    strip부터 하면 그런 키가 조용히 잘려 "가끔 복호가 안 되는" 설치가 된다."""
+    path = tmp_path / "whitespace.key"
+    key = b"\n" + bytes(range(1, 31)) + b" "  # 앞뒤가 개행·공백인 정상 키
+    assert len(key) == KEY_BYTES
+    path.write_bytes(key)
+    path.chmod(0o600)
+    assert load_master_key(path) == key
+
+
+def test_해석할_수_없는_키_파일은_이유를_알려_준다(tmp_path: Path) -> None:
+    path = tmp_path / "garbage.key"
+    path.write_bytes(b"this is not a key")
+    path.chmod(0o600)
+    with pytest.raises(CryptoError, match="해석할 수 없다"):
+        load_master_key(path)
+
+
 def test_키_파일이_없으면_이유를_알려_준다(tmp_path: Path) -> None:
     with pytest.raises(CryptoError, match="없다"):
         load_master_key(tmp_path / "absent.key")

@@ -43,6 +43,7 @@ known-first-party = [
     "vai_contracts",
     "vai_core_bus",
     "vai_core_lic",
+    "vai_core_adm",
     "vai_core_sec",
     "vai_core_gw",
     "vai_flt_micro",

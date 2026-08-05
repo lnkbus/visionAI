@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI 운영 콘솔 — 블록 상태 · 라이선스 · 감사</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb;
+          --accent:#2563eb; --warn:#b45309; --danger:#b91c1c; --ok:#15803d; --card:#f9fafb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af;
+          --line:#272b33; --accent:#60a5fa; --warn:#fbbf24; --danger:#f87171; --ok:#4ade80; --card:#161a21; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  nav { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; flex-wrap:wrap; }
+  nav button { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted);
+               padding:8px 14px; font:inherit; cursor:pointer; }
+  nav button[aria-selected="true"] { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+  section[hidden] { display:none; }
+  .panel { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; background:var(--card); }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+  input, select { width:100%; font:inherit; padding:7px 9px; border:1px solid var(--line);
+                  border-radius:7px; background:var(--bg); color:var(--fg); }
+  button.act { background:var(--accent); color:#fff; border:1px solid transparent; border-radius:7px;
+               padding:7px 14px; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  .row { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:120px; }
+  .row > button { flex:0 0 auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); }
+  .tag.ready { color:var(--ok); border-color:var(--ok); }
+  .tag.degraded { color:var(--warn); border-color:var(--warn); }
+  .tag.down { color:var(--danger); border-color:var(--danger); }
+  .tag.unknown { color:var(--muted); }
+  .metrics { display:flex; gap:22px; flex-wrap:wrap; margin-bottom:6px; }
+  .metric b { display:block; font-size:22px; font-weight:600; }
+  .metric b.warn { color:var(--warn); } .metric b.bad { color:var(--danger); } .metric b.good { color:var(--ok); }
+  .metric span { font-size:12px; color:var(--muted); }
+  .empty { color:var(--muted); font-size:13px; }
+  .msg { font-size:13px; margin-top:8px; min-height:18px; }
+  .msg.err { color:var(--danger); } .msg.ok { color:var(--ok); }
+  .banner { border-radius:8px; padding:9px 12px; margin-bottom:12px; font-size:13px; border:1px solid; }
+  .banner.warn { color:var(--warn); border-color:var(--warn); }
+  .banner.bad { color:var(--danger); border-color:var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <h1>VisionAI 운영 콘솔</h1>
+  <p class="sub">
+    폐쇄망에서는 공급사가 원격으로 볼 수 없다. 이 화면만으로 “지금 정상인가”를 판단할 수 있어야 한다.
+  </p>
+
+  <div class="panel">
+    <h2>운영자 토큰</h2>
+    <div class="row">
+      <div>
+        <label for="token">Bearer 토큰 (<code>admin</code> 스코프 필요)</label>
+        <input id="token" placeholder="eyJhbGciOi…" autocomplete="off" />
+      </div>
+      <button class="act" id="refresh">새로고침</button>
+    </div>
+    <div class="msg" id="authMsg"></div>
+  </div>
+
+  <div id="banners"></div>
+
+  <nav>
+    <button data-tab="status" aria-selected="true">플랫폼 상태</button>
+    <button data-tab="audit" aria-selected="false">감사 로그</button>
+  </nav>
+
+  <section id="tab-status">
+    <div class="panel">
+      <h2>요약</h2>
+      <div class="metrics" id="summary"><span class="empty">토큰을 넣고 새로고침을 누르세요.</span></div>
+    </div>
+    <div class="panel">
+      <h2>블록 상태</h2>
+      <table>
+        <thead><tr><th>블록</th><th>상태</th><th>지연</th><th>라이선스</th><th>비고</th></tr></thead>
+        <tbody id="blocks"><tr><td colspan="5" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-audit" hidden>
+    <div class="panel">
+      <h2>무결성</h2>
+      <div class="metrics" id="chain"><span class="empty">—</span></div>
+      <p class="sub" style="margin:6px 0 0">
+        해시 체인은 변조를 <b>막지 않고 탐지</b>한다. head 해시를 별도 매체에 정기 보관하는
+        운영 절차가 함께여야 저장소 통째 교체까지 막을 수 있다.
+      </p>
+    </div>
+    <div class="panel">
+      <h2>조회</h2>
+      <div class="row">
+        <div><label for="fActor">행위자</label><input id="fActor" placeholder="전체" /></div>
+        <div><label for="fAction">행위</label>
+          <select id="fAction">
+            <option value="">전체</option>
+            <option value="pii.reveal">PII 원문 열람</option>
+            <option value="export">반출</option>
+            <option value="access_denied">접근 거부</option>
+            <option value="session.start">세션 시작</option>
+            <option value="session.end">세션 종료</option>
+            <option value="kb.delete">문서 파기</option>
+            <option value="rule.publish">룰 배포</option>
+            <option value="license.install">라이선스 설치</option>
+          </select>
+        </div>
+        <div><label for="fTenant">테넌트</label><input id="fTenant" placeholder="전체" /></div>
+        <button class="ghost" id="query">조회</button>
+      </div>
+      <div class="msg" id="auditMsg"></div>
+      <table>
+        <thead><tr><th>#</th><th>시각</th><th>행위</th><th>행위자</th><th>대상</th><th>결과</th></tr></thead>
+        <tbody id="records"><tr><td colspan="6" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TOKEN_KEY = "vai.adm.token";
+$("token").value = sessionStorage.getItem(TOKEN_KEY) || "";
+
+// 토큰은 sessionStorage에만 둔다. localStorage는 탭을 닫아도 남아
+// 공용 운영 PC에서 다음 사람에게 넘어간다.
+$("token").addEventListener("change", () => sessionStorage.setItem(TOKEN_KEY, $("token").value.trim()));
+
+document.querySelectorAll("nav button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
+    $("tab-status").hidden = btn.dataset.tab !== "status";
+    $("tab-audit").hidden = btn.dataset.tab !== "audit";
+  });
+});
+
+async function api(path, params) {
+  const url = new URL(path, location.origin);
+  Object.entries(params || {}).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
+  const token = $("token").value.trim();
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (res.status === 401) throw new Error("인증 실패 — admin 스코프를 가진 토큰이 필요합니다");
+  if (!res.ok) throw new Error(`${res.status} ${(await res.json().catch(() => ({}))).detail || ""}`);
+  return res.json();
+}
+
+function metric(value, label, cls) {
+  return `<div class="metric"><b class="${cls || ""}">${value}</b><span>${label}</span></div>`;
+}
+
+function banners(s) {
+  const out = [];
+  // 서명 검증 없이 도는 빌드는 라이선스가 사실상 없는 것과 같다. 가장 먼저 알린다.
+  if (!s.license_signature_verified) {
+    out.push(`<div class="banner bad">라이선스 서명 검증이 <b>꺼져 있습니다</b> — 릴리스 빌드가 아닙니다. 운영 반입 전 확인이 필요합니다.</div>`);
+  }
+  if (s.license_days_remaining !== null && s.license_days_remaining <= 30) {
+    const d = s.license_days_remaining;
+    out.push(`<div class="banner ${d < 0 ? "bad" : "warn"}">라이선스 ${d < 0 ? `만료 후 ${-d}일` : `만료까지 ${d}일`} — 갱신 절차를 시작하세요.</div>`);
+  }
+  if (s.audit_intact === false) {
+    out.push(`<div class="banner bad">감사 로그 무결성이 깨졌습니다 (#${s.audit_broken_at}부터 신뢰할 수 없음).</div>`);
+  }
+  if (!s.encryption_enabled) {
+    out.push(`<div class="banner warn">저장 암호화가 꺼져 있습니다 — 평문으로 저장됩니다.</div>`);
+  }
+  $("banners").innerHTML = out.join("");
+}
+
+function renderStatus(s) {
+  $("summary").innerHTML = [
+    metric(`${s.ready_count}/${s.total_count}`, "정상 블록", s.ready_count === s.total_count ? "good" : "bad"),
+    metric(s.license_expires || "무기한", "라이선스 만료"),
+    metric(s.license_days_remaining ?? "—", "잔여일", (s.license_days_remaining ?? 999) <= 30 ? "warn" : ""),
+    metric(s.audit_total, "감사 레코드"),
+    metric(s.audit_intact === null ? "?" : s.audit_intact ? "온전" : "손상", "무결성", s.audit_intact ? "good" : "bad"),
+    metric(s.encryption_enabled ? s.encryption_algorithm : "꺼짐", "저장 암호화", s.encryption_enabled ? "good" : "warn"),
+  ].join("");
+
+  $("blocks").innerHTML = s.blocks.length ? s.blocks.map((b) => `
+    <tr>
+      <td class="mono">${b.block_id}</td>
+      <td><span class="tag ${b.state}">${b.state}</span></td>
+      <td class="mono">${b.latency_ms === null ? "—" : b.latency_ms + "ms"}</td>
+      <td>${b.license_expired ? (b.license_in_grace ? "유예 중" : "만료") : (b.license_days_remaining ?? "—")}</td>
+      <td class="empty">${b.detail || ""}</td>
+    </tr>`).join("") : `<tr><td colspan="5" class="empty">—</td></tr>`;
+}
+
+async function refresh() {
+  $("authMsg").textContent = "조회 중…"; $("authMsg").className = "msg";
+  try {
+    const status = await api("/v1/admin/status");
+    banners(status);
+    renderStatus(status);
+    $("chain").innerHTML = [
+      metric(status.audit_total, "레코드"),
+      metric(status.audit_intact ? "통과" : "실패", "검증", status.audit_intact ? "good" : "bad"),
+      metric(status.audit_broken_at ?? "—", "끊긴 지점", status.audit_broken_at ? "bad" : ""),
+    ].join("");
+    $("authMsg").textContent = `갱신됨 ${new Date().toLocaleTimeString("ko-KR")}`;
+    $("authMsg").className = "msg ok";
+  } catch (err) {
+    $("authMsg").textContent = err.message;
+    $("authMsg").className = "msg err";
+  }
+}
+
+async function query() {
+  $("auditMsg").textContent = "조회 중…"; $("auditMsg").className = "msg";
+  try {
+    const rows = await api("/v1/admin/audit", {
+      actor: $("fActor").value.trim(), action: $("fAction").value, tenant_id: $("fTenant").value.trim(), limit: 100,
+    });
+    $("records").innerHTML = rows.length ? rows.map((r) => `
+      <tr>
+        <td class="mono">${r.seq_no}</td>
+        <td class="mono">${new Date(r.recorded_at).toLocaleString("ko-KR")}</td>
+        <td>${r.event.action}</td>
+        <td class="mono">${r.event.actor}</td>
+        <td class="mono">${r.event.resource || "—"}</td>
+        <td><span class="tag ${r.event.outcome === "success" ? "ready" : "down"}">${r.event.outcome}</span></td>
+      </tr>`).join("") : `<tr><td colspan="6" class="empty">해당하는 기록이 없습니다.</td></tr>`;
+    $("auditMsg").textContent = `${rows.length}건 — 이 조회 자체도 감사에 남습니다.`;
+    $("auditMsg").className = "msg ok";
+  } catch (err) {
+    $("auditMsg").textContent = err.message;
+    $("auditMsg").className = "msg err";
+  }
+}
+
+$("refresh").addEventListener("click", refresh);
+$("query").addEventListener("click", query);
+if ($("token").value) refresh();
+</script>
+</body>
+</html>

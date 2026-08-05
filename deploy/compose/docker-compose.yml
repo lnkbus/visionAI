@@ -93,6 +93,33 @@ services:
     ports:
       - "8096:8096"
 
+  core-adm:
+    # 운영 콘솔. 조회 전용이라 죽어도 상담은 계속 돈다.
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: core-adm
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: CORE-ADM
+      # 데모 구성은 인증을 **명시적으로** 끈다. 기본 비밀키로는 기동을 거부하므로
+      # "나중에 바꾸겠다"로 남는 기본값이 운영에 흘러 들어가지 않는다.
+      #   운영: VAI_ADM_REQUIRE_AUTH=true + VAI_ADM_JWT_SECRET=<32바이트 이상>
+      VAI_ADM_REQUIRE_AUTH: "false"
+      VAI_ADM_LICENSE_URL: http://core-lic:8095
+      VAI_ADM_SECURITY_URL: http://core-sec:8096
+    depends_on:
+      redis:
+        condition: service_healthy
+      core-lic:
+        condition: service_started
+      core-sec:
+        condition: service_started
+    ports:
+      - "8097:8097"
+
   core-bus:
     <<: *block
     build:

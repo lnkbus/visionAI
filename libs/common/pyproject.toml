@@ -11,6 +11,8 @@ dependencies = [
     # 오프라인 DRM 서명 검증(RSA-4096/PSS). 모든 블록이 기동 시 .lic을 직접
     # 검증하므로 공통 라이브러리에 둔다 — 라이선스 서버는 폐쇄망의 단일 장애점이다.
     "cryptography>=43.0",
+    # 게이트웨이와 운영 콘솔이 같은 토큰을 검증한다(vai_common.auth).
+    "pyjwt>=2.9",
 ]
 
 [build-system]
