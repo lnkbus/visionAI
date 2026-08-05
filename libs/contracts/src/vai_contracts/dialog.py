@@ -102,6 +102,51 @@ class Scenario(BaseModel):
         return next((n for n in self.nodes if n.node_id == node_id), None)
 
 
+class ScenarioStage(StrEnum):
+    """시나리오 생애주기.
+
+    한 칸씩만 올라간다. 편집 직후 바로 운영에 올리는 길을 열어 두면 결국
+    그 길로만 다니게 되고, 검증과 시연은 형식이 된다.
+
+    **편집하면 무조건 DRAFT로 내려간다.** 검증을 통과한 뒤 한 글자만 고쳐도
+    그 시나리오는 더 이상 검증된 물건이 아니다.
+    """
+
+    DRAFT = "draft"
+    """편집 중. 아직 아무것도 보장하지 않는다."""
+
+    BUILT = "built"
+    """구조 검증 통과 — 막다른 골목이 없고 사람 연결에 도달할 수 있다."""
+
+    STAGING = "staging"
+    """시뮬레이터로 실제 대화를 돌려 봤다. 구조가 맞는 것과 말이 되는 것은 다르다."""
+
+    LIVE = "live"
+    """운영 배포됨. 지금 고객이 이 흐름을 듣고 있다."""
+
+
+STAGE_ORDER = [ScenarioStage.DRAFT, ScenarioStage.BUILT, ScenarioStage.STAGING, ScenarioStage.LIVE]
+
+
+class ScenarioRevision(BaseModel):
+    """시나리오 한 판 + 그것이 어디까지 왔는지.
+
+    시나리오 본문과 생애주기를 한 덩어리로 둔다. 따로 두면 "어느 버전이
+    운영인가"를 두 곳에서 물어야 하고, 두 답이 갈라지는 순간 아무도 못 믿는다.
+    """
+
+    scenario: Scenario
+    stage: ScenarioStage = ScenarioStage.DRAFT
+    note: str = ""
+    """무엇을 왜 바꿨는가. 되돌릴 때 이 줄만 보고 고른다."""
+
+    updated_by: str = ""
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    problems: list[str] = Field(default_factory=list)
+    """마지막 검증에서 나온 문제. 비어 있다고 검증했다는 뜻은 아니다 —
+    ``stage``가 그것을 말한다."""
+
+
 class DialogState(BaseModel):
     """세션 하나의 대화 상태. 봇 프로세스 밖에 저장한다."""
 

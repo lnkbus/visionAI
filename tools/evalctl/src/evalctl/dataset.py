@@ -117,6 +117,21 @@ _GROUNDING_KEYS = {"case_id", "evidence", "answer", "accept", "known_limitation"
 _INTENT_KEYS = {"case_id", "intents", "utterance", "expect", "note"}
 
 
+@dataclass(frozen=True)
+class AsrCase:
+    """음성인식 사례 — 오디오 파일 하나와 정답 전사.
+
+    오디오를 레포에 넣지 않는다. 저작권과 개인정보가 걸리고, 무엇보다 커진다.
+    매니페스트는 **상대 경로**만 들고, 실제 오디오는 각자 반입한다
+    (`eval/audio/README.md`).
+    """
+
+    case_id: str
+    audio: str
+    text: str
+    note: str = ""
+
+
 def _read_rows(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """헤더(메타) 한 줄과 사례 줄들을 분리한다."""
     if not path.is_file():
@@ -313,3 +328,25 @@ def check_coverage(cases: list[RetrievalCase], articles: list[Article]) -> list[
         f"코퍼스 조항 {article_id}를 검증하는 사례가 없다" for article_id in sorted(known - covered)
     )
     return problems
+
+
+_ASR_KEYS = {"case_id", "audio", "text", "note"}
+
+
+def load_asr(path: Path) -> tuple[list[AsrCase], str]:
+    """오디오 매니페스트. 헤더의 ``_audio_root`` 가 오디오 디렉토리를 가리킨다."""
+    header, rows = _read_rows(path)
+    _check_keys(path, rows, _ASR_KEYS)
+    cases = [
+        AsrCase(
+            case_id=str(row["case_id"]),
+            audio=str(row["audio"]),
+            text=str(row["text"]),
+            note=str(row.get("note", "")),
+        )
+        for row in rows
+    ]
+    for case in cases:
+        if not case.text.strip():
+            raise DatasetError(f"{path.name} [{case.case_id}] 정답 전사가 비었다")
+    return cases, str(header.get("_audio_root", "audio"))

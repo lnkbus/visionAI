@@ -1,0 +1,2 @@
+{"_comment": "음성인식 골든셋 매니페스트. 오디오는 레포에 넣지 않는다 — 저작권·개인정보·용량. 실제 파일은 eval/audio/ 에 각자 반입한다(README 참조).", "_audio_root": "audio"}
+{"case_id": "mlk-001", "audio": "mlk-001.wav", "text": "I have a dream that one day this nation will rise up and live out the true meaning of its creed", "note": "영어 공개 샘플 — 배선 확인용. 한국어 기준선은 Zeroth 반입 후"}

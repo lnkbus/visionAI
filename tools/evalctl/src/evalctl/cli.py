@@ -54,6 +54,14 @@ INTENT_FILE = "intent-routing.jsonl"
 BASELINE_FILE = "baseline.json"
 
 SUITE_NAMES = ("retrieval", "pii", "tts", "grounding", "intent")
+"""``--suite all`` 이 도는 목록. 모델도 오디오도 없이 어디서나 돈다."""
+
+OPTIONAL_SUITES = ("stt",)
+"""명시적으로 지정해야 도는 스위트.
+
+``all`` 에 넣지 않는 이유는 **모델 가중치와 오디오가 있어야** 돌기 때문이다.
+섞어 두면 없는 환경에서 전체가 멈추고, 그러면 사람들은 곧 ``--suite`` 로
+빼기 시작한다. 반대로 조용히 건너뛰게 하면 "STT 품질 통과"로 읽힌다."""
 
 
 @dataclass
@@ -151,6 +159,9 @@ def run_suites(
     top_k: int,
     expand: bool = True,
     tokenizer: str = "syllable",
+    stt_adapter: str = "fake",
+    stt_model: str = "",
+    stt_config: str = "",
 ) -> list[SuiteResult]:
     results: list[SuiteResult] = []
     if "retrieval" in suites:
@@ -161,6 +172,8 @@ def run_suites(
         results.append(_run_tts_suite(eval_dir))
     if "grounding" in suites:
         results.append(_run_grounding_suite(eval_dir))
+    if "stt" in suites:
+        results.append(_run_asr_suite(eval_dir, stt_adapter, stt_model, stt_config))
     if "intent" in suites:
         # --no-expand는 질의 확장과 어휘 분류기를 함께 끈다. 둘 다 "모델 없이
         # 도는 보강 계층"이라 한 스위치로 껐다 켜야 비교가 의미를 갖는다.
@@ -168,12 +181,52 @@ def run_suites(
     return results
 
 
+def _run_asr_suite(eval_dir: Path, adapter: str, model_path: str, config: str) -> SuiteResult:
+    """음성인식 스위트.
+
+    모델도 오디오도 있어야 돈다. 없으면 **왜 못 도는지 말하고 멈춘다** —
+    조용히 건너뛰면 "STT 품질 통과"로 읽힌다.
+    """
+    from evalctl.asr import summarize_asr
+    from evalctl.dataset import load_asr
+    from evalctl.runners import AsrUnavailable, run_asr
+
+    manifest = eval_dir / "asr-manifest.jsonl"
+    cases, audio_root = load_asr(manifest)
+    if not model_path:
+        raise typer.BadParameter(
+            "--stt-model 이 필요하다. 가중치는 "
+            "`deploy/airgap/fetch_models.sh --out models --stt small` 로 받는다"
+        )
+    try:
+        outcomes = asyncio.run(
+            run_asr(
+                cases,
+                eval_dir / audio_root,
+                adapter_name=adapter,
+                model_path=model_path,
+                config=json.loads(config) if config else {},
+            )
+        )
+    except AsrUnavailable as exc:
+        typer.secho(f"✗ 음성 스위트를 돌릴 수 없다: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    metrics = summarize_asr(outcomes)
+    failures = [
+        f"[{o.case_id}] 기대 {o.reference!r} ≠ 실제 {o.hypothesis!r}"
+        for o in outcomes
+        if o.char_errors
+    ]
+    return SuiteResult(name="stt", metrics=dict(metrics.to_dict()), failures=failures)
+
+
 def _resolve_suites(suite: str) -> list[str]:
     if suite == "all":
         return list(SUITE_NAMES)
-    if suite not in SUITE_NAMES:
+    if suite not in (*SUITE_NAMES, *OPTIONAL_SUITES):
         raise typer.BadParameter(
-            f"알 수 없는 스위트: {suite} (가능: all, {', '.join(SUITE_NAMES)})"
+            f"알 수 없는 스위트: {suite} (가능: all, {', '.join((*SUITE_NAMES, *OPTIONAL_SUITES))})"
         )
     return [suite]
 
@@ -192,6 +245,16 @@ def _render(results: list[SuiteResult], verbose: bool) -> None:
                 f"  지연 평균 {metrics['mean_latency_ms']:.1f}ms · "
                 f"p95 {metrics['p95_latency_ms']:.1f}ms (알고리즘 기준)"
             )
+        elif result.name == "stt":
+            typer.echo(
+                f"  발화 {int(metrics['total'])}건 · "
+                f"CER {metrics['cer']:.3f} · WER {metrics['wer']:.3f}"
+            )
+            typer.echo(
+                f"  빈 인식 {int(metrics['empty'])}건 · p95 {metrics['p95_latency_ms']:.0f}ms"
+            )
+            # 한국어에서 기준선은 CER 로 잡는다. 띄어쓰기가 흔들려 WER 이
+            # 실력과 무관하게 출렁이기 때문이다.
         else:
             known = int(metrics["known_limitations"])
             suffix = f" · 알려진 한계 {known}건" if known else ""
@@ -219,7 +282,9 @@ def _as_suite_metrics(results: list[SuiteResult]) -> SuiteMetrics:
 @app.command()
 def run(
     root: Path = typer.Option(None, help="레포 루트"),
-    suite: str = typer.Option("all", help="all | retrieval | pii | tts | grounding | intent"),
+    suite: str = typer.Option(
+        "all", help="all | retrieval | pii | tts | grounding | intent | stt(모델 필요)"
+    ),
     top_k: int = typer.Option(DEFAULT_TOP_K, help="검색 상위 K (출하 설정과 같게 둔다)"),
     json_out: Path = typer.Option(None, "--json", help="결과를 JSON으로 저장"),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="실패 사례를 전부 출력"),
@@ -231,11 +296,21 @@ def run(
     tokenizer: str = typer.Option(
         "syllable", help="syllable(기본) | kiwi — 형태소 분석기 교체 이득을 재볼 때"
     ),
+    stt_adapter: str = typer.Option("faster_whisper", help="음성 스위트 어댑터"),
+    stt_model: str = typer.Option("", help="모델 경로 (--suite stt 에 필요)"),
+    stt_config: str = typer.Option("", help="어댑터 설정 JSON"),
 ) -> None:
     """골든셋을 돌려 품질 수치를 낸다 (판정 없음)."""
     try:
         results = run_suites(
-            _eval_dir(root), _resolve_suites(suite), top_k, not no_expand, tokenizer
+            _eval_dir(root),
+            _resolve_suites(suite),
+            top_k,
+            not no_expand,
+            tokenizer,
+            stt_adapter,
+            stt_model,
+            stt_config,
         )
     except DatasetError as exc:
         typer.secho(f"골든셋 오류: {exc}", fg=typer.colors.RED)

@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
+from evalctl.asr import AsrOutcome, score
 from evalctl.dataset import (
     Article,
+    AsrCase,
     GroundingCase,
     IntentCase,
     PiiCase,
@@ -281,3 +284,79 @@ async def run_intent(cases: list[IntentCase], *, use_classifier: bool = True) ->
 
 def corpus_path(eval_dir: Path, corpus_name: str) -> Path:
     return eval_dir / "corpus" / corpus_name
+
+
+# ── 음성인식 ────────────────────────────────────────────────────────────────
+#
+# 다른 스위트와 달리 **모델과 오디오가 있어야 돈다**. 없으면 건너뛰는 게 아니라
+# 왜 못 도는지 말하고 멈춘다 — 조용히 건너뛰면 "STT 품질 통과"로 읽힌다.
+
+
+class AsrUnavailable(RuntimeError):
+    """음성 스위트를 돌릴 수 없다. 이유를 문장으로 들고 있다."""
+
+
+def _read_pcm(path: Path) -> tuple[bytes, int]:
+    """16-bit PCM WAV 만 읽는다. 변환은 반입 전에 끝내는 것이 맞다 —
+    평가 도구가 오디오 변환까지 하면 그 변환이 결과에 섞인다."""
+    import wave
+
+    with wave.open(str(path), "rb") as handle:
+        if handle.getsampwidth() != 2:
+            raise AsrUnavailable(f"{path.name}: 16-bit PCM 이 아니다")
+        if handle.getnchannels() != 1:
+            raise AsrUnavailable(f"{path.name}: 모노가 아니다 (채널 {handle.getnchannels()})")
+        return handle.readframes(handle.getnframes()), handle.getframerate()
+
+
+# ruff: noqa: ASYNC240 — 평가 도구는 로컬 파일을 순차로 읽는다. 이벤트 루프를
+# 막아도 문제되지 않고, 오히려 측정 중 다른 코루틴이 끼면 지연 숫자가 흐려진다.
+async def run_asr(
+    cases: list[AsrCase],
+    audio_root: Path,
+    *,
+    adapter_name: str,
+    model_path: str,
+    config: dict[str, Any] | None = None,
+) -> list[AsrOutcome]:
+    """오디오를 넣고 전사를 받아 채점한다."""
+    try:
+        from vai_stt_core.adapters import create_stt
+    except ImportError as exc:  # pragma: no cover - 설치 구성에 달림
+        raise AsrUnavailable(
+            "STT-CORE 를 불러올 수 없다 — `uv sync --all-packages` 로 워크스페이스를 맞춘다"
+        ) from exc
+
+    if not audio_root.is_dir():
+        raise AsrUnavailable(f"오디오 디렉토리가 없다: {audio_root} — eval/audio/README.md 참조")
+
+    adapter = create_stt(adapter_name)
+    try:
+        await adapter.initialize(model_path, config or {})
+    except ModuleNotFoundError as exc:
+        # 엔진은 선택 의존성이라 개발 환경에 없는 것이 정상이다.
+        # "No module named 'faster_whisper'" 만 던지면 무엇을 해야 할지 모른다.
+        raise AsrUnavailable(
+            f"인식 엔진이 없다 ({exc.name}) — "
+            "`uv run --with faster-whisper evalctl run --suite stt ...` 로 돌리거나 "
+            "`uv sync --all-packages --extra whisper` 로 환경에 넣는다"
+        ) from exc
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise AsrUnavailable(
+            f"모델을 열 수 없다: {model_path} — {exc}. 가중치는 "
+            "`deploy/airgap/fetch_models.sh --out models --stt small` 로 받는다"
+        ) from exc
+    outcomes: list[AsrOutcome] = []
+    try:
+        for case in cases:
+            path = audio_root / case.audio
+            if not path.is_file():
+                raise AsrUnavailable(f"오디오가 없다: {path}")
+            pcm, rate = _read_pcm(path)
+            started = time.perf_counter()
+            pieces = [chunk["text"] async for chunk in adapter.transcribe_stream(pcm, rate)]
+            elapsed = (time.perf_counter() - started) * 1000
+            outcomes.append(score(case.case_id, case.text, " ".join(pieces), elapsed))
+    finally:
+        await adapter.close()
+    return outcomes

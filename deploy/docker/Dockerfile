@@ -25,7 +25,21 @@ COPY tools/ tools/
 
 ARG BLOCK
 RUN test -n "$BLOCK" || (echo "BLOCK 빌드 인자가 필요하다 (예: stt-core)" && exit 1)
-RUN uv sync --frozen --no-dev --package "vai-${BLOCK}"
+
+# 실제 엔진은 선택 의존성이다. 기본 이미지에 넣지 않는 이유는 무게다 —
+# faster-whisper 하나가 이미지를 수백 MB 늘리고, 폐쇄망 반입은 크기로 걸린다.
+#
+# 다만 **넣지 않으면 fake 어댑터밖에 못 쓴다.** 그 사실이 기동 로그에만 남으면
+# "설치는 됐는데 인식이 안 된다"로 나타난다. 실물 데모·품질 측정용 이미지는
+# EXTRAS 로 명시해 만든다:
+#
+#   docker build --build-arg BLOCK=stt-core --build-arg EXTRAS=whisper ...
+ARG EXTRAS=""
+RUN if [ -n "$EXTRAS" ]; then       uv sync --frozen --no-dev --package "vai-${BLOCK}" --extra "$EXTRAS";     else       uv sync --frozen --no-dev --package "vai-${BLOCK}";     fi
+
+# 이미지가 어떤 엔진을 담고 있는지 남긴다. 라벨은 docker inspect 로 읽히므로
+# "이 이미지로 실제 인식이 되는가"를 기동하지 않고도 알 수 있다.
+LABEL ai.visionai.extras="${EXTRAS}"
 
 # 블록 이름(stt-core)과 파이썬 모듈명(vai_stt_core)의 변환을 빌드 시점에 끝내
 # 런타임 셸에서 문자열을 다루지 않게 한다.

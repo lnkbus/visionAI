@@ -15,10 +15,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from vai_common.bus import EventBus
+from vai_common.resource import Yield
 from vai_common.worker import BlockWorker
 from vai_contracts.events import FilterResult, SessionClosed, SpeakerLabel
 from vai_contracts.session import ChannelRole, SessionProfile
-from vai_contracts.summary import Summary, SummaryStatus
+from vai_contracts.summary import Summary, SummaryDone, SummaryStatus
 from vai_contracts.topics import Topic
 from vai_llm_sum import prompts
 from vai_llm_sum.ports import CompletePort, SummaryStore
@@ -142,11 +143,13 @@ class SummaryWorker(BlockWorker[SessionClosed]):
         *,
         group: str,
         consumer: str,
+        yield_to_stt: Yield | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._buffer = buffer
         self._complete = complete
         self._store = store
+        self._yield_to_stt = yield_to_stt
 
     async def handle(self, event: SessionClosed) -> None:
         transcript = self._buffer.take(event.session_id)
@@ -161,7 +164,24 @@ class SummaryWorker(BlockWorker[SessionClosed]):
             # 발화 없는 세션(오접속·즉시 끊김)에 GPU를 쓰지 않는다.
             summary.status = SummaryStatus.READY
             await self._store.put(summary)
+            await self._announce(summary)
             return
+
+        # 실시간 경로에 양보한다. 기다리는 동안 상태를 저장해 **화면에 보이게**
+        # 한다 — 아무 표시가 없으면 사용자는 요약이 실패했다고 생각한다.
+        if self._yield_to_stt is not None and self._yield_to_stt.enabled:
+            summary.status = SummaryStatus.WAITING
+            await self._store.put(summary)
+            waited = await self._yield_to_stt.wait_for_turn()
+            summary.waited_for_stt_ms = int(waited * 1000)
+            summary.yield_gave_up = self._yield_to_stt.gave_up
+            if self._yield_to_stt.gave_up:
+                # 늦은 회의록이 없는 회의록보다 낫다. 포기했다는 사실은 남긴다 —
+                # 자주 켜지면 장비가 모자란다는 뜻이고 증설 근거가 된다.
+                log.warning(
+                    "STT 양보 상한 초과 — 그대로 진행한다",
+                    extra={"session_id": event.session_id, "waited_ms": summary.waited_for_stt_ms},
+                )
 
         summary.status = SummaryStatus.RUNNING
         await self._store.put(summary)
@@ -182,6 +202,9 @@ class SummaryWorker(BlockWorker[SessionClosed]):
             summary.error = str(exc)
             log.exception("요약 생성 실패", extra={"session_id": event.session_id})
             await self._store.put(summary)
+            # 실패도 알린다. 실패를 안 세면 성공률이 항상 100%로 보이고,
+            # 그 화면은 아무것도 알려주지 않는다.
+            await self._announce(summary)
             return
 
         summary.latency_ms = int((time.perf_counter() - started) * 1000)
@@ -204,6 +227,7 @@ class SummaryWorker(BlockWorker[SessionClosed]):
 
         await self._store.put(summary)
         await self.bus.publish_ui(event.session_id, summary)
+        await self._announce(summary)
         log.info(
             "요약 완료",
             extra={
@@ -212,4 +236,27 @@ class SummaryWorker(BlockWorker[SessionClosed]):
                 "status": summary.status.value,
                 "latency_ms": summary.latency_ms,
             },
+        )
+
+    async def _announce(self, summary: Summary) -> None:
+        """끝났다는 **사실**만 스트림에 낸다 — 본문은 싣지 않는다.
+
+        회의록은 개인정보 밀도가 가장 높은 산출물이고, 스트림은 여러 블록이
+        함께 읽는 자리다. 본문이 필요하면 권한과 감사가 걸린 조회 API를 쓴다.
+
+        성공·실패·빈 세션을 **모두** 낸다. 지나간 이벤트는 아무도 다시 만들어
+        주지 않으므로, 여기서 빠뜨린 경우는 통계에서 영영 사라진다.
+        """
+        await self.bus.publish(
+            Topic.SUMMARY_DONE,
+            SummaryDone(
+                session_id=summary.session_id,
+                tenant_id=summary.tenant_id,
+                profile=summary.profile,
+                status=summary.status,
+                latency_ms=summary.latency_ms,
+                waited_for_stt_ms=summary.waited_for_stt_ms,
+                yield_gave_up=summary.yield_gave_up,
+                transcript_chars=summary.transcript_chars,
+            ),
         )

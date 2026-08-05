@@ -4,7 +4,7 @@
 
 | | SaaS | 온프레미스 (폐쇄망) |
 |---|------|---------------------|
-| 인프라 | 링버스 운영 K8s | 고객사 K3s(단일노드~소규모) 또는 K8s / PoC는 Docker Compose |
+| 인프라 | 링버스 운영 K8s | 고객사 K8s (단일노드~소규모) / PoC는 Docker Compose |
 | 네트워크 | 인터넷 | Air-Gapped — 외부 호출 0건 |
 | AI 엔진 | 로컬 서빙 풀 또는 상용 API 어댑터 | 전부 로컬: Faster-Whisper/CosyVoice/vLLM/Qdrant |
 | 라이선스 | 구독 DB + 미터링 | H/W Fingerprint 오프라인 DRM (`.lic`) |
@@ -28,7 +28,7 @@ deploy/
 │   └── avatar.yaml             # 패키지 C
 ├── airgap/
 │   ├── build_bundle.sh         # bundle.yaml 기준 필요한 블록 이미지+모델만 tar.gz 패키징
-│   ├── install.sh              # 내부 레지스트리 적재 → K3s/Helm 설치 → 라이선스 활성화
+│   ├── install.sh              # 내부 레지스트리 적재 → K8s/Helm 설치 → 라이선스 활성화
 │   └── selftest/               # 설치 후 자가진단 (STT 왕복, 팝업 지연 측정 리포트)
 └── compose/                    # PoC/데모용 docker-compose (GPU 1대)
 ```
@@ -42,14 +42,14 @@ deploy/
 
 1. **번들 생성** (링버스, 인터넷 환경): `build_bundle.sh <bundle> <gpu-profile>` → 블록 이미지 + 차트 + 모델 가중치 + 서명 해시를 단일 `.tar.gz`로
 2. **반입**: 고객사 보안성 검토·매체 검사 절차 준수 (SBOM·이미지 서명 제공)
-3. **설치**: `install.sh` — 내부 레지스트리 push → K3s(또는 기존 K8s)에 Helm 설치 → `.lic` 활성화 → 초기 관리자 계정
+3. **설치**: `install.sh` — 내부 레지스트리 push → 고객사 K8s에 Helm 설치 → `.lic` 활성화 → 초기 관리자 계정
 4. **자가진단**: 오디오 왕복 smoke test — STT 정확도 샘플, Assist 팝업 p95 지연, GPU 점유 리포트 출력 → 검수 문서로 활용
 
 ### 3.2 표준 사양 프로파일
 
 | 프로파일 | 용도 | GPU | 구성 |
 |----------|------|-----|------|
-| **S** (PoC/소형) | AICC ~30ch 또는 회의실 5개 | L4/A10 1장 (STT+SLM 소형, sLLM 7B INT4) | 단일노드 K3s 또는 Compose |
+| **S** (PoC/소형) | AICC ~30ch 또는 회의실 5개 | L4/A10 1장 (STT+SLM 소형, sLLM 7B INT4) | 단일노드 K8s 또는 Compose |
 | **M** (표준) | AICC ~100ch | A100/H100 1~2장 (sLLM 14B, Triton STT) | 앱 3노드 + GPU 1노드 + DB HA |
 | **L** (대형) | AICC 300ch+ / 통합 패키지 | GPU 4장+ | 풀 HA, 블록별 GPU 풀 분리 |
 

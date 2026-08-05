@@ -1,4 +1,4 @@
-# 09. K3s 실기동 리허설 — 노트북에서 밟는다
+# 09. K8s 실기동 리허설 — 노트북에서 밟는다
 
 > `docs/07 §3.2`에서 "클러스터가 있는 환경이 필요하다"로 미뤄 둔 항목이다.
 > **GPU가 필요 없다는 것**을 확인하고 나니 Apple Silicon 노트북으로 옮길 수 있었다.
@@ -74,11 +74,22 @@ arm64 빌드는 **실제로 돌려 확인했다**(QEMU 에뮬레이션, `docker 
 
 ### 3.2 클러스터
 
+로컬에서 쿠버네티스를 띄우는 도구는 아무거나 된다 — 우리 차트가 배포판에
+묶여 있지 않기 때문이다. `k3d`(가볍다)나 `kind`(업스트림 k8s에 가장 가깝다)를 쓴다.
+
 ```bash
 brew install k3d kubectl helm
 k3d cluster create visionai --agents 1 \
   --k3s-arg "--disable=traefik@server:0"      # 인그레스는 이 리허설의 대상이 아니다
+
+# 또는 업스트림 K8s 에 더 가깝게:
+#   brew install kind && kind create cluster --name visionai
 ```
+
+**주의: 기본 StorageClass가 있어야 한다.** 없으면 PVC가 `Pending`으로 멈추고
+파드가 영원히 안 뜬다. `k3d`는 `local-path`가 기본으로 붙고, `kind`도 기본
+provisioner가 있다. 고객사 클러스터에서는 그쪽 StorageClass 이름을
+`--set ...persistence.storageClass=` 로 넘긴다.
 
 ### 3.3 이미지 적재
 

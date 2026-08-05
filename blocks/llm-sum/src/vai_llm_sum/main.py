@@ -15,6 +15,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common import audit
 from vai_common.bus import EventBus, RedisEventBus, build_bus
+from vai_common.resource import (
+    BusyRegistry,
+    MemoryBusyRegistry,
+    RedisBusyRegistry,
+    Yield,
+)
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
 from vai_contracts.audit import AuditAction
@@ -55,6 +61,18 @@ class SumSettings(BaseSettings):
     정하지 않되, 정하지 않았다는 사실은 기동 로그에 남긴다."""
 
     purge_interval_s: float = 60 * 60 * 6
+
+    yield_to_stt: bool = True
+    """STT가 인식 중이면 요약을 미룬다.
+
+    한 장비에 둘을 올리면 메모리를 다투고, 그때 먼저 무너지는 것이 실시간
+    자막이다. 회의록이 3분 늦는 것과 회의 중 자막이 끊기는 것은 비용이 다르다.
+    GPU가 넉넉한 서버에서는 꺼서 병렬로 돌린다."""
+
+    yield_max_wait_s: float = 180.0
+    """양보 상한. 넘으면 포기하고 진행한다 — 늦은 회의록이 없는 회의록보다 낫다.
+
+    통화가 끊이지 않는 상담센터에서는 "STT가 한가해질 때"가 영영 오지 않는다."""
 
 
 class LlmSumClient:
@@ -116,6 +134,9 @@ def create_app() -> FastAPI:
         collector = TranscriptCollector(
             bus, buffer, group=f"{common.consumer_group}:transcript", consumer=common.consumer_name
         )
+        busy: BusyRegistry = (
+            RedisBusyRegistry(bus.redis) if isinstance(bus, RedisEventBus) else MemoryBusyRegistry()
+        )
         summarizer = SummaryWorker(
             bus,
             buffer,
@@ -123,6 +144,7 @@ def create_app() -> FastAPI:
             store,
             group=f"{common.consumer_group}:summary",
             consumer=common.consumer_name,
+            yield_to_stt=Yield(busy, enabled=cfg.yield_to_stt, max_wait_s=cfg.yield_max_wait_s),
         )
         application.state.store = store
         application.state.bus = bus

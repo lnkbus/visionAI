@@ -75,6 +75,9 @@
     <button data-tab="tuning" aria-selected="false">검색 튜닝</button>
     <button data-tab="eval" aria-selected="false">평가셋</button>
     <button data-tab="feedback" aria-selected="false">팝업 채택률</button>
+    <button data-tab="scenario" aria-selected="false">시나리오</button>
+    <button data-tab="sim" aria-selected="false">대화 시뮬레이터</button>
+    <button data-tab="tts" aria-selected="false">읽기 미리듣기</button>
   </nav>
 
   <!-- 컴플라이언스 룰 -->
@@ -186,6 +189,148 @@
       <div id="fb-out"></div>
     </div>
   </section>
+
+  <section id="tab-scenario" hidden>
+    <div class="panel">
+      <h2>생애주기 — 초안 → 검증 → 시연 → 운영</h2>
+      <p class="hint">
+        <b>한 칸씩만 올라간다.</b> 편집 직후 운영으로 가는 지름길을 열면 결국 그 길로만 다니게 되고,
+        그러면 검증과 시연은 형식이 된다. 그리고 <b>편집하면 초안으로 내려간다</b> —
+        검증을 통과한 뒤 한 글자만 고쳐도 그것은 더 이상 검증된 물건이 아니다.
+      </p>
+      <div class="row">
+        <div id="scStages" class="hint">—</div>
+        <button class="act" id="scLoad">불러오기</button>
+        <button class="act" id="scPromote">다음 단계로</button>
+      </div>
+      <div class="msg" id="scMsg"></div>
+      <div id="scProblems"></div>
+    </div>
+
+    <div class="panel">
+      <h2>시나리오 (JSON)</h2>
+      <textarea id="scJson" rows="16" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="act" id="scSave">초안 저장</button>
+        <button class="act ghost" id="scExport">반출 (JSON 내려받기)</button>
+        <button class="act ghost" id="scImport">반입</button>
+        <input id="scImportFile" type="file" accept=".json" hidden />
+      </div>
+      <p class="hint">
+        반출본에는 <b>단계가 실리지 않는다</b>. 다른 환경에 들여온 시나리오가 “운영”으로 표시되면
+        검증 없이 배포로 이어진다 — 반입본은 언제나 초안에서 시작한다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>흐름 복제</h2>
+      <div class="row">
+        <div><label for="scCloneNodes">복제할 노드 — 쉼표로 구분</label>
+          <input id="scCloneNodes" placeholder="start, card" /></div>
+        <div style="max-width:160px"><label for="scCloneSuffix">접미사</label>
+          <input id="scCloneSuffix" value="-copy" /></div>
+        <button class="act ghost" id="scClone">복제</button>
+      </div>
+      <p class="hint">
+        복제한 노드들 <b>안쪽으로 향하는 연결만</b> 새 이름으로 바뀐다. 바깥으로 나가는 연결은
+        그대로 두어 복제본이 기존 종료·연결 지점을 공유한다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>학습 도구 — 인텐트 일괄 편집</h2>
+      <div class="row">
+        <button class="act ghost" id="scIntentsDown">표 내려받기 (CSV)</button>
+        <button class="act ghost" id="scIntentsUp">표 올리기</button>
+        <input id="scIntentsFile" type="file" accept=".csv,text/csv" hidden />
+      </div>
+      <p class="hint">
+        엑셀이 그대로 여는 CSV다. <code>.xlsx</code>를 쓰려면 라이브러리가 하나 더 필요하고
+        폐쇄망 반입 목록이 그만큼 길어지는데, 얻는 것은 셀 서식뿐이다.
+        <b>표 편집으로 노드가 새로 생기지는 않는다</b> — 오타 하나로 아무 데도 연결되지 않은
+        노드가 만들어지는 것을 막는다.
+      </p>
+      <p class="hint">
+        운영 콘솔의 <b>재학습 후보</b>에서 내려받은 폴백 발화를 여기 <code>examples</code> 열에
+        <code>|</code> 로 이어 붙이면 그대로 반영된다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>배포 이력</h2>
+      <div id="scHistory"><p class="hint">불러오기를 누르면 표시된다.</p></div>
+      <p class="hint">
+        되돌리기는 <b>초안으로</b> 복구한다. 되돌리는 것도 배포이므로 같은 검증을 거쳐야 하고,
+        그 사이에 바뀐 다른 것과 맞는지 확인할 기회가 필요하다.
+      </p>
+    </div>
+  </section>
+
+  <section id="tab-sim" hidden>
+    <div class="panel">
+      <h2>대화 시뮬레이터 — 배포 없이 흐름 확인</h2>
+      <p class="hint">
+        고객사가 시나리오를 직접 늘리려면 “이렇게 말하면 어디로 가는지”를 스스로 볼 수 있어야 한다.
+        그게 안 되면 결국 공급사에 물어보게 된다.
+        <b>실제 대화 엔진(BOT-VOICE)을 그대로 부른다</b> — 시뮬레이터 전용 구현을 두면
+        “시뮬레이터에서는 되는데 실제로는 안 된다”가 가능해진다.
+      </p>
+      <label for="simScenario">시나리오 (JSON)</label>
+      <textarea id="simScenario" rows="10" spellcheck="false"></textarea>
+      <label for="simUtterances">고객 발화 — 한 줄에 하나</label>
+      <textarea id="simUtterances" rows="4" spellcheck="false"
+        placeholder="카드 재발급 하려고요&#10;네"></textarea>
+      <div class="row"><button id="simRun">시뮬레이션</button></div>
+      <div id="simOut"></div>
+    </div>
+  </section>
+
+  <section id="tab-tts" hidden>
+    <div class="panel">
+      <h2>읽기 미리듣기 — 숫자·금액·전문용어</h2>
+      <p class="hint">
+        합성 전에 <b>읽기 텍스트</b>를 본다. 소리를 들어야만 알 수 있으면 사전을 고칠 때마다
+        전체 합성을 돌려야 한다. “2,000원”이 어떻게 읽히는지, 상품명이 영어로 새는지가 여기서 드러난다.
+      </p>
+      <label for="ttsText">문장</label>
+      <textarea id="ttsText" rows="3" spellcheck="false">재발급 수수료는 2,000원이며 3영업일 걸립니다. 접수번호는 A1234입니다.</textarea>
+      <div class="row"><button id="ttsRun">미리듣기</button></div>
+      <div id="ttsOut"></div>
+    </div>
+
+    <div class="panel">
+      <h2>읽기 사전 — 고유명사·사내 용어</h2>
+      <p class="hint">
+        전처리 규칙은 숫자·날짜·단위처럼 <b>규칙으로 정해지는 것</b>만 다룬다.
+        “무배당행복플러스”를 어떻게 읽을지는 규칙이 없고 그 회사만 안다 —
+        그걸 코드로 받으면 안내 문구 하나에 공급사 배포가 필요해진다.
+      </p>
+      <table id="tlex-table">
+        <thead><tr><th style="width:32%">표기</th><th style="width:38%">읽기 (한글)</th><th>메모</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:8px">
+        <button class="act ghost" id="tlex-add">행 추가</button>
+        <button class="act ghost" id="tlex-load">불러오기</button>
+        <button class="act" id="tlex-save">저장 · 배포</button>
+      </div>
+      <div class="msg" id="tlex-msg"></div>
+      <p class="hint">
+        <b>읽기는 한글로 적는다.</b> 숫자나 영문을 남기면 전처리 규칙이 다시 손대고
+        결과가 예측 불가능해진다. 띄어쓰기는 흡수하므로
+        “무배당행복플러스”와 “무배당 행복 플러스”를 따로 등록할 필요가 없다.
+      </p>
+      <p class="hint">
+        <b>긴 표기부터 적용된다.</b> 짧은 것이 먼저 걸리면 “행복플러스”가 이겨
+        “무배당행복플러스”를 등록한 의미가 사라진다.
+      </p>
+      <p class="hint">
+        저장하면 바로 배포된다. 룰셋과 달리 초안 단계가 없다 — 읽기가 틀리면 즉시 들리고
+        즉시 되돌릴 수 있어서, 배포 절차를 두면 얻는 것보다 잃는 것이 많다.
+      </p>
+    </div>
+  </section>
+
 </main>
 
 <script type="module">
@@ -465,6 +610,299 @@ function escapeHtml(value) {
 rulesBody.append(ruleRow({ rule_id: "FORBIDDEN_GUARANTEE", pattern: "원금.?보장|무조건.?수익",
                            severity: "violation", message: "확정 수익 표현은 금지" }));
 lexBody.append(lexRow());
+
+// ── 대화 시뮬레이터 · 읽기 미리듣기 ──────────────────────────────────────────
+// 둘 다 다른 블록의 API를 콘솔이 중계한다. 여기서 다시 구현하지 않는 이유는
+// 시험 경로와 운영 경로가 갈리면 안 되기 때문이다.
+const SAMPLE_SCENARIO = {
+  tenant_id: "demo",
+  scenario_id: "card-reissue",
+  entry_node: "greet",
+  nodes: [
+    { node_id: "greet", kind: "say", prompt: "안녕하세요. 무엇을 도와드릴까요?", next_node: "ask" },
+    {
+      node_id: "ask", kind: "ask", slot: "purpose",
+      prompt: "어떤 업무를 도와드릴까요?",
+      reprompt: "다시 한 번 말씀해 주시겠어요?",
+      next_node: "bye",
+      intents: [{ name: "handoff", patterns: ["상담원", "사람"], next_node: "agent" }],
+    },
+    { node_id: "agent", kind: "handoff", prompt: "상담원을 연결해 드리겠습니다." },
+    { node_id: "bye", kind: "end", prompt: "접수되었습니다. 감사합니다." },
+  ],
+};
+
+if ($("simScenario") && !$("simScenario").value.trim()) {
+  $("simScenario").value = JSON.stringify(SAMPLE_SCENARIO, null, 2);
+}
+
+$("simRun")?.addEventListener("click", async () => {
+  const out = $("simOut");
+  out.innerHTML = '<p class="hint">시뮬레이션 중…</p>';
+  let scenario;
+  try {
+    scenario = JSON.parse($("simScenario").value);
+  } catch (error) {
+    out.innerHTML = `<p class="bad">시나리오 JSON 파싱 실패: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  const utterances = $("simUtterances").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  try {
+    const result = await api("/internal/v1/simulate", {
+      method: "POST",
+      body: JSON.stringify({ scenario, utterances }),
+    });
+    const problems = (result.problems ?? []).length
+      ? `<p class="bad">⚠ 시나리오 문제 ${result.problems.length}건<br>${
+          result.problems.map(escapeHtml).join("<br>")}</p>`
+      : "";
+    const turns = (result.turns ?? []).map((turn, i) => `
+      <div class="panel" style="margin:8px 0">
+        <div class="hint">턴 ${i} · 노드 <code>${escapeHtml(turn.node_id)}</code>${
+          turn.handed_off ? ' · <b class="bad">상담원 연결</b>' : ""}</div>
+        ${turn.user ? `<div>고객 — ${escapeHtml(turn.user)}</div>` : ""}
+        <div>봇 — ${escapeHtml(turn.bot)}</div>
+        ${Object.keys(turn.slots ?? {}).length
+          ? `<div class="hint">슬롯 ${escapeHtml(JSON.stringify(turn.slots))}</div>` : ""}
+      </div>`).join("");
+    out.innerHTML = problems + turns +
+      `<p class="hint">${result.finished ? "시나리오 종료" : "아직 진행 중 — 발화를 더 넣어 본다"}</p>`;
+  } catch (error) {
+    out.innerHTML = `<p class="bad">✗ ${escapeHtml(error.message)}</p>`;
+  }
+});
+
+$("ttsRun")?.addEventListener("click", async () => {
+  const out = $("ttsOut");
+  out.innerHTML = '<p class="hint">미리듣기…</p>';
+  try {
+    const result = await api("/internal/v1/tts/preview", {
+      method: "POST",
+      body: JSON.stringify({ text: $("ttsText").value, tenant_id: tenant() }),
+    });
+    out.innerHTML = `
+      <div class="panel" style="margin:8px 0">
+        <div class="hint">원문</div>
+        <div style="margin:4px 0 10px">${escapeHtml(result.original ?? "")}</div>
+        <div class="hint">읽기 텍스트 — 실제로 이렇게 발음된다${
+          result.readings_applied ? ` · 사전 ${result.readings_applied}건 적용` : " · 사전 미적용(규칙만)"}</div>
+        <div style="font-size:16px;margin:4px 0">${escapeHtml(result.normalized ?? "")}</div>
+        ${(result.chunks ?? []).length > 1
+          ? `<div class="hint">문장 ${result.chunks.length}개로 나뉘어 순차 합성된다 —
+             첫 소리까지 ${result.first_chunk_chars ?? "?"}자</div>`
+          : `<div class="hint">첫 소리까지 ${result.first_chunk_chars ?? "?"}자</div>`}
+      </div>`;
+  } catch (error) {
+    out.innerHTML = `<p class="bad">✗ ${escapeHtml(error.message)}</p>`;
+  }
+});
+
+// ── 시나리오 생애주기 · 반출입 · 학습 도구 ───────────────────────────────────
+const STAGES = [
+  ["draft", "초안"], ["built", "검증 통과"], ["staging", "시연 확인"], ["live", "운영"],
+];
+let REVISION = null;
+
+function renderStage() {
+  const current = REVISION?.stage ?? "draft";
+  const index = STAGES.findIndex(([key]) => key === current);
+  $("scStages").innerHTML = STAGES.map(([key, label], i) => {
+    const done = i <= index;
+    return `<span class="tag" style="${done ? "border-color:var(--accent);color:var(--accent)" : ""}">${
+      i + 1}. ${label}</span>`;
+  }).join(" → ");
+  $("scPromote").disabled = current === "live";
+  $("scPromote").textContent = current === "live"
+    ? "운영 중" : `${STAGES[index + 1][1]}(으)로`;
+
+  const problems = REVISION?.problems ?? [];
+  $("scProblems").innerHTML = problems.length
+    ? `<ul class="bad">${problems.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>`
+    : "";
+}
+
+function showRevision(revision) {
+  REVISION = revision;
+  $("scJson").value = JSON.stringify(revision.scenario, null, 2);
+  renderStage();
+}
+
+async function loadScenario() {
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}`));
+    await loadScenarioHistory();
+    say($("scMsg"), `단계 ${REVISION.stage}${REVISION.note ? ` · ${REVISION.note}` : ""}`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+}
+
+async function loadScenarioHistory() {
+  const rows = await api(`/internal/v1/scenarios/${tenant()}/history`);
+  $("scHistory").innerHTML = rows.length ? `
+    <table><thead><tr><th>버전</th><th>시각</th><th>메모</th><th></th></tr></thead><tbody>
+    ${rows.map((r) => `<tr>
+      <td class="mono">v${r.scenario.version}</td>
+      <td class="mono">${new Date(r.updated_at).toLocaleString("ko-KR")}</td>
+      <td>${escapeHtml(r.note || "—")}</td>
+      <td><button class="ghost" data-restore="${r.scenario.version}">되돌리기</button></td>
+    </tr>`).join("")}</tbody></table>`
+    : `<p class="hint">아직 배포한 적이 없다.</p>`;
+  for (const button of $("scHistory").querySelectorAll("[data-restore]")) {
+    button.onclick = () => restoreScenario(button.dataset.restore);
+  }
+}
+
+async function restoreScenario(version) {
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/restore?version=${encodeURIComponent(version)}`,
+      { method: "POST" }));
+    say($("scMsg"), `v${version} 을 초안으로 복구했다 — 검증부터 다시 거친다`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+}
+
+function parseScenario() {
+  try { return JSON.parse($("scJson").value); }
+  catch (error) { throw new Error(`JSON 형식 오류: ${error.message}`); }
+}
+
+$("scLoad").addEventListener("click", loadScenario);
+
+$("scSave").addEventListener("click", async () => {
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}`, {
+      method: "PUT", body: JSON.stringify(parseScenario()),
+    }));
+    say($("scMsg"), "초안 저장됨 — 단계가 초안으로 돌아갔다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scPromote").addEventListener("click", async () => {
+  const index = STAGES.findIndex(([key]) => key === (REVISION?.stage ?? "draft"));
+  const next = STAGES[index + 1]?.[0];
+  if (!next) return;
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/promote?stage=${next}`, { method: "POST" }));
+    await loadScenarioHistory();
+    say($("scMsg"), next === "live" ? "운영에 배포했다" : `${next} 단계로 올렸다`, "ok");
+  } catch (error) {
+    // 검증 실패는 문제 목록까지 보여 줘야 한다 — "실패"만 보이면 할 수 있는 일이 없다.
+    try { showRevision(await api(`/internal/v1/scenarios/${tenant()}`)); } catch { /* 조회 실패는 무시 */ }
+    say($("scMsg"), typeof error.message === "string" ? error.message : "승격 실패", "bad");
+  }
+});
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+$("scExport").addEventListener("click", async () => {
+  try {
+    const bundle = await api(`/internal/v1/scenarios/${tenant()}/export`);
+    download(`scenario-${tenant()}.json`, JSON.stringify(bundle, null, 2), "application/json");
+    say($("scMsg"), "반출했다 — 단계는 실리지 않는다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scImport").addEventListener("click", () => $("scImportFile").click());
+$("scImportFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}/import`, {
+      method: "POST", body: await file.text(),
+    }));
+    say($("scMsg"), "반입했다 — 초안에서 시작한다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+  event.target.value = "";
+});
+
+$("scClone").addEventListener("click", async () => {
+  const nodes = $("scCloneNodes").value.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!nodes.length) { say($("scMsg"), "복제할 노드를 적는다", "bad"); return; }
+  const suffix = encodeURIComponent($("scCloneSuffix").value.trim());
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/clone-flow?suffix=${suffix}`,
+      { method: "POST", body: JSON.stringify(nodes) }));
+    say($("scMsg"), `${nodes.join(", ")} 복제됨`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scIntentsDown").addEventListener("click", async () => {
+  const response = await fetch(`/internal/v1/scenarios/${tenant()}/intents.csv`);
+  if (!response.ok) { say($("scMsg"), `HTTP ${response.status}`, "bad"); return; }
+  download(`intents-${tenant()}.csv`, await response.text(), "text/csv;charset=utf-8");
+});
+
+$("scIntentsUp").addEventListener("click", () => $("scIntentsFile").click());
+$("scIntentsFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}/intents.csv`, {
+      method: "POST", body: JSON.stringify({ csv: await file.text() }),
+    }));
+    say($("scMsg"), "인텐트를 반영했다 — 단계는 초안으로 돌아갔다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+  event.target.value = "";
+});
+
+// ── TTS 읽기 사전 ────────────────────────────────────────────────────────────
+const tlexBody = $("tlex-table").querySelector("tbody");
+
+function tlexRow(entry = {}) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="t-surface" placeholder="무배당행복플러스" /></td>
+    <td><input class="t-reading" placeholder="무배당 행복 플러스" /></td>
+    <td><input class="t-note" placeholder="왜 이렇게 읽는지" /></td>
+    <td><button class="act danger t-del">×</button></td>`;
+  tr.querySelector(".t-surface").value = entry.surface ?? "";
+  tr.querySelector(".t-reading").value = entry.reading ?? "";
+  tr.querySelector(".t-note").value = entry.note ?? "";
+  tr.querySelector(".t-del").addEventListener("click", () => tr.remove());
+  return tr;
+}
+
+$("tlex-add").addEventListener("click", () => tlexBody.append(tlexRow()));
+
+async function loadTtsLexicon() {
+  try {
+    const lexicon = await api(`/internal/v1/tts-lexicon/${tenant()}`);
+    tlexBody.replaceChildren(...lexicon.readings.map(tlexRow));
+    if (!lexicon.readings.length) tlexBody.append(tlexRow());
+    say($("tlex-msg"), `${lexicon.readings.length}건 (버전 ${lexicon.version})`, "ok");
+  } catch (err) { say($("tlex-msg"), err.message, "err"); }
+}
+
+$("tlex-load").addEventListener("click", loadTtsLexicon);
+
+$("tlex-save").addEventListener("click", async () => {
+  const readings = [...tlexBody.querySelectorAll("tr")]
+    .map((tr) => ({
+      surface: tr.querySelector(".t-surface").value.trim(),
+      reading: tr.querySelector(".t-reading").value.trim(),
+      note: tr.querySelector(".t-note").value.trim(),
+      enabled: true,
+    }))
+    .filter((entry) => entry.surface && entry.reading);
+  try {
+    const saved = await api(`/internal/v1/tts-lexicon/${tenant()}`, {
+      method: "PUT",
+      body: JSON.stringify({ tenant_id: tenant(), readings }),
+    });
+    say($("tlex-msg"), `배포됨 — ${saved.readings.length}건 (버전 ${saved.version})`, "ok");
+  } catch (err) { say($("tlex-msg"), err.message, "err"); }
+});
+
+tlexBody.append(tlexRow());
+
 </script>
 </body>
 </html>

@@ -20,6 +20,12 @@ from vai_common.config_store import (
     InMemoryConfigStore,
     RedisConfigStore,
 )
+from vai_common.resource import (
+    BusyRegistry,
+    Heartbeat,
+    MemoryBusyRegistry,
+    RedisBusyRegistry,
+)
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
 from vai_common.worker import SessionReaper
@@ -50,6 +56,12 @@ class SttSettings(BaseSettings):
 
     lexicon_ttl_s: float = 30.0
 
+    busy_signal: bool = True
+    """인식 중임을 알릴지. 요약(LLM-SUM)이 이 표시를 보고 양보한다.
+
+    GPU가 넉넉한 서버에서는 꺼도 된다 — 다만 끄면 요약이 인식과 동시에 돌고,
+    16GB 단일 장비에서는 그때 먼저 무너지는 것이 실시간 자막이다."""
+
 
 def create_app() -> FastAPI:
     common = get_settings()
@@ -74,6 +86,14 @@ def create_app() -> FastAPI:
                 CachedConfig(config_store, ConfigKind.LEXICON, Lexicon, ttl_s=stt_cfg.lexicon_ttl_s)
             )
 
+        # 바쁨 표시는 프로세스를 넘어 보여야 한다 — 요약은 다른 컨테이너다.
+        # Redis 버스가 아니면(단위 시험·단일 프로세스) 인메모리로 내려가고,
+        # 그때는 요약이 이 표시를 보지 못한다. 그 구성에서는 애초에 경합도 없다.
+        busy: BusyRegistry = (
+            RedisBusyRegistry(bus.redis) if isinstance(bus, RedisEventBus) else MemoryBusyRegistry()
+        )
+        heartbeat = Heartbeat(busy, enabled=stt_cfg.busy_signal)
+
         workers = [
             SttWorker(
                 bus,
@@ -82,6 +102,9 @@ def create_app() -> FastAPI:
                 consumer=f"{common.consumer_name}-{i}",
                 publish_ui=stt_cfg.publish_ui,
                 lexicons=lexicons,
+                # 워커가 여럿이어도 하트비트는 하나를 공유한다. 갱신 간격이
+                # 워커 수만큼 나뉘면 그 자체가 Redis 부하가 된다.
+                heartbeat=heartbeat,
             )
             for i in range(max(1, stt_cfg.workers))
         ]

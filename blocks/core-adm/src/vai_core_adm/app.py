@@ -5,15 +5,21 @@
 확인하지 못하면 곧바로 공급사 출동이 되고, 출동 원가가 유지보수 수익을 잠식한다.
 이 화면은 편의 기능이 아니라 **원가 구조**다.
 
-집계만 한다. 상태의 원본은 각 블록이 갖고 있고(``/readyz``, CORE-LIC, CORE-SEC),
-콘솔은 그것을 모아 보여 줄 뿐이다. 콘솔이 상태를 따로 저장하면 곧 원본과 갈라져
-"화면은 정상인데 실제로는 죽어 있는" 상태가 된다.
+**상태**는 집계만 한다. 원본은 각 블록이 갖고 있고(``/readyz``, CORE-LIC,
+CORE-SEC), 콘솔은 그것을 모아 보여 줄 뿐이다. 상태를 따로 저장하면 곧 원본과
+갈라져 "화면은 정상인데 실제로는 죽어 있는" 상태가 된다.
 
-**콘솔이 죽어도 상담은 돈다.** 여기는 조회 전용이며 파이프라인 경로에 없다.
+**통계는 예외다.** 지나간 이벤트는 아무도 갖고 있지 않으므로 여기서 세지 않으면
+"어제 인식률이 어땠나"에 답할 원본 자체가 없다(:mod:`vai_core_adm.analytics`).
+수집은 별도 컨슈머 그룹으로 돌며 파이프라인을 잡지 않는다.
+
+**콘솔이 죽어도 상담은 돈다.** 조회와 집계뿐이며 실시간 경로에 없다.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -27,14 +33,23 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from fastapi.responses import FileResponse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from vai_common import audit
+from vai_common.audit import emit as emit_audit
 from vai_common.auth import AuthError, Principal, verify_access_token
 from vai_common.bus import EventBus, build_bus
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
+from vai_common.worker import BlockWorker, SessionReaper
+from vai_contracts.analytics import CallRecord, FallbackUtterance, RankEntry, StatsOverview
 from vai_contracts.audit import AuditAction, AuditOutcome, AuditRecord, ChainStatus
 from vai_contracts.ops import BlockHealth, PlatformStatus
 from vai_core_adm import BLOCK_ID
+from vai_core_adm.analytics import (
+    AnalyticsStore,
+    build_collectors,
+    build_store,
+    overview,
+    recent_days,
+)
 from vai_core_adm.diagnose import (
     DIRECT_CALLS,
     ROUND_TRIPS,
@@ -72,6 +87,17 @@ class AdminSettings(BaseSettings):
     security_url: str = "http://core-sec:8096"
     require_auth: bool = True
     """개발·데모에서만 끈다. 끄면 콘솔이 무인증으로 열린다."""
+
+    analytics: bool = True
+    """운영 통계·콜 이력 수집.
+
+    끄면 대시보드가 빈다. 끌 수 있게 둔 이유는 **대화 이력이 개인정보**라서다 —
+    수집을 원하지 않는 고객사가 있고, 그때 "안 쓰면 된다"가 아니라 실제로
+    저장하지 않아야 한다."""
+
+    analytics_retention_days: int = 90
+    """이력·통계 보관 기간. 보관기간을 정하지 않은 대화 이력은 시간이 갈수록
+    위험만 커지고 쓸모는 줄어든다."""
 
 
 def _require_strong_secret(secret: str) -> None:
@@ -114,9 +140,43 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.client = client or httpx.AsyncClient()
         application.state.bus = bus or build_bus(common.redis_url)
+        application.state.analytics = None
+        tasks: list[asyncio.Task[None]] = []
+        workers: list[BlockWorker[Any]] = []
+
+        if cfg.analytics:
+            store = build_store(application.state.bus, retention_days=cfg.analytics_retention_days)
+            application.state.analytics = store
+            workers, acc = build_collectors(
+                application.state.bus,
+                store,
+                group=f"{common.consumer_group}:analytics",
+                consumer=common.consumer_name,
+            )
+            tasks = [
+                asyncio.create_task(worker.run(), name=f"analytics-{index}")
+                for index, worker in enumerate(workers)
+            ]
+            # 진행 중 세션의 이력을 들고 있으므로 끝날 때 버려야 한다. 안 버리면
+            # 24시간 도는 온프렘에서 메모리가 조용히 늘다가 어느 날 죽는다.
+            reaper = SessionReaper(
+                application.state.bus,
+                workers,
+                group=f"{common.consumer_group}:analytics-reaper",
+            )
+            tasks.append(asyncio.create_task(reaper.run(), name="analytics-reaper"))
+            application.state.analytics_acc = acc
+
         try:
             yield
         finally:
+            for worker in workers:
+                worker.stop()
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             if not injected:
                 await application.state.client.aclose()
                 await application.state.bus.close()
@@ -148,7 +208,7 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
             principal.require_scope(ADMIN_SCOPE)
         except AuthError as exc:
             # 거부된 시도야말로 감사에서 중요하다. 성공만 남기면 침해 시도가 안 보인다.
-            await audit.emit(
+            await emit_audit(
                 request.app.state.bus,
                 action=AuditAction.ACCESS_DENIED,
                 actor="unknown",
@@ -221,7 +281,7 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
 
         # 감사 로그 열람 자체가 감사 대상이다. 누가 무엇을 조회했는지 남지 않으면
         # 감사 기록을 훑어 본 사실이 흔적 없이 사라진다.
-        await audit.emit(
+        await emit_audit(
             request.app.state.bus,
             action=AuditAction.EXPORT,
             actor=principal.subject,
@@ -309,6 +369,132 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
         assert trip is not None
         bus_: EventBus = request.app.state.bus
         return await run_round_trip(bus_, trip, tenant_id=tenant, text=text or SAMPLE_TEXT)
+
+    # ── 운영 통계 · 콜 이력 ──────────────────────────────────────────────────
+    #
+    # 폐쇄망에서는 공급사가 원격으로 지표를 보지 못한다. 고객사가 스스로
+    # "어제보다 나빠졌나"를 답하지 못하면 증설·튜닝 판단이 전부 체감이 된다.
+
+    def _analytics(request: Request) -> AnalyticsStore:
+        store: AnalyticsStore | None = getattr(request.app.state, "analytics", None)
+        if store is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="통계 수집이 꺼져 있다 — VAI_ADM_ANALYTICS 를 확인한다",
+            )
+        return store
+
+    def _tenant(principal: Principal, asked: str) -> str:
+        """어느 테넌트의 지표인가.
+
+        ``*`` 스코프(플랫폼 운영자)만 남의 테넌트를 볼 수 있다. 이걸 열어 두면
+        운영 콘솔이 곧 테넌트 간 정보 유출 경로가 된다.
+        """
+        if principal.tenant_id in ("", "*"):
+            return asked or "default"
+        if asked and asked != principal.tenant_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="다른 테넌트의 지표다")
+        return principal.tenant_id
+
+    @app.get("/v1/admin/analytics/overview", response_model=StatsOverview, tags=["analytics"])
+    async def analytics_overview(
+        request: Request,
+        principal: Principal = Depends(operator),
+        tenant_id: str = Query("", description="비면 토큰의 테넌트"),
+        days: int = Query(7, ge=1, le=90),
+    ) -> StatsOverview:
+        tenant = _tenant(principal, tenant_id)
+        rows = await _analytics(request).daily(tenant, recent_days(days))
+        return overview(tenant, rows)
+
+    @app.get("/v1/admin/analytics/rankings", tags=["analytics"])
+    async def analytics_rankings(
+        request: Request,
+        principal: Principal = Depends(operator),
+        tenant_id: str = Query(""),
+        limit: int = Query(10, ge=1, le=100),
+    ) -> dict[str, list[RankEntry]]:
+        """어느 플로우가 많이 쓰였고 어느 룰이 많이 걸렸는가.
+
+        시나리오를 어디부터 손볼지 정하는 근거다. 이게 없으면 개선은 늘
+        "민원이 들어온 곳"부터가 되고, 그건 가장 늦은 신호다.
+        """
+        store = _analytics(request)
+        tenant = _tenant(principal, tenant_id)
+        return {
+            "nodes": await store.rankings(tenant, "node", limit),
+            "rules": await store.rankings(tenant, "rule", limit),
+        }
+
+    @app.get("/v1/admin/analytics/fallbacks", tags=["analytics"])
+    async def analytics_fallbacks(
+        request: Request,
+        principal: Principal = Depends(operator),
+        tenant_id: str = Query(""),
+        limit: int = Query(50, ge=1, le=500),
+    ) -> list[FallbackUtterance]:
+        """봇이 못 알아들어 사람에게 넘어가기 직전의 고객 발화 — 재학습 후보."""
+        store = _analytics(request)
+        return await store.fallbacks(_tenant(principal, tenant_id), limit)
+
+    @app.get("/v1/admin/calls", response_model=list[CallRecord], tags=["analytics"])
+    async def call_history(
+        request: Request,
+        principal: Principal = Depends(operator),
+        tenant_id: str = Query(""),
+        limit: int = Query(50, ge=1, le=200),
+        q: str = Query("", description="세션 ID 또는 대화 내용"),
+    ) -> list[CallRecord]:
+        store = _analytics(request)
+        return await store.list_calls(_tenant(principal, tenant_id), limit=limit, query=q)
+
+    @app.get("/v1/admin/calls/{session_id}", response_model=CallRecord, tags=["analytics"])
+    async def call_detail(
+        session_id: str, request: Request, principal: Principal = Depends(operator)
+    ) -> CallRecord:
+        """건별 대화 내용. **마스킹본이다** — 원문은 어디에도 저장하지 않는다.
+
+        열람 자체를 감사에 남긴다. 대화 이력은 개인정보 열람 창구가 되기 가장
+        쉬운 자리이고, 누가 언제 무엇을 봤는지 남지 않으면 사후에 따질 수 없다.
+        """
+        record = await _analytics(request).get_call(session_id)
+        if record is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="이력을 찾을 수 없다")
+        _tenant(principal, record.tenant_id)
+        await emit_audit(
+            request.app.state.bus,
+            action=AuditAction.CALL_VIEW,
+            actor=principal.subject,
+            block_id=BLOCK_ID,
+            resource=f"call:{session_id}",
+            session_id=session_id,
+            tenant_id=record.tenant_id,
+            actor_ip=request.client.host if request.client else "",
+        )
+        return record
+
+    @app.delete("/v1/admin/calls/{session_id}", tags=["analytics"])
+    async def call_delete(
+        session_id: str, request: Request, principal: Principal = Depends(operator)
+    ) -> dict[str, bool]:
+        """이력 파기. 개인정보 파기 요구는 거절할 수 없다(docs/05 §2.2)."""
+        store = _analytics(request)
+        record = await store.get_call(session_id)
+        if record is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="이력을 찾을 수 없다")
+        _tenant(principal, record.tenant_id)
+        removed = await store.delete_call(session_id)
+        await emit_audit(
+            request.app.state.bus,
+            action=AuditAction.CALL_DELETE,
+            actor=principal.subject,
+            block_id=BLOCK_ID,
+            resource=f"call:{session_id}",
+            session_id=session_id,
+            tenant_id=record.tenant_id,
+            actor_ip=request.client.host if request.client else "",
+        )
+        return {"deleted": removed}
 
     @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:

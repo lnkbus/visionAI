@@ -110,6 +110,10 @@ services:
       VAI_ADM_REQUIRE_AUTH: "false"
       VAI_ADM_LICENSE_URL: http://core-lic:8095
       VAI_ADM_SECURITY_URL: http://core-sec:8096
+      # 운영 통계·콜 이력 수집. 대화 이력은 개인정보라, 수집을 원하지 않는
+      # 고객사에서는 "안 보면 된다"가 아니라 실제로 저장하지 않아야 한다.
+      VAI_ADM_ANALYTICS: ${VAI_ADM_ANALYTICS:-true}
+      VAI_ADM_ANALYTICS_RETENTION_DAYS: ${VAI_ADM_ANALYTICS_RETENTION_DAYS:-90}
     depends_on:
       redis:
         condition: service_healthy
@@ -177,18 +181,29 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: stt-core
+        # 실제 인식 엔진. 기본 이미지에는 없다 — 넣지 않으면 fake 어댑터밖에
+        # 못 쓰고, 그 사실이 기동 로그에만 남아 "설치는 됐는데 인식이 안 된다"가
+        # 된다. 가벼운 이미지가 필요하면 VAI_STT_EXTRAS= 로 비운다.
+        EXTRAS: ${VAI_STT_EXTRAS-whisper}
+    volumes:
+      - license-data:/licenses:ro
+      # 모델 가중치. `deploy/airgap/fetch_models.sh --out models` 로 먼저 받는다.
+      # 어댑터는 local_files_only 로 여니 컨테이너가 기동 중 밖으로 나가지 않는다.
+      - ${VAI_MODEL_DIR:-../../models}:/models:ro
     environment:
       <<: *block-env
       VAI_BLOCK_ID: STT-CORE
       VAI_CONSUMER_GROUP: stt
       VAI_CONSUMER_NAME: stt-1
-      # 기본은 GPU 없이 도는 fake. 실제 인식은 아래 두 줄을 바꾼다:
-      #   VAI_STT_ADAPTER: faster_whisper
-      #   VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3
-      VAI_STT_ADAPTER: fake
+      # 기본값이 실제 엔진이다. fake 로 돌리려면 VAI_STT_ADAPTER=fake 를 준다.
+      VAI_STT_ADAPTER: ${VAI_STT_ADAPTER:-faster_whisper}
+      VAI_STT_MODEL_PATH: ${VAI_STT_MODEL_PATH:-/models/faster-whisper-small}
+      VAI_STT_ADAPTER_CONFIG: '{"device":"cpu","compute_type":"int8","language":"ko"}'
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
       VAI_STT_PUBLISH_UI: "false"
+      # 인식 중임을 알린다. LLM-SUM이 이 표시를 보고 요약을 미룬다.
+      VAI_STT_BUSY_SIGNAL: ${VAI_STT_BUSY_SIGNAL:-true}
     # volumes:
     #   - /opt/visionai/models:/models:ro   # 폐쇄망 반입 모델 마운트
 
@@ -315,6 +330,10 @@ services:
       # 회의록은 그 자체가 산출물이다. Redis TTL(7일)에 맡기지 않는다.
       VAI_SUM_STORE: file
       VAI_SUM_DATA_DIR: /var/lib/visionai/summaries
+      # 실시간 인식에 양보한다. 한 장비에 STT와 sLLM을 함께 올리면 메모리를
+      # 다투고, 그때 먼저 무너지는 것이 실시간 자막이다. GPU가 넉넉하면 끈다.
+      VAI_SUM_YIELD_TO_STT: ${VAI_SUM_YIELD_TO_STT:-true}
+      VAI_SUM_YIELD_MAX_WAIT_S: ${VAI_SUM_YIELD_MAX_WAIT_S:-180}
     volumes:
       - license-data:/licenses:ro
       - summary-data:/var/lib/visionai/summaries
@@ -397,9 +416,21 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: spk-dia
+        # 신경망 임베더(ECAPA-TDNN). 비우면 spectral 만 쓸 수 있고, 그건
+        # **음역이 뚜렷이 다른 화자만** 가른다 — 회의록에서는 그게 흔한 상황이
+        # 아니다. torch 가 딸려 와 이미지가 커지므로 끄고 싶으면 VAI_SPK_EXTRAS= .
+        EXTRAS: ${VAI_SPK_EXTRAS-neural}
+    volumes:
+      - license-data:/licenses:ro
+      # 임베더 가중치. `fetch_models.sh --spk` 로 먼저 받는다.
+      - ${VAI_MODEL_DIR:-../../models}:/models:ro
     environment:
       <<: *block-env
       VAI_BLOCK_ID: SPK-DIA
+      # 기본값이 신경망 임베더다. spectral 로 내리려면 명시한다.
+      VAI_SPK_EMBEDDER: ${VAI_SPK_EMBEDDER:-speechbrain}
+      VAI_SPK_EMBEDDER_MODEL: ${VAI_SPK_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
+      VAI_SPK_EMBEDDER_CONFIG: '{"device":"cpu"}'
       VAI_CONSUMER_GROUP: dia
       VAI_CONSUMER_NAME: dia-1
       # 운영에서는 신경망 임베더로 바꾼다. spectral은 음역이 뚜렷이 다른

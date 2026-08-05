@@ -32,7 +32,11 @@
 | [**00. 레고블록 모듈 카탈로그**](docs/00-module-catalog.md) | **단일 기준 문서** — 블록 정의·계약·조립 레시피·블록별 청구 모델 |
 | [01. 제품 기획서](docs/01-product-plan.md) | 시장/타겟, 패키지 상품화, 가격·라이선스 모델, 로드맵 |
 | [02. 시스템 아키텍처](docs/02-architecture.md) | End-to-End 구조, 실시간 파이프라인, 어댑터, 프로토콜 |
-| [03. 배포 전략 (온프렘/SaaS)](docs/03-deployment-onprem-saas.md) | 에어갭 번들, K3s/Compose, 오프라인 DRM, 업데이트 |
+| [03. 배포 전략 (온프렘/SaaS)](docs/03-deployment-onprem-saas.md) | 에어갭 번들, K8s/Compose, 오프라인 DRM, 업데이트 |
+| [10. 스마트 회의록 데모](docs/10-meeting-demo.md) | 노트북에서 실제 음성으로 — 모델 반입, 기동, 확인, 한계 |
+| [11. 경쟁 제안서 대비 격차](docs/11-competitive-gap.md) | 없는 것을 없다고 적는다 — 제안 대응 리스크 |
+| [12. 엔진 선택과 규모 산정](docs/12-engines-and-scale.md) | STT·화자분리·sLLM 교체, 상담석 → GPU 계산 |
+| [13. 운영 포털과 시나리오 저작](docs/13-portal-and-authoring.md) | 화면 지도, 통계가 세는 것, 시나리오 생애주기 |
 | [04. AI 가상상담원 확장 설계](docs/04-ai-avatar-counselor.md) | 아바타 파이프라인, WebRTC, 단계별 구현 |
 | [05. 데이터·보안·컴플라이언스](docs/05-data-security-compliance.md) | 망분리·KCMVP·개인정보·AI 리스크 통제 |
 | [06. 기술 스택 & MVP 개발 계획](docs/06-tech-stack-mvp.md) | 블록 모노레포 구조, Wave별 개발 계획 — **코딩 착수용** |
@@ -303,7 +307,7 @@ CORE-BUS가 세션 인입 시점에 셉니다.
 콘솔은 사용률 70%에서 노랑, 90%에서 빨간 배너를 띄웁니다. 상한에 부딪힌 뒤에
 아는 것은 이미 상담을 놓친 뒤입니다.
 
-### 배포는 블록을 켜고 끄는 것 (Helm/K3s)
+### 배포는 블록을 켜고 끄는 것 (Helm/K8s)
 
 ```bash
 helm install visionai deploy/charts/visionai -f values-aicc.yaml \
@@ -561,6 +565,6 @@ graph LR
         C["기반 블록<br/>버스·게이트웨이·DRM·보안·콘솔"]
     end
     Blocks -->|"bundle.yaml 조립"| PKG["제품 패키지<br/>A: 금융 AICC<br/>B: 스마트 회의록<br/>C: AI 가상상담원"]
-    PKG -->|"Helm/K3s + .lic"| ONPREM["온프레미스<br/>(폐쇄망)"]
+    PKG -->|"Helm/K8s + .lic"| ONPREM["온프레미스<br/>(폐쇄망)"]
     PKG -->|"동일 이미지 + 구독 토글"| SAAS["SaaS"]
 ```
