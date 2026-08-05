@@ -1,118 +1,121 @@
-# 06. 기술 스택 & MVP 개발 계획 (코딩 착수용)
+# 06. 기술 스택 & 개발 계획 (코딩 착수용)
 
-## 1. 기술 스택 선정
+## 1. 기술 스택 (사양서 v1.0 기준)
 
-| 계층 | 선정 | 선정 이유 |
-|------|------|-----------|
-| 백엔드 | **Python 3.12 + FastAPI** | AI 생태계 밀착(LLM/임베딩/음성 라이브러리), 비동기 스트리밍(SSE/WebSocket) 성숙, 채용 풀 |
-| AI 오케스트레이션 | 자체 경량 파이프라인 (+ 필요시 LangGraph 수준의 상태 그래프) | 프레임워크 종속 최소화 — 감사 기록·가드레일을 1급 시민으로 직접 구현 |
-| LLM (SaaS) | Claude API (claude-sonnet-5 기본, 요약 등 경량 작업은 claude-haiku-4-5) | 한국어 품질, 긴 컨텍스트, 무학습 계약 |
-| LLM (온프렘) | vLLM + 오픈 웨이트 한국어 강 모델(GPU 프로파일별 7B~70B급) | OpenAI 호환 API로 게이트웨이 추상화 용이 |
-| 임베딩 | SaaS: API / 온프렘: 로컬 한국어 임베딩 모델 서빙 | 환경별 Provider 교체 |
-| DB | **PostgreSQL 16 + pgvector** | 업무 데이터·벡터 검색 단일화(운영 단순), RLS 멀티테넌시, 온프렘 반입 용이 |
-| 캐시/큐 | **Redis** (+ 작업큐: arq/Celery) | 세션 상태, 임베딩 작업큐 |
-| 스토리지 | S3 호환 (SaaS: S3 / 온프렘: MinIO) | 단일 코드 경로 |
-| 프론트엔드 | **TypeScript + React(Next.js)** — 관리자 콘솔·상담원 워크스페이스 / 채팅 위젯은 경량 임베드 스크립트 | 표준 생태계 |
-| 실시간 | WebSocket(채팅), SSE(스트리밍 응답), WebRTC+SFU(Phase 3, LiveKit 계열) | 단계별 도입 |
-| 배포 | Docker + Helm/K8s, 개발·PoC는 docker-compose | 03 문서 참조 |
-| 관측성 | OpenTelemetry + Prometheus/Grafana + Loki | 온프렘 번들 동일 |
-| CI/CD | GitHub Actions: lint(ruff)·type(mypy)·test(pytest)·이미지 빌드·차트 패키징 | 모노레포 단일 파이프라인 |
+| 계층 | 선정 | 비고 |
+|------|------|------|
+| 언어/프레임워크 | **Python 3.12 + FastAPI** (asyncio) | 음성 스트리밍·AI 생태계 밀착 |
+| 오디오 인입 | SIP/RTP 게이트웨이(AICC), WebSocket/gRPC/파일(회의) | G.711/PCM 8k/16k |
+| VAD | **Silero VAD** + 200~500ms 청크 버퍼 | |
+| STT | **Faster-Whisper** (기본) / **Triton Server** (대규모 애드온) | BaseSTTAdapter 핫스왑 |
+| TTS | **CosyVoice / Kokoro** | BaseTTSAdapter, 200ms 청크 스트리밍 |
+| 화자분리 | pyannote 계열 | MEETING 프로파일 |
+| SLM (실시간 질의 추출) | 1.5B~3B / vLLM | < 200ms |
+| sLLM (요약/분석) | 7B~14B INT4/FP8 / **vLLM** | 배치 경로. SaaS는 상용 API 어댑터 |
+| 검색 | **Qdrant**(Dense) + BM25(Sparse) + **BGE-Reranker-v2** | 하이브리드 |
+| 문서 파서 | **HWP**/PDF/DOCX 파서 | 공공(HWP) 필수 |
+| 필터 | 정규식(Python/C++) + 로컬 NER | < 10ms Fast-Path |
+| DB | **PostgreSQL 16** (업무 데이터) + Qdrant(벡터) | RLS 멀티테넌시 |
+| 버스/캐시 | **Redis Streams** (이벤트 버스·세션) → 대규모 시 NATS 승격 | |
+| 스토리지 | S3 호환 (SaaS: S3 / 온프렘: MinIO) — 오디오 원본 암호화 저장 | |
+| 프론트엔드 | **TypeScript + Next.js** (상담원 WS·회의록·어드민), WebSocket 실시간 | |
+| 배포 | Docker Compose(PoC) / **K3s 단일노드**(공공 소형) / K8s+Helm | 03 문서 |
+| 코드 보호 | Cython 컴파일 + PyArmor (온프렘 릴리스 빌드) | |
+| 암호화 | KCMVP 검증모듈(ARIA/AES-256) | |
+| 관측성 | OpenTelemetry + Prometheus/Grafana/Loki, GPU 모니터링(DCGM) | |
+| CI/CD | GitHub Actions: ruff·mypy·pytest·블록별 이미지 빌드·차트 패키징 | |
 
-## 2. 모노레포 구조 (제안)
+## 2. 모노레포 구조 (블록 = 최상위 단위)
 
 ```
 visionAI/
-├── apps/
-│   ├── api-core/            # FastAPI 모놀리스: auth, tenant, conversation, routing, admin API
-│   │   ├── src/core/        #   도메인 모델·서비스 (모듈 경계 엄격)
-│   │   ├── src/api/         #   라우터 (v1)
-│   │   └── tests/
-│   ├── ai-orchestrator/     # 대화 파이프라인 워커 (전처리→RAG→LLM→가드레일→후처리)
-│   ├── knowledge-worker/    # 문서 파싱·청킹·임베딩 배치 워커
-│   └── web/                 # Next.js: 관리자 콘솔 + 상담원 워크스페이스
-│       └── packages/widget/ # 임베드형 채팅 위젯 (경량 번들)
+├── blocks/                        # ★ 레고블록 — 1블록 = 1디렉토리 = 1이미지 = 1청구단위
+│   ├── core-bus/                  #   각 블록 내부 구조는 00 문서 §1 참조:
+│   ├── core-gw/                   #   src/ adapters/ contracts/ chart/ block.yaml tests/
+│   ├── core-lic/
+│   ├── core-sec/
+│   ├── core-adm/                  # (frontend 포함)
+│   ├── aud-rtp/
+│   ├── aud-ws/
+│   ├── aud-vad/
+│   ├── stt-core/
+│   ├── stt-trt/
+│   ├── spk-dia/
+│   ├── tts-core/
+│   ├── flt-micro/
+│   ├── rag-kb/
+│   ├── rag-srch/
+│   ├── ta-assist/
+│   ├── llm-gw/
+│   ├── llm-sum/
+│   ├── ui-agent/                  # Next.js
+│   ├── ui-meet/                   # Next.js
+│   ├── bot-voice/                 # (Wave 7)
+│   └── ava-counsel/               # (Wave 7)
 ├── libs/
-│   ├── llm-gateway/         # Provider 추상화 (anthropic / vllm / ...)
-│   ├── schemas/             # Pydantic 모델·API 계약 (OpenAPI 소스)
-│   └── common/              # 로깅, 텔레메트리, PII 마스킹, RLS 헬퍼
-├── deploy/                  # Helm 차트, values-*, airgap/, compose/
-├── docs/                    # 본 설계 문서
-└── Makefile                 # dev up/down, test, lint, seed
+│   ├── contracts/                 # 공유 이벤트/API 스키마 (Pydantic + AsyncAPI) — 블록 간 유일한 공유물
+│   ├── common/                    # 로깅·텔레메트리·설정·라이선스 클라이언트
+│   └── testing/                   # fake adapters (fake-stt, fake-llm), 오디오 fixture
+├── deploy/                        # 우산 차트, bundles/, airgap/, compose/ (03 문서)
+├── tools/
+│   ├── blockctl/                  # 블록 스캐폴딩·검증 CLI (block.yaml lint, 계약 호환성 체크)
+│   └── licgen/                    # .lic 발급기 (사내용)
+├── docs/
+└── Makefile                       # make dev / test / bundle BUNDLE=aicc
 ```
 
-## 3. 핵심 API 초안 (v1)
+### 블록 개발 규칙
 
-```
-# 대화 (위젯/채널용)
-POST   /v1/conversations                      # 세션 시작 {channel, visitor_meta}
-POST   /v1/conversations/{id}/messages        # 발화 전송 → SSE 스트리밍 응답
-POST   /v1/conversations/{id}/handoff         # 상담원 전환 요청
-POST   /v1/conversations/{id}/feedback        # 도움됨/안됨 피드백
+1. **블록 간 코드 import 금지** — 공유는 `libs/contracts`, `libs/common`만 허용. CI에서 import-linter로 강제
+2. **계약 우선**: 이벤트 스키마(AsyncAPI)·API(OpenAPI)를 먼저 정의 → 코드 생성. 계약 변경은 하위 호환 검사 통과 필수
+3. **어댑터 플러그인**: 엔진 추가는 `adapters/`에 클래스 추가 + entry-point 등록. 코어 수정 발생 시 설계 리뷰
+4. **환경 분기 금지**: `if is_onprem:` 대신 어댑터/설정 주입
+5. **블록 인수 기준(DoD)**: 계약 테스트 + 단독 기동 smoke + 성능 예산(해당 시 지연 목표) 통과 → 그 시점부터 견적·청구 가능한 상태로 간주
+6. **fake 어댑터 필수**: 모든 AI 엔진 블록은 결정적 fake 구현 제공 — GPU 없는 CI에서 전체 파이프라인 통합 테스트
 
-# 상담원 워크스페이스
-GET    /v1/agent/queue                        # 배분 대기열 (WebSocket 구독)
-POST   /v1/agent/conversations/{id}/accept
-GET    /v1/agent/conversations/{id}/summary   # AI 전달 요약
-POST   /v1/agent/conversations/{id}/suggest   # 실시간 답변 추천
+## 3. 핵심 인터페이스 (요약)
 
-# 지식베이스
-POST   /v1/kb                                 # 지식베이스 생성
-POST   /v1/kb/{id}/documents                  # 문서 업로드 (비동기 인덱싱 job)
-GET    /v1/kb/{id}/documents/{doc_id}/status
-POST   /v1/kb/{id}/search                     # 검색 미리보기 (관리자 튜닝용)
+- 이벤트 버스 토픽: `audio.in.{session}` → `stt.delta.{session}` → `filter.clean.{session}` → `assist.popup.{session}` / `session.closed` → `summary.done`
+- WebSocket `/v1/audio/stream` 프로토콜: [02 문서](02-architecture.md) §4 (사양서 원문 규격 준수)
+- REST(관리): `/v1/kb/*`(지식), `/v1/sessions/*`(이력), `/v1/admin/*`(테넌트·룰셋·라이선스 상태), `/v1/rules/*`(컴플라이언스 룰셋 CRUD)
 
-# 관리
-POST   /v1/admin/tenants                      # (SaaS 운영자) 테넌트 프로비저닝
-GET    /v1/admin/analytics/overview           # 해결률·전환율·볼륨 대시보드
-PUT    /v1/admin/prompts/{key}                # 프롬프트 버전 관리 (테넌트 오버라이드)
-GET    /v1/admin/audit-logs
-```
+## 4. 개발 로드맵 — Wave × 사양서 Phase 매핑
 
-- 인증: `Authorization: Bearer <JWT>` (tenant_id claim 포함), 위젯은 사이트 키 + 세션 토큰 교환 방식
-- 모든 응답 스트리밍은 SSE(`text/event-stream`) — 토큰 단위 delta + 완료 시 인용 출처 이벤트
+사양서의 12주 Phase를 블록 Wave로 세분화한다. **각 Wave 완료 = 검수·기성 청구 가능 지점.**
 
-## 4. MVP 범위 확정 (M1~M4)
+| Wave | 기간(안) | 블록 | 완료 기준 (DoD) | 사양서 |
+|------|----------|------|------------------|--------|
+| **1. 뼈대** | W1~2 | CORE-BUS, CORE-GW, CORE-LIC(스텁) | 세션 생성→이벤트 왕복 E2E, compose 기동 | Ph.1 |
+| **2. 음성 코어** | W2~4 | AUD-WS, AUD-VAD, STT-CORE | 마이크→실시간 자막 데모, Faster-Whisper 어댑터+fake 어댑터, 다국어 샘플 | Ph.1 |
+| **3. 지능** | W4~7 | FLT-MICRO, RAG-KB, RAG-SRCH, TA-ASSIST, LLM-GW | PII 마스킹<10ms, 팝업 E2E<1초(p95), HWP/PDF 인덱싱, 평가셋 정확도 기준 | Ph.2 |
+| **4. 제품화 A** | W7~9 | UI-AGENT, LLM-SUM, AUD-RTP | AICC 번들 통합 데모(전화 시뮬레이터), 표준요약 채택률 측정 체계 | Ph.3 |
+| **5. 제품화 B** | W9~10 | SPK-DIA, UI-MEET | 회의 파일→화자별 회의록+Action Item, 회의록 번들 데모 | Ph.3 |
+| **6. 패키징** | W10~12 | CORE-LIC(정식), CORE-SEC, CORE-ADM, airgap | H/W Fingerprint 검증, KCMVP 암호화, 에어갭 설치 리허설, PyArmor 빌드, GS인증 준비 | Ph.4 |
+| **7. 확장** | Y2 | TTS-CORE→BOT-VOICE→AVA-COUNSEL | [04 문서](04-ai-avatar-counselor.md) 로드맵 | — |
 
-**목표: "보험 FAQ/약관 문서를 올리면, 웹 위젯에서 근거 기반 AI 상담이 되고, 막히면 상담원에게 요약과 함께 넘어가는" 데모 가능한 제품**
+### MVP 데모 시나리오 (Wave 4 종료 시)
 
-### In (반드시)
-- [ ] 테넌트/사용자/RBAC 기반 골격 + RLS
-- [ ] 지식베이스: PDF/DOCX/텍스트 업로드 → 청킹·임베딩 → 하이브리드 검색
-- [ ] 대화 파이프라인: 마스킹 → 의도분기(생성형/시나리오/전환) → RAG → 스트리밍 응답 + 출처
-- [ ] LLM Gateway: anthropic + vllm 두 Provider 동작 (compose에서 vllm 프로파일 검증)
-- [ ] 웹 채팅 위젯 + 상담원 핸드오프(대기열·수락·AI 요약 전달)
-- [ ] 관리자 콘솔: 문서 관리, 상담 이력 조회, 기본 통계
-- [ ] 감사 로그(pipeline_run), 개인정보 마스킹
-- [ ] docker-compose 원커맨드 데모 환경
+> 전화 시뮬레이터로 상담 통화 재생 → 상담원 화면에 실시간 자막(고객/상담원 채널 분리) →
+> 주민번호 발화 시 즉시 마스킹 표시 → "결제일 연기 되나요?" 발화 1초 내 약관 팝업+추천 답변 →
+> 통화 종료 수 초 후 카테고리·표준 요약 자동 생성 → 어드민에서 GPU 사용률·지연 대시보드 확인
 
-### Out (MVP 이후)
-- 카카오 상담톡 연동(M5~), 시나리오 빌더 GUI(M5~), 과금 미터링 자동화(M7~)
-- 음성(Phase 2), 아바타(Phase 3)
-- 스키마 분리 Enterprise 테넌시, SSO 연동(온프렘 패키징 시점)
+## 5. 품질·성능 검증 체계
 
-### 마일스톤 상세
+| 항목 | 방법 |
+|------|------|
+| 지연 예산 회귀 | 각 블록 계약 테스트에 지연 assert(FLT<10ms, 검색<100ms, 리랭킹<80ms), 통합 p95<1초 — CI 야간 벤치 |
+| STT 품질 | 도메인 오디오 평가셋(금융 상담 100통화, 회의 20건) WER/CER 회귀 측정 |
+| RAG 품질 | 보험/카드 약관 Q&A 골든셋 100문항 — 인용 정확도·팝업 적합률 |
+| 요약 품질 | 표준요약 골든셋 + 사람 평가 루브릭(주기 샘플링) |
+| 부하 | 동시 채널 시뮬레이터(오디오 재생기) — 프로파일 S/M 사양 검증 리포트 |
 
-| 월 | 목표 | 검증 기준 |
-|----|------|-----------|
-| M1 | 레포 골격, api-core 기동, 테넌트/인증, DB 마이그레이션 체계, compose 환경 | 테넌트 생성→로그인→헬스체크 E2E |
-| M2 | 지식베이스 파이프라인 + LLM Gateway + 기본 대화(RAG 응답) | 문서 업로드→질문→출처 포함 답변 |
-| M3 | 위젯, 핸드오프, 상담원 워크스페이스, 마스킹·감사 로그 | 위젯 상담→전환→상담원 수락 E2E |
-| M4 | 관리자 콘솔·통계, vLLM 프로파일 검증, 부하 테스트, 데모 시나리오(보험 FAQ) | 사내 데모 + PoC 제안 가능 상태 |
+## 6. 첫 스프린트 백로그 (바로 착수)
 
-## 5. 개발 규칙 (초기 합의)
-
-- **API 계약 우선**: `libs/schemas`의 Pydantic 모델이 단일 진실 — OpenAPI 자동 생성, 프론트 타입 생성(openapi-typescript)
-- **테스트**: 도메인 로직 단위 테스트 + 파이프라인 통합 테스트(LLM은 fake provider로 결정적 테스트), E2E는 compose 기반 smoke
-- **마이그레이션**: Alembic, expand-contract(전방 호환) 원칙 — 온프렘 롤백 대비
-- **환경 분기 금지 원칙**: `if is_onprem:` 식 분기 대신 Provider/설정 주입 (03 문서 §7 매트릭스 외 분기 금지)
-- **프롬프트는 리소스**: `prompts/` 디렉토리에 버전 관리, 변경 시 회귀 평가셋(golden set) 통과 필수
-- **AI 품질 평가**: 보험 도메인 Q&A 평가셋 100문항 구축(M2) → 근거 인용률·정확도 회귀 측정을 CI에 포함
-
-## 6. 바로 시작할 첫 스프린트 백로그 (제안)
-
-1. 모노레포 스캐폴딩(uv workspace + pnpm), Makefile, CI 파이프라인
-2. api-core: FastAPI 기동, 설정 체계(pydantic-settings, 환경 프로파일), 헬스체크
-3. DB 스키마 v0: tenant/user/conversation/message/kb/document/chunk/pipeline_run + Alembic + RLS
-4. llm-gateway 라이브러리: `complete()`/`embed()` 인터페이스 + anthropic 구현 + fake 구현(테스트용)
-5. docker-compose: postgres(pgvector)/redis/minio/api-core 기동
-6. 인증: JWT 발급·검증, 테넌트 컨텍스트 미들웨어(RLS 세션 변수 설정)
+1. 모노레포 스캐폴딩: uv workspace + pnpm, `tools/blockctl`로 블록 템플릿 생성기(`blockctl new <id>`)
+2. `libs/contracts` v0: 세션·오디오·STT Delta·팝업 이벤트 스키마 (사양서 §4 프로토콜 반영)
+3. `core-bus`: Redis Streams 발행/구독 래퍼, 세션 상태 머신(AICC/MEETING 프로파일)
+4. `core-gw`: FastAPI + `/v1/audio/stream` WebSocket(수신·발행), JWT 인증 스텁
+5. `aud-vad`: Silero VAD + 청크 분할 워커
+6. `stt-core`: BaseSTTAdapter + fake 어댑터(테스트) + Faster-Whisper 어댑터(GPU)
+7. compose 환경: redis + postgres + 위 블록 기동, 데모 페이지(마이크→자막)
+8. CI: 블록별 빌드 매트릭스, import-linter, 계약 스키마 검증

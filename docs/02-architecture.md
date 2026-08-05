@@ -1,176 +1,197 @@
 # 02. 시스템 아키텍처
 
+> 기준 문서: 「온프레미스 실시간 다국어 STT/TTS & sLLM AI 플랫폼 개발 사양서 v1.0」
+> 모든 컴포넌트는 [00. 레고블록 모듈 카탈로그](00-module-catalog.md)의 블록 계약을 따른다.
+
 ## 1. 설계 원칙
 
-1. **One Codebase, Two Deployments** — SaaS와 온프레미스는 동일 소스·동일 컨테이너 이미지. 차이는 설정(Helm values)과 어댑터 구현체로만 흡수한다. 별도 포크 금지.
-2. **모든 외부 의존성은 추상화** — LLM, 임베딩, STT/TTS, 스토리지, 메시징은 인터페이스 뒤에 두고 환경별 구현체를 주입한다. 망분리 환경에서는 외부 API 호출이 0건이어야 한다.
-3. **채널과 코어의 분리** — 텍스트/음성/아바타는 "채널 어댑터"일 뿐, 대화 처리 코어는 하나다. Phase 3 아바타는 채널 추가이지 재개발이 아니다.
-4. **테넌트 우선(tenant-first)** — 모든 데이터 접근 경로에 tenant_id가 강제되는 구조. 온프레미스는 "테넌트 1개짜리 배포"로 동일 코드가 동작한다.
-5. **감사 가능성(auditability)** — 모든 AI 응답은 입력·근거 문서·모델·프롬프트 버전과 함께 기록되어 재현 가능해야 한다(금융권 심사 대응).
+1. **레고블록 조립(Composable Blocks)** — 모든 기능은 독립 배포·독립 과금 가능한 블록. 블록 간 결합은 이벤트 버스 토픽과 OpenAPI 계약으로만. 제품 패키지는 `bundle.yaml` 조립 정의서로 구성
+2. **Model-Agnostic Abstraction** — STT/TTS/sLLM 모델 코드는 서비스 로직에 종속되지 않는 어댑터(ABC) 패턴. 엔진 교체는 어댑터 플러그인 추가로 해결(핫스왑)
+3. **Dual-Profile Processing** — 동일 파이프라인이 두 프로파일을 동시 지원:
+   - `AICC`: 초저지연, Stereo/RTP, 실시간 감지·팝업
+   - `MEETING`: 고정밀, Mono/File, 화자분리·요약
+4. **Sub-Second Pipeline** — STT 수신 → sLLM/RAG 지식 팝업까지 전 과정 지연 1초 미만
+5. **Fast-Path / Slow-Path 분리** — 컴플라이언스·마스킹은 sLLM을 거치지 않는 10ms 정규식 경로, 요약·분석은 세션 종료 후 배치 경로
+6. **Complete Air-Gapped** — 폐쇄망에서 외부 호출 0건. H/W Fingerprint 오프라인 라이선스, KCMVP 암호화
+7. **One Codebase, Two Deployments** — 동일 블록 이미지가 온프렘(로컬 엔진)과 SaaS(상용 API Provider)에서 설정만 바꿔 동작
 
-## 2. 전체 아키텍처
+## 2. 전체 아키텍처 (End-to-End)
 
 ```mermaid
 graph TB
-    subgraph Channels["채널 계층"]
-        WEB["웹 채팅 위젯"]
-        KAKAO["카카오 상담톡"]
-        VOICE["전화/보이스봇<br/>(Phase 2)"]
-        AVATAR["아바타 화상상담<br/>(Phase 3)"]
-        AGENTUI["상담원 워크스페이스"]
-        ADMIN["관리자 콘솔"]
+    subgraph IN["Inbound Audio / Data Layer"]
+        RTP["AUD-RTP<br/>SIP/RTP Gateway<br/>G.711/PCM 8k/16k Stereo"]
+        WS["AUD-WS<br/>WebSocket · gRPC · File<br/>16kHz+ Mono/Multi"]
     end
 
-    subgraph Edge["API 게이트웨이"]
-        GW["Gateway<br/>(인증 · 테넌트 라우팅 · Rate Limit)"]
+    VAD["AUD-VAD — Audio Router & Streaming Buffer<br/>Silero VAD · 200~500ms Chunk Divider"]
+
+    subgraph SPEECH["Core Speech Processing Engine"]
+        STT["STT-CORE<br/>BaseSTTAdapter: Faster-Whisper ↔ Triton (핫스왑)"]
+        TTS["TTS-CORE<br/>BaseTTSAdapter: CosyVoice / Kokoro (청크 스트리밍)"]
+        DIA["SPK-DIA<br/>화자분리 (MEETING 프로파일)"]
     end
 
-    subgraph Core["코어 서비스"]
-        CONV["Conversation Service<br/>대화 세션·상태 관리"]
-        ORCH["AI Orchestrator<br/>대화 파이프라인 실행"]
-        RAG["Knowledge Service<br/>문서 수집·임베딩·검색(RAG)"]
-        ASSIST["Agent Assist Service<br/>답변추천·요약·분류"]
-        HANDOFF["Routing Service<br/>상담원 배분·핸드오프"]
+    FLT["FLT-MICRO — Real-Time Micro-Filter (Fast-Path)<br/>PII Masking(Regex+Local NER) · 필수고지 룰체크 < 10ms"]
+
+    subgraph RT["Real-time Agent Assist / TA Pipeline"]
+        QE["SLM Query Extractor (1.5B~3B) < 200ms"]
+        HS["RAG-SRCH: Qdrant Dense + BM25 Sparse < 100ms"]
+        RR["BGE-Reranker-v2 < 80ms"]
+        POP["Knowledge Popup Push (WS) < 50ms"]
     end
 
-    subgraph AILayer["AI 추상화 계층"]
-        LLMGW["LLM Gateway<br/>(Provider 추상화)"]
-        SPEECH["Speech Gateway<br/>STT/TTS 추상화 (Phase 2+)"]
+    subgraph BATCH["sLLM Summarization & Analytics (Post-Session)"]
+        VLLM["LLM-GW: vLLM 7B~14B INT4/FP8"]
+        SUM["LLM-SUM: AICC 분류·표준요약 / 회의록·Action Items"]
     end
 
-    subgraph Providers["환경별 Provider"]
-        API_LLM["SaaS: Claude API 등<br/>상용 LLM"]
-        LOCAL_LLM["온프렘: vLLM<br/>(로컬 오픈모델)"]
-    end
+    UIA["UI-AGENT<br/>상담원 워크스페이스"]
+    UIM["UI-MEET<br/>회의록 UI"]
 
-    subgraph Data["데이터 계층"]
-        PG[("PostgreSQL<br/>업무 데이터 + pgvector")]
-        REDIS[("Redis<br/>세션·캐시·큐")]
-        S3[("Object Storage<br/>S3 / MinIO")]
-        AUDIT[("감사 로그 저장소<br/>append-only")]
-    end
-
-    Channels --> GW
-    GW --> CONV
-    GW --> ADMIN_SVC["Admin/Tenant Service"]
-    CONV --> ORCH
-    ORCH --> RAG
-    ORCH --> LLMGW
-    ASSIST --> LLMGW
-    CONV --> HANDOFF
-    HANDOFF --> AGENTUI
-    LLMGW --> API_LLM
-    LLMGW --> LOCAL_LLM
-    ORCH --> SPEECH
-    Core --> PG
-    Core --> REDIS
-    RAG --> S3
-    Core --> AUDIT
+    RTP --> VAD
+    WS --> VAD
+    VAD --> STT
+    STT -->|"stt.delta (Delta Text Stream)"| FLT
+    STT -.-> DIA
+    FLT -->|"Real-time Stream"| QE --> HS --> RR --> POP --> UIA
+    FLT -->|"Post-Session Batch"| VLLM --> SUM
+    SUM --> UIA
+    SUM --> UIM
+    DIA --> SUM
+    TTS -.->|"Phase 확장: BOT-VOICE/AVA"| RTP
 ```
 
-## 3. 서비스 구성
+## 3. 핵심 파이프라인 상세
 
-MVP 단계에서는 **모듈러 모놀리스**(단일 배포 단위, 내부 모듈 경계 엄격)로 시작하고,
-부하 특성이 다른 서비스부터 분리한다. 처음부터 마이크로서비스로 쪼개지 않는다.
+### 3.1 실시간 스트림 경로 (AICC 프로파일) — 지연 예산 합계 < 1초
 
-| 서비스 | 역할 | 분리 시점 |
-|--------|------|-----------|
-| **api-core** | Gateway + Conversation + Routing + Admin (모놀리스 본체) | MVP부터 단일 서비스 |
-| **ai-orchestrator** | 대화 파이프라인(전처리→RAG→LLM→후처리→가드레일) 실행 | MVP부터 분리 (LLM 대기시간이 길어 워커 특성이 다름) |
-| **knowledge-worker** | 문서 파싱·청킹·임베딩 비동기 처리 | MVP부터 분리 (배치성 부하) |
-| **llm-gateway** | Provider 추상화, 키 관리, 사용량 계측, 폴백 | MVP는 라이브러리로 시작 → 서비스로 승격 |
-| **speech-service** | STT/TTS 스트리밍 | Phase 2 |
-| **avatar-service** | 아바타 렌더링·립싱크·WebRTC | Phase 3 |
+| 단계 | 블록 | 목표 Latency | 처리 내용 |
+|------|------|--------------|-----------|
+| 오디오 인입 | AUD-RTP | — | 고객/상담원 채널 분리(Stereo), PCM 정규화 |
+| VAD·청킹 | AUD-VAD | 버퍼 200~500ms | 발화 구간 검출, 청크 분할, 백프레셔 |
+| STT | STT-CORE | 스트리밍 Delta | `{text, is_final, confidence, speaker_id}` 이벤트 발행 |
+| 마스킹·룰체크 | FLT-MICRO | **< 10ms** | PII 치환(`[RRN_MASKED]` 등), 필수 고지문구 매칭 → `matched_rules` |
+| 질의 추출 | TA-ASSIST(SLM) | < 200ms | 최근 3문장 맥락에서 검색용 핵심 의도 문장 추출 |
+| 하이브리드 검색 | RAG-SRCH | < 100ms | 의미 유사도(Dense) + 약관 조항/상품명(Sparse) 동시 |
+| 리랭킹 | RAG-SRCH | < 80ms | 상위 10 후보 → 최종 3 청크 |
+| UI 푸시 | CORE-GW(WS) | < 50ms | 참조 원문 + 추천 답변 팝업 렌더 |
 
-### 3.1 대화 처리 파이프라인 (AI Orchestrator)
-
-```
-사용자 발화
-  → ① 전처리: 개인정보 탐지·마스킹, 언어 감지
-  → ② 의도 분류: 시나리오 매칭(정형 업무) vs 생성형 응답(비정형 질의) vs 상담원 전환
-  → ③ RAG 검색: 하이브리드(BM25 + 벡터) → 리랭킹 → 근거 문서 확보
-  → ④ LLM 생성: 시스템 프롬프트(테넌트별 페르소나/정책) + 근거 + 대화 이력
-  → ⑤ 가드레일: 답변 근거성 검증, 금지 주제 필터, 규제 문구(예: 투자권유 제한) 체크
-  → ⑥ 후처리: 출처 표기, 액션 추출(예: 상담 예약 생성), 감사 로그 기록
-```
-
-- ②의 3분기 구조가 중요: 금융권은 "정확해야 하는 정형 업무"(해지환급금 조회 등)는 시나리오/API 호출로,
-  "설명형 질의"(약관 문의)는 RAG 생성형으로 처리해 환각 리스크를 업무 유형별로 통제한다.
-- 모든 단계는 `pipeline_run` 레코드로 기록 — 어떤 근거로 어떤 답이 나갔는지 재현 가능.
-
-### 3.2 LLM Gateway (하이브리드 배포의 핵심)
+### 3.2 배치 경로 (세션 종료 후)
 
 ```
-인터페이스: complete(messages, tools?, tenant_ctx) / embed(texts, tenant_ctx)
-
-Provider 구현체:
-  - anthropic  : Claude API (SaaS 기본)
-  - vllm       : OpenAI 호환 엔드포인트 (온프렘 로컬 모델 — 예: 한국어 특화 오픈모델)
-  - azure/aws  : 고객사가 계약한 클라우드 LLM (프라이빗 엔드포인트)
-
-기능:
-  - 테넌트/환경별 Provider 바인딩 (SaaS: 공용 키풀, 온프렘: 로컬 엔드포인트 고정)
-  - 사용량 계측(토큰) → 과금/쿼터
-  - 타임아웃·재시도·폴백 체인 (예: 로컬 모델 장애 시 축소 응답 + 상담원 전환)
-  - 프롬프트 버전 관리: 프롬프트는 코드가 아닌 버전된 리소스로 관리(테넌트 오버라이드 허용)
+session.closed 이벤트
+  → LLM-SUM: 전체 대화(마스킹본) 로드
+  → AICC: 상담 카테고리 분류 + 표준 요약 템플릿 생성
+  → MEETING: 화자별 정리 + 안건/결정사항/Action Item 추출
+  → summary.done 발행 → UI 반영 + 외부 시스템 webhook(옵션)
 ```
 
-**모델 전략**: SaaS는 상용 API로 품질 우선. 온프레미스는 vLLM 서빙 기반 오픈 웨이트 모델을 GPU 사양별 프로파일(예: 소형 7~8B / 표준 30B급 / 고성능 70B급)로 패키징한다. RAG 품질이 좋으면 중형 모델로도 상담 품질 확보가 가능하다는 것을 전제로 하되, PoC에서 모델별 품질 벤치마크를 수행한다.
+### 3.3 어댑터 인터페이스 (사양서 기준)
 
-## 4. 멀티테넌시 설계
+```python
+# blocks/stt-core/adapters/base.py
+class BaseSTTAdapter(ABC):
+    @abstractmethod
+    async def initialize(self, model_path: str, config: Dict[str, Any]) -> None: ...
+    @abstractmethod
+    async def transcribe_stream(
+        self, audio_chunk: bytes, sample_rate: int = 16000
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        # yield {"text","is_final","confidence","speaker_id"}
+        ...
+
+# blocks/tts-core/adapters/base.py
+class BaseTTSAdapter(ABC):
+    @abstractmethod
+    async def synthesize_stream(
+        self, text_stream: AsyncGenerator[str, None], voice_id: str
+    ) -> AsyncGenerator[bytes, None]:
+        # 200ms 단위 PCM 청크 반환
+        ...
+```
+
+- 어댑터 등록은 `block.yaml`의 entry-point 선언으로 플러그인 로딩 — 엔진 추가 시 코어 수정 없음
+- 동일 패턴을 sLLM(LLM-GW: vllm/상용 API), 임베딩, 리랭커에 적용
+
+## 4. WebSocket 통신 프로토콜 (`/v1/audio/stream`)
+
+```jsonc
+// Client → Server (Inbound Audio Chunk)
+{
+  "event": "audio_data",
+  "session_id": "sess_20260731_001",
+  "format": "pcm_16k",
+  "channel": "customer",          // customer | agent | mic_N(회의)
+  "audio_base64": "UklGRiQAAABXQVZF..."
+}
+
+// Server → Client (STT & Agent Assist Event)
+{
+  "event": "agent_assist_update",
+  "session_id": "sess_20260731_001",
+  "stt_result":  { "speaker": "customer", "text": "...", "is_final": true },
+  "compliance":  { "pii_masked": false, "matched_rules": [] },
+  "knowledge_popup": [{
+    "doc_id": "doc_card_policy_012",
+    "title": "신용카드 결제일 변경 및 연기 규정",
+    "score": 0.92,
+    "snippet": "...",
+    "recommended_answer": "..."
+  }]
+}
+```
+
+- 이벤트 스키마는 `blocks/*/contracts/asyncapi.yaml`로 버전 관리(v1 네임스페이스), 하위 호환 유지
+
+## 5. 멀티테넌시 & 하이브리드 배포
 
 | 격리 수준 | 대상 | 방식 |
 |-----------|------|------|
-| **Row-level** (기본) | SaaS Standard | 단일 DB, 모든 테이블에 `tenant_id` + PostgreSQL RLS(Row Level Security) 강제 |
-| **Schema-level** | SaaS Enterprise | 테넌트별 스키마 분리 (백업/복원 독립) |
-| **Instance-level** | 온프레미스 | 고객사 인프라에 전체 스택 독립 배포 (tenant 1개) |
+| Row-level | SaaS Standard | 단일 DB + `tenant_id` + PostgreSQL RLS |
+| Schema-level | SaaS Enterprise | 테넌트별 스키마 (Qdrant는 테넌트별 컬렉션) |
+| Instance-level | 온프레미스 | 고객사 폐쇄망에 전체 스택 독립 배포(tenant 1개, 동일 코드) |
 
-- 애플리케이션 계층: 요청 컨텍스트에서 `tenant_id`를 해석(JWT claim) → DB 세션 변수로 설정 → RLS가 이중 방어
-- 벡터 검색(pgvector)도 동일 테이블 + RLS로 격리. Enterprise는 스키마별 인덱스
-- 오브젝트 스토리지는 테넌트별 prefix + 서버측 암호화 키 분리
-- **온프레미스도 멀티테넌시 코드를 그대로 사용** (tenant가 1개일 뿐) — 코드 분기 없음. 부수 효과로, 온프렘 고객이 계열사 다중 브랜드를 운영하는 경우 즉시 대응 가능
+환경별 차이는 어댑터/설정으로만 흡수:
 
-## 5. 데이터 모델 (핵심 엔티티)
+| 관심사 | 온프렘 (폐쇄망) | SaaS |
+|--------|-----------------|------|
+| STT/TTS | 로컬 엔진(Faster-Whisper/CosyVoice), GPU | 로컬 서빙 풀 또는 상용 API 어댑터 |
+| sLLM | vLLM 7B~14B (INT4/FP8) | 상용 LLM API(Claude 등) 어댑터 |
+| Vector DB | Qdrant(번들) | Qdrant 매니지드/클러스터 |
+| 라이선스 | CORE-LIC `.lic` 오프라인 검증 | 구독 DB + 미터링 |
+| 텔레메트리 | 로컬 수집만 | 중앙 수집 |
+
+## 6. 데이터 모델 (핵심 엔티티)
 
 ```mermaid
 erDiagram
-    TENANT ||--o{ USER : has
+    TENANT ||--o{ SESSION : has
+    SESSION ||--o{ UTTERANCE : contains
+    UTTERANCE ||--o| FILTER_RESULT : "masked/ruled by"
+    SESSION ||--o{ ASSIST_EVENT : "popup history"
+    ASSIST_EVENT }o--o{ CHUNK : cites
+    SESSION ||--o| SUMMARY : produces
     TENANT ||--o{ KNOWLEDGE_BASE : owns
     KNOWLEDGE_BASE ||--o{ DOCUMENT : contains
-    DOCUMENT ||--o{ CHUNK : "split into"
-    TENANT ||--o{ CONVERSATION : has
-    CONVERSATION ||--o{ MESSAGE : contains
-    CONVERSATION ||--o| HANDOFF : "may escalate"
-    MESSAGE ||--o| PIPELINE_RUN : "generated by"
-    PIPELINE_RUN }o--o{ CHUNK : "cited"
-    TENANT ||--o{ PROMPT_VERSION : configures
-    CONVERSATION ||--o| SUMMARY : produces
+    DOCUMENT ||--o{ CHUNK : "parsed into"
+    TENANT ||--o{ COMPLIANCE_RULE : configures
+    TENANT ||--o{ LICENSE_STATE : "block flags"
 ```
 
 | 엔티티 | 비고 |
 |--------|------|
-| `conversation` | 채널 무관 통합 세션(웹/카카오/전화/아바타 공용). `channel` 필드로 구분 |
-| `message` | role(user/assistant/agent/system), 원문 + 마스킹본 분리 저장 |
-| `pipeline_run` | AI 응답 1건의 전체 실행 기록: 모델, 프롬프트 버전, 인용 청크, 지연시간, 토큰 |
-| `chunk` | 문서 조각 + 임베딩(pgvector). 문서 버전 관리로 "당시 어떤 약관으로 답했는지" 추적 |
-| `handoff` | 상담원 전환 이벤트: 사유, 대기시간, AI가 생성한 전달 요약 |
+| `session` | profile(AICC/MEETING), channel 구성, 시작/종료, 오디오 원본 참조(암호화 스토리지) |
+| `utterance` | STT 결과(원문+마스킹본 분리), speaker, confidence, 타임코드 |
+| `assist_event` | 팝업 1건의 전체 기록: 추출 질의, 인용 청크, 점수, 상담원 채택 여부 — **재현 가능 감사 기록** |
+| `summary` | 유형(AICC 표준요약/회의록), 모델·프롬프트 버전, 편집 이력 |
+| `compliance_rule` | 테넌트별 필수 고지/금지 표현 룰셋(정규식+메타), 버전 관리 |
 
-## 6. 비기능 요구사항
+## 7. 확장 경로: TTS → 보이스봇 → 아바타
 
-| 항목 | 목표 |
-|------|------|
-| 응답 지연 | 챗봇 첫 토큰 2초 이내(스트리밍), 음성 왕복 1.5초 이내(Phase 2) |
-| 동시성 | SaaS: 테넌트당 동시 세션 500, 전체 10k 세션 수평 확장 |
-| 가용성 | SaaS 99.9% / 온프렘은 HA 구성 옵션(active-active 2노드+) |
-| LLM 장애 대응 | Provider 폴백 → 실패 시 정중한 안내 + 상담원 전환 (무응답 금지) |
-| 관측성 | OpenTelemetry 표준 — 온프렘 고객사 모니터링 체계에 수용 가능 |
-| 국제화 | 1차 한국어, 구조는 다국어 리소스 분리 |
+Phase 1 사양(STT 중심 Agent Assist)에 이미 TTS-CORE 어댑터가 포함되므로:
 
-## 7. 기간계/외부 시스템 연동
+1. **BOT-VOICE**: `stt.delta → 대화엔진 → TTS-CORE` 루프 연결로 보이스봇 구성 (신규 블록 1개)
+2. **AVA-COUNSEL**: BOT-VOICE 파이프라인 앞에 WebRTC/립싱크/렌더러를 얹음 (상세: [04 문서](04-ai-avatar-counselor.md))
 
-금융권 온프레미스의 실제 도입 관문은 **기간계 연동**이다(고객 조회, 계약 조회, 접수 생성 등).
-
-- **Integration Adapter 패턴**: 대화 중 필요한 업무 액션을 `tool` 인터페이스(함수 호출)로 정의하고,
-  고객사별 어댑터(REST/SOAP/MCI/파일)로 구현. 코어는 어댑터 스펙만 알고 고객사 프로토콜을 모름
-- 어댑터는 별도 배포 단위 → 고객사 SI 파트너 또는 링버스 컨설팅 조직이 구현 (용역 매출 연계 지점)
-- 개인정보가 LLM 프롬프트에 들어가는 경로는 마스킹 정책 엔진을 반드시 경유
+코어 파이프라인(VAD·STT·필터·RAG·sLLM)은 재사용되며, 확장은 항상 **블록 추가**로 이뤄진다.
