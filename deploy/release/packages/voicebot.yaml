@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 1784fa3182db9b54958bdca8a14612e457a28ed472a82474d37302b8e27a07aa
+configuration_hash: 1bfd3c0f57c141adb5e40475f0a69037a7f261083c56b7c1f570ce67710fd02c
 component_count: 23
 components:
 - id: AUD-RTP
@@ -38,7 +38,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: 99cab4a3157f1cec
+  source_hash: 65f3753e2bb235e9
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -188,7 +188,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 8a8b4f7427e45bc6
+  source_hash: f731c9a39aab7fb2
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
@@ -34,6 +35,15 @@ from vai_common.settings import get_settings
 from vai_contracts.audit import AuditAction, AuditOutcome, AuditRecord, ChainStatus
 from vai_contracts.ops import BlockHealth, PlatformStatus
 from vai_core_adm import BLOCK_ID
+from vai_core_adm.diagnose import (
+    DIRECT_CALLS,
+    ROUND_TRIPS,
+    SAMPLE_TEXT,
+    ProbeResult,
+    probes,
+    run_direct_call,
+    run_round_trip,
+)
 from vai_core_adm.registry import DEFAULT_ENDPOINTS, probe_all
 
 log = logging.getLogger(__name__)
@@ -238,6 +248,67 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
                 status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"감사 저장소에 연결할 수 없다: {exc}"
             ) from exc
         return ChainStatus.model_validate(response.json())
+
+    # ── 블록 인터페이스 시험 ────────────────────────────────────────────────
+    #
+    # /readyz 는 프로세스가 살아 있다는 것만 말한다. 감사에서 나온 결함은
+    # 전부 readyz 초록 상태에서 났다 — 살아 있는데 아무것도 못 하는 것이
+    # 이 제품의 주된 실패 모양이다. 그래서 입력을 넣고 출력을 본다.
+
+    @app.get("/v1/admin/diagnose", tags=["diagnose"])
+    async def diagnose_list(_: Principal = Depends(operator)) -> list[dict[str, Any]]:
+        """시험 가능한 항목. 카탈로그가 아니라 이 목록이 기준이다 —
+        시험이 정의되지 않은 블록을 '통과'로 보이게 하지 않는다."""
+        return probes()
+
+    @app.post("/v1/admin/diagnose/{block_id}", response_model=ProbeResult, tags=["diagnose"])
+    async def diagnose_block(
+        block_id: str,
+        request: Request,
+        principal: Principal = Depends(operator),
+        kind: str = Query("", description="round_trip | direct (비면 자동 선택)"),
+        text: str = Query("", description="시험 입력. 비면 기본 문구"),
+    ) -> ProbeResult:
+        """블록 하나를 실제로 돌려 본다.
+
+        **왕복 시험은 진짜 이벤트를 흘린다.** 뒤따르는 블록들도 그 이벤트를
+        소비하므로 운영 중 실행은 그 사실을 알고 해야 한다. 세션 ID의
+        ``diag-`` 접두사가 운영 데이터와 구분하는 유일한 표식이다.
+        """
+        wanted = block_id.upper()
+        trip = ROUND_TRIPS.get(wanted)
+        call = DIRECT_CALLS.get(wanted)
+        if kind == "round_trip":
+            call = None
+        elif kind == "direct":
+            trip = None
+        if trip is None and call is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail=f"{wanted}: 정의된 시험이 없다 — /v1/admin/diagnose 로 목록을 본다",
+            )
+
+        tenant = principal.tenant_id or "diag"
+        if call is not None:
+            endpoints: dict[str, str] = request.app.state.endpoints
+            base = endpoints.get(call.block_id) or endpoints.get(call.endpoint_key)
+            if not base:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"{call.block_id} 주소를 모른다 — VAI_ADM_ENDPOINTS 를 확인한다",
+                )
+            body = {"text": text} if text and "text" in call.body else {}
+            if text and "query" in call.body:
+                body = {"query": text}
+            if text and "prompt" in call.body:
+                body = {"prompt": text}
+            return await run_direct_call(
+                request.app.state.client, call, base, tenant_id=tenant, body=body
+            )
+
+        assert trip is not None
+        bus_: EventBus = request.app.state.bus
+        return await run_round_trip(bus_, trip, tenant_id=tenant, text=text or SAMPLE_TEXT)
 
     @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:

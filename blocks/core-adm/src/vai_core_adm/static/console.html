@@ -76,6 +76,7 @@
   <nav>
     <button data-tab="status" aria-selected="true">플랫폼 상태</button>
     <button data-tab="audit" aria-selected="false">감사 로그</button>
+    <button data-tab="diagnose" aria-selected="false">블록 시험</button>
   </nav>
 
   <section id="tab-status">
@@ -128,6 +129,31 @@
       </table>
     </div>
   </section>
+
+  <section id="tab-diagnose" hidden>
+    <div class="panel">
+      <h2>블록 인터페이스 시험</h2>
+      <p class="hint">
+        <code>/readyz</code>는 프로세스가 살아 있다는 것만 말한다. 살아 있는데 아무것도 못 하는 상태가
+        이 제품의 주된 실패 모양이다 — 색인이 빈 채로 검색이 응답하고, 룰을 고쳐도 워커가 다시 읽지 않고,
+        잡음 필터가 아무것도 거르지 않았다. 전부 <code>/readyz</code>는 초록이었다.
+        그래서 <b>입력을 넣고 출력을 본다</b>.
+      </p>
+      <p class="hint" style="color:#b58900">
+        ⚠ <b>왕복 시험은 진짜 이벤트를 흘린다.</b> 뒤따르는 블록들도 그 이벤트를 소비한다.
+        세션 ID의 <code>diag-</code> 접두사가 운영 데이터와 구분하는 유일한 표식이다.
+        운영 중 실행은 이 사실을 알고 한다.
+      </p>
+      <div class="row">
+        <div style="flex:1">
+          <label for="dText">시험 입력 (비우면 기본 문구)</label>
+          <input id="dText" placeholder="카드 재발급 신청하려고 하는데 수수료가 얼마인가요" />
+        </div>
+        <div style="align-self:flex-end"><button id="dAll">전부 시험</button></div>
+      </div>
+      <div id="dList" class="hint" style="margin-top:12px">토큰을 넣고 탭을 다시 누른다.</div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -144,14 +170,19 @@ document.querySelectorAll("nav button").forEach((btn) => {
     document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
     $("tab-status").hidden = btn.dataset.tab !== "status";
     $("tab-audit").hidden = btn.dataset.tab !== "audit";
+    $("tab-diagnose").hidden = btn.dataset.tab !== "diagnose";
+    if (btn.dataset.tab === "diagnose" && !PROBES.length) loadProbes();
   });
 });
 
-async function api(path, params) {
+async function api(path, params, method) {
   const url = new URL(path, location.origin);
   Object.entries(params || {}).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
   const token = $("token").value.trim();
-  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(url, {
+    method: method || "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (res.status === 401) throw new Error("인증 실패 — admin 스코프를 가진 토큰이 필요합니다");
   if (!res.ok) throw new Error(`${res.status} ${(await res.json().catch(() => ({}))).detail || ""}`);
   return res.json();
@@ -226,6 +257,65 @@ async function refresh() {
     $("authMsg").className = "msg err";
   }
 }
+
+let PROBES = [];
+
+async function loadProbes() {
+  try {
+    PROBES = await api("/v1/admin/diagnose");
+  } catch (e) {
+    $("dList").innerHTML = `<span class="bad">${e.message}</span>`;
+    return;
+  }
+  renderProbes();
+}
+
+function renderProbes() {
+  $("dList").innerHTML = PROBES.map((p, i) => `
+    <div class="panel" style="margin:8px 0" id="probe-${i}">
+      <div class="row" style="align-items:center">
+        <div style="flex:1">
+          <b>${p.block_id}</b> <span class="hint">${p.label}</span><br>
+          <span class="hint">${p.kind === "round_trip"
+            ? `버스 왕복 — <code>${p.inbound}</code> → <code>${p.outbound}</code>`
+            : `직접 호출 — <code>${p.path}</code>`}</span>
+        </div>
+        <button data-probe="${i}">시험</button>
+      </div>
+      ${p.note ? `<p class="hint" style="margin:6px 0 0">${p.note}</p>` : ""}
+      <div class="result" id="probe-result-${i}"></div>
+    </div>`).join("");
+  document.querySelectorAll("[data-probe]").forEach((b) => {
+    b.onclick = () => runProbe(Number(b.dataset.probe));
+  });
+}
+
+async function runProbe(index) {
+  const probe = PROBES[index];
+  const box = $(`probe-result-${index}`);
+  box.innerHTML = '<span class="hint">시험 중…</span>';
+  try {
+    const url = `/v1/admin/diagnose/${probe.block_id}`;
+    const res = await api(url, { kind: probe.kind, text: $("dText").value.trim() }, "POST");
+    const cls = res.ok ? "ok" : "bad";
+    const icon = res.ok ? "✓" : "✗";
+    box.innerHTML = `
+      <div class="${cls}" style="margin-top:8px">${icon} ${res.detail} · ${res.latency_ms}ms</div>
+      ${res.session_id ? `<div class="hint">세션 <code>${res.session_id}</code></div>` : ""}
+      ${Object.keys(res.payload || {}).length
+        ? `<pre class="hint" style="white-space:pre-wrap;margin:6px 0 0">${
+            JSON.stringify(res.payload, null, 2)}</pre>`
+        : ""}`;
+  } catch (e) {
+    box.innerHTML = `<div class="bad" style="margin-top:8px">✗ ${e.message}</div>`;
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "dAll") {
+    PROBES.forEach((_, i) => runProbe(i));
+  }
+});
 
 async function query() {
   $("auditMsg").textContent = "조회 중…"; $("auditMsg").className = "msg";

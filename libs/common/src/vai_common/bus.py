@@ -20,7 +20,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar, cast
 
@@ -66,7 +66,26 @@ class EventBus(ABC):
         group: str,
         consumer: str,
         block_ms: int = 2000,
-    ) -> AsyncIterator[Delivery[EventT]]: ...
+    ) -> AsyncGenerator[Delivery[EventT], None]:
+        """구현은 모두 비동기 제너레이터다. 반환형에 그것을 그대로 적는 이유는
+        **소비자가 중간에 멈출 수 있어야** 하기 때문이다(``aclose``). 진단처럼
+        한 건만 받고 끝내는 소비자가 스트림을 놓아 주지 못하면 그룹이 남는다."""
+
+    @abstractmethod
+    async def prepare_group(self, topic: Topic, group: str, *, from_now: bool = False) -> None:
+        """소비 시작 전에 컨슈머 그룹을 만들어 둔다.
+
+        **기본 구현을 두지 않는다.** no-op을 기본값으로 주면 이것을 구현하지
+        않은 버스에서 경합이 조용히 살아남고, 증상은 '가끔 응답이 없다'로만
+        나타난다.
+
+        비동기 제너레이터는 첫 ``anext`` 전까지 아무것도 하지 않는다. 그래서
+        "구독을 걸고 발행한다"고 짜도 실제로는 발행이 먼저 일어날 수 있고,
+        그러면 잘 도는 블록일수록 응답을 놓친다.
+
+        ``from_now`` 는 **지금 이후 메시지만** 받겠다는 뜻이다. 진단은 밀린
+        메시지를 훑을 이유가 없고, 훑으면 그 시간이 그대로 응답 지연으로 보인다.
+        """
 
     @abstractmethod
     async def ack(self, topic: Topic, group: str, message_id: str) -> None: ...
@@ -111,6 +130,15 @@ class RedisEventBus(EventBus):
             await self._redis.xgroup_create(stream(topic), group, id="0", mkstream=True)
         self._ensured.add((topic, group))
 
+    async def prepare_group(self, topic: Topic, group: str, *, from_now: bool = False) -> None:
+        if from_now:
+            # id="$" — 이 시점 이후 메시지만. 진단이 밀린 메시지를 훑지 않게 한다.
+            with contextlib.suppress(Exception):
+                await self._redis.xgroup_create(stream(topic), group, id="$", mkstream=True)
+            self._ensured.add((topic, group))
+            return
+        await self._ensure_group(topic, group)
+
     async def consume(
         self,
         topic: Topic,
@@ -119,7 +147,7 @@ class RedisEventBus(EventBus):
         group: str,
         consumer: str,
         block_ms: int = 2000,
-    ) -> AsyncIterator[Delivery[EventT]]:
+    ) -> AsyncGenerator[Delivery[EventT], None]:
         await self._ensure_group(topic, group)
         key = stream(topic)
         while True:
@@ -198,6 +226,10 @@ class InMemoryEventBus(EventBus):
             # 소비자가 원본을 수정해도 다른 그룹에 번지지 않도록 복사본을 넣는다.
             await self._queues[(topic, group)].put(event.model_copy(deep=True))
 
+    async def prepare_group(self, topic: Topic, group: str, *, from_now: bool = False) -> None:
+        # 인메모리 큐는 등록 시점 이후 것만 받는다 — from_now 가 이미 기본 동작이다.
+        self.register_group(topic, group)
+
     async def consume(
         self,
         topic: Topic,
@@ -206,7 +238,7 @@ class InMemoryEventBus(EventBus):
         group: str,
         consumer: str,
         block_ms: int = 2000,
-    ) -> AsyncIterator[Delivery[EventT]]:
+    ) -> AsyncGenerator[Delivery[EventT], None]:
         self.register_group(topic, group)
         queue = self._queues[(topic, group)]
         while True:
