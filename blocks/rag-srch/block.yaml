@@ -1,7 +1,7 @@
 id: RAG-SRCH
 name: 하이브리드 검색 & 리랭킹
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   Qdrant 밀집 검색과 BM25 희소 검색을 RRF로 융합하고(<100ms), 크로스 인코더로
   상위 후보를 재정렬한다(<80ms). 밀집만으로는 조항 번호·상품명 같은 고유 토큰을

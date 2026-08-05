@@ -1,7 +1,7 @@
 id: LLM-GW
 name: sLLM 서빙 게이트웨이
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   vLLM(7B~14B INT4/FP8) 로컬 서빙과 상용 API를 하나의 인터페이스 뒤에 둔다.
   프로파일(slm/default)로 크기가 다른 모델을 나눠 서빙하고, 토큰 사용량을

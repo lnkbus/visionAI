@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: bdaf8827e34d28a272b38c7e9faaf9ff5e763a63189cfd01f77debcdd1ad4ef1
+configuration_hash: d1fa31856c0d6f4aa2444089bd3d3f6c2ce02076a25d130ac78c892520654ae7
 component_count: 15
 components:
 - id: AUD-VAD
@@ -60,9 +60,9 @@ components:
   - CORE-BUS
 - id: LLM-GW
   name: sLLM 서빙 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: c2bb184f0c14cefd
+  source_hash: 271d3cdbbc0e1ccb
   license_key: LLM-GW
   capacity_unit: concurrent_channels
   depends_on:
@@ -121,9 +121,9 @@ components:
   source_hash: 3ee02e1184412da1
 - id: lib:retrieval
   name: vai_retrieval
-  version: 0.1.0
+  version: 0.2.0
   kind: library
-  source_hash: 79fe8986dc97d767
+  source_hash: 5c0d49a09f0a3695
 - id: infra:redis
   name: redis
   version: ''

@@ -4176,7 +4176,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-llm-gw"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/llm-gw" }
 dependencies = [
     { name = "fastapi" },
@@ -4254,7 +4254,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-rag-srch"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "blocks/rag-srch" }
 dependencies = [
     { name = "fastapi" },
@@ -4275,7 +4275,7 @@ requires-dist = [
 
 [[package]]
 name = "vai-retrieval"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "libs/retrieval" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },

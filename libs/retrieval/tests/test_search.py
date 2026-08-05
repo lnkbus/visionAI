@@ -268,3 +268,69 @@ async def test_expansion_can_be_disabled() -> None:
     response = await search(engine, "카드 잃어버렸어요")
 
     assert response.expanded_terms == []
+
+
+# ── 희소 색인 자가 복원 ──────────────────────────────────────────────────────
+
+
+async def _store_only(store: MemoryVectorStore) -> HybridSearchEngine:
+    """색인은 다른 프로세스(RAG-KB)에서 끝났고, 이 프로세스의 BM25는 비어 있다."""
+    vectors = await HashingEmbedder().embed([chunk.text for chunk in chunks()])
+    await store.upsert(chunks(), vectors)
+    return HybridSearchEngine(HashingEmbedder(), store, LexicalOverlapReranker())
+
+
+async def test_empty_sparse_index_is_rebuilt_on_first_query() -> None:
+    """재시작 후 첫 질의에서 스스로 복원해야 한다.
+
+    복원 전 상태는 **오류를 내지 않는다** — 밀집 축만으로 결과가 나오고 희소
+    점수만 전부 0이다. 장애로 보이지 않는 장애가 가장 오래 간다.
+    """
+    store = MemoryVectorStore()
+    await store.initialize({"multiprocess_warning": False})
+    engine = await _store_only(store)
+    assert engine._index(TENANT, KB).size == 0
+
+    response = await search(engine, "연회비 면제 이용실적")
+
+    assert engine._index(TENANT, KB).size == len(DOCS)
+    assert any(hit.sparse_score > 0 for hit in response.hits), "희소 축이 살아나야 한다"
+
+
+async def test_rebuild_is_attempted_once_for_an_empty_collection() -> None:
+    """정말로 문서가 없는 컬렉션에 매 질의마다 복원을 시도하면 검색이 느려진다."""
+    store = MemoryVectorStore()
+    await store.initialize({"multiprocess_warning": False})
+    engine = HybridSearchEngine(HashingEmbedder(), store, LexicalOverlapReranker())
+
+    calls = 0
+    original = engine.rebuild_sparse
+
+    async def counted(tenant_id: str, kb_id: str) -> int:
+        nonlocal calls
+        calls += 1
+        return await original(tenant_id, kb_id)
+
+    engine.rebuild_sparse = counted  # type: ignore[method-assign]
+    await search(engine, "무엇이든")
+    await search(engine, "또 무엇이든")
+
+    assert calls == 1
+
+
+async def test_freshly_indexed_collection_is_not_rescanned(
+    engine: HybridSearchEngine,
+) -> None:
+    """방금 색인한 컬렉션까지 저장소를 훑으면 색인 직후 첫 질의가 느려진다."""
+    calls = 0
+    original = engine.rebuild_sparse
+
+    async def counted(tenant_id: str, kb_id: str) -> int:
+        nonlocal calls
+        calls += 1
+        return await original(tenant_id, kb_id)
+
+    engine.rebuild_sparse = counted  # type: ignore[method-assign]
+    await search(engine, "연회비")
+
+    assert calls == 0
