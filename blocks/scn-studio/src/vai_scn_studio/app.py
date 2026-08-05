@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common.bus import RedisEventBus, build_bus
+from vai_common.config_store import ConfigKind, ConfigStore, InMemoryConfigStore, RedisConfigStore
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
 from vai_contracts.authoring import (
@@ -81,6 +82,7 @@ def create_app(
     feedback: FeedbackStore | None = None,
     search_client: httpx.AsyncClient | None = None,
     filter_client: httpx.AsyncClient | None = None,
+    configs: ConfigStore | None = None,
 ) -> FastAPI:
     common = get_settings()
     cfg = StudioSettings()
@@ -91,6 +93,7 @@ def create_app(
         if store is not None:
             application.state.store = store
             application.state.feedback = feedback or InMemoryFeedbackStore()
+            application.state.configs = configs or InMemoryConfigStore()
             application.state.bus = None
         else:
             bus = build_bus(common.redis_url)
@@ -98,9 +101,11 @@ def create_app(
             if isinstance(bus, RedisEventBus):
                 application.state.store = RedisAuthoringStore(bus.redis)
                 application.state.feedback = RedisFeedbackStore(bus.redis)
+                application.state.configs = RedisConfigStore(bus.redis)
             else:
                 application.state.store = InMemoryAuthoringStore()
                 application.state.feedback = InMemoryFeedbackStore()
+                application.state.configs = InMemoryConfigStore()
 
         application.state.search = search_client or httpx.AsyncClient(
             base_url=cfg.search_url.rstrip("/"), timeout=10.0
@@ -204,6 +209,9 @@ def create_app(
         """
         payload.tenant_id = tenant_id
         saved: Lexicon = await request.app.state.store.save_lexicon(payload)
+        # 배포 채널로 내보낸다. STT-CORE가 여기서 읽어 인식 교정에 쓴다 —
+        # 실시간 블록이 저작 도구를 직접 부르지 않게 하려는 것이다.
+        await request.app.state.configs.publish(ConfigKind.LEXICON, tenant_id, saved)
         return saved
 
     # ── 검색 튜닝 · 평가 ─────────────────────────────────────────────────────

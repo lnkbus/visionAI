@@ -1,0 +1,22 @@
+id: UI-AGENT
+name: 상담원 워크스페이스
+tier: experience
+version: 0.1.0
+description: >
+  상담원이 실제로 보는 화면. 실시간 자막(마스킹본), 컴플라이언스 경고, 지식 팝업,
+  상담 요약이 여기서 만난다. 팝업 채택 피드백 버튼이 품질 개선 루프의 유일한
+  수집 지점이므로, 이 블록이 없으면 채택률 통계는 영원히 비어 있다.
+  세션을 관찰만 하는 읽기 전용 블록이라 화면이 죽어도 상담은 계속된다.
+depends_on:
+  - CORE-BUS
+  - LLM-SUM
+  - SCN-STUDIO
+adapters: []
+contracts:
+  consumes: []
+  produces: []
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: seats
+  dev_effort_mm: 2.5
+  included_in_package: false

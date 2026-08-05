@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI 상담원 워크스페이스</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb;
+          --accent:#2563eb; --warn:#b45309; --danger:#b91c1c; --ok:#15803d; --card:#f9fafb;
+          --cust:#2563eb; --agent:#15803d; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af;
+          --line:#272b33; --accent:#60a5fa; --warn:#fbbf24; --danger:#f87171; --ok:#4ade80;
+          --card:#161a21; --cust:#60a5fa; --agent:#4ade80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width:1160px; margin:0 auto; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; }
+  .bar { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  input { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:7px;
+          background:var(--bg); color:var(--fg); min-width:260px; }
+  button { font:inherit; padding:7px 14px; border-radius:7px; border:1px solid transparent;
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border-color:var(--line); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .status { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  .grid { display:grid; grid-template-columns: 1.25fr 1fr; gap:14px; align-items:start; }
+  @media (max-width:880px) { .grid { grid-template-columns: 1fr; } }
+  section { border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:var(--card); }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+               margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  #captions { min-height:320px; max-height:52vh; overflow-y:auto; }
+  .line { padding:5px 0; border-bottom:1px solid var(--line); }
+  .line:last-child { border-bottom:none; }
+  .line.interim { opacity:.55; font-style:italic; }
+  .who { font-size:11px; font-weight:600; margin-right:8px; }
+  .who.customer { color:var(--cust); }
+  .who.agent { color:var(--agent); }
+  .badge { display:inline-block; font-size:10px; padding:1px 7px; border-radius:99px;
+           border:1px solid currentColor; margin-left:8px; vertical-align:middle; }
+  .badge.pii { color:var(--warn); }
+  .badge.rule { color:var(--danger); }
+  .alerts { min-height:24px; }
+  .alert { border-left:3px solid var(--danger); padding:6px 10px; margin-bottom:6px; font-size:13px; }
+  .hit { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px;
+         padding:10px 12px; margin-bottom:10px; }
+  .hit .t { font-weight:600; }
+  .hit .meta { color:var(--muted); font-size:11px; margin-bottom:4px; }
+  .hit .s { font-size:13px; margin:4px 0 8px; }
+  .hit .fb { display:flex; gap:6px; align-items:center; }
+  .hit .fb button { padding:4px 10px; font-size:12px; }
+  .hit .fb .done { font-size:12px; color:var(--ok); }
+  .empty { color:var(--muted); font-size:13px; }
+  .query { font-size:11px; color:var(--muted); margin-bottom:8px; }
+  dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; }
+  dt { color:var(--muted); font-size:12px; }
+  dd { margin:0; }
+  .kw { display:inline-block; font-size:11px; padding:1px 7px; border-radius:99px;
+        border:1px solid var(--line); margin:2px 4px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>상담원 워크스페이스</h1>
+    <span class="sub">자막은 컴플라이언스 필터를 거친 마스킹본만 표시된다</span>
+  </header>
+
+  <div class="bar">
+    <div>
+      <label for="session">세션 ID</label>
+      <input id="session" placeholder="sess_20260805_ab12cd34" />
+    </div>
+    <button id="connect">관찰 시작</button>
+    <button id="disconnect" class="ghost" disabled>중지</button>
+    <button id="load-summary" class="ghost">요약 불러오기</button>
+    <span class="status"><span class="dot" id="dot"></span><span id="state">대기</span></span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <section>
+        <h2>실시간 자막</h2>
+        <div id="captions"><p class="empty">세션 ID를 넣고 관찰을 시작한다.</p></div>
+      </section>
+      <section style="margin-top:14px">
+        <h2>컴플라이언스 경고</h2>
+        <div class="alerts" id="alerts"><p class="empty">위반 발화가 감지되면 여기 표시된다.</p></div>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>지식 팝업 <span class="sub" id="popup-latency"></span></h2>
+        <div id="popups"><p class="empty">고객 질문이 들어오면 근거가 표시된다.</p></div>
+      </section>
+      <section style="margin-top:14px">
+        <h2>상담 요약</h2>
+        <div id="summary"><p class="empty">상담 종료 후 생성된다.</p></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const els = {
+  session: $("session"), connect: $("connect"), disconnect: $("disconnect"),
+  dot: $("dot"), state: $("state"), captions: $("captions"), alerts: $("alerts"),
+  popups: $("popups"), summary: $("summary"), latency: $("popup-latency"),
+};
+
+let ws = null;
+let interimLine = null;
+const seenRules = new Set();
+// 같은 문서에 두 번 피드백을 보내면 채택률이 왜곡된다.
+const ratedDocs = new Set();
+
+const setState = (text, live = false) => {
+  els.state.textContent = text;
+  els.dot.classList.toggle("on", live);
+};
+
+function clearEmpty(container) {
+  container.querySelector(".empty")?.remove();
+}
+
+function escapeText(node, value) {
+  node.textContent = String(value ?? "");
+}
+
+// ── 자막 ─────────────────────────────────────────────────────────────────────
+function renderCaption(stt, compliance) {
+  clearEmpty(els.captions);
+  // 중간 결과는 한 줄을 덮어쓰고, 확정되면 고정한 뒤 새 줄로 넘어간다.
+  const line = (!stt.is_final && interimLine) ? interimLine : document.createElement("div");
+  line.className = "line" + (stt.is_final ? "" : " interim");
+  line.replaceChildren();
+
+  const who = document.createElement("span");
+  const role = stt.speaker === "agent" ? "agent" : "customer";
+  who.className = `who ${role}`;
+  who.textContent = role === "agent" ? "상담원" : "고객";
+  line.append(who, document.createTextNode(stt.text));
+
+  if (compliance?.pii_masked) {
+    const badge = document.createElement("span");
+    badge.className = "badge pii";
+    badge.textContent = "개인정보 마스킹";
+    line.append(badge);
+  }
+  for (const ruleId of compliance?.matched_rules ?? []) {
+    const badge = document.createElement("span");
+    badge.className = "badge rule";
+    badge.textContent = ruleId;
+    line.append(badge);
+    raiseAlert(ruleId, stt.text);
+  }
+
+  if (!line.isConnected) els.captions.append(line);
+  interimLine = stt.is_final ? null : line;
+  els.captions.scrollTop = els.captions.scrollHeight;
+}
+
+function raiseAlert(ruleId, text) {
+  // 같은 룰이 반복 매칭돼도 경고는 한 번만 띄운다. 경고가 쌓이면 안 읽힌다.
+  if (seenRules.has(ruleId)) return;
+  seenRules.add(ruleId);
+  clearEmpty(els.alerts);
+  const box = document.createElement("div");
+  box.className = "alert";
+  const strong = document.createElement("b");
+  strong.textContent = ruleId;
+  const detail = document.createElement("div");
+  detail.className = "sub";
+  escapeText(detail, text);
+  box.append(strong, detail);
+  els.alerts.prepend(box);
+}
+
+// ── 지식 팝업 ────────────────────────────────────────────────────────────────
+function renderPopups(hits, query) {
+  if (!hits?.length) return;
+  clearEmpty(els.popups);
+  els.popups.replaceChildren();
+
+  if (query) {
+    const line = document.createElement("div");
+    line.className = "query";
+    escapeText(line, `검색 질의: ${query}`);
+    els.popups.append(line);
+  }
+
+  for (const hit of hits) {
+    const box = document.createElement("div");
+    box.className = "hit";
+
+    const title = document.createElement("div");
+    title.className = "t";
+    escapeText(title, hit.title);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    escapeText(meta, `${hit.doc_id} · 관련도 ${hit.score.toFixed(2)}`);
+
+    const snippet = document.createElement("div");
+    snippet.className = "s";
+    escapeText(snippet, hit.recommended_answer || hit.snippet);
+
+    const fb = document.createElement("div");
+    fb.className = "fb";
+    if (ratedDocs.has(hit.doc_id)) {
+      const done = document.createElement("span");
+      done.className = "done";
+      done.textContent = "피드백 완료";
+      fb.append(done);
+    } else {
+      fb.append(
+        feedbackButton("도움됨", true, hit, query, fb),
+        feedbackButton("아님", false, hit, query, fb),
+      );
+    }
+
+    box.append(title, meta, snippet, fb);
+    els.popups.append(box);
+  }
+}
+
+function feedbackButton(label, accepted, hit, query, container) {
+  const button = document.createElement("button");
+  button.className = accepted ? "" : "ghost";
+  button.textContent = label;
+  button.addEventListener("click", async () => {
+    ratedDocs.add(hit.doc_id);
+    container.replaceChildren();
+    const done = document.createElement("span");
+    done.className = "done";
+    done.textContent = accepted ? "도움됨으로 기록" : "개선 대상으로 기록";
+    container.append(done);
+    // 실패해도 상담원에게 오류를 보이지 않는다 — 에러가 뜨면 다음부터 안 누른다.
+    await fetch("/v1/agent/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: els.session.value.trim(), tenant_id: "demo",
+        doc_id: hit.doc_id, query: query ?? "", accepted,
+      }),
+    }).catch(() => {});
+  });
+  return button;
+}
+
+// ── 요약 ─────────────────────────────────────────────────────────────────────
+function renderSummary(summary) {
+  const box = els.summary;
+  box.replaceChildren();
+
+  if (summary.status !== "ready") {
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent = summary.status === "failed"
+      ? `요약 생성 실패: ${summary.error ?? "원인 미상"}`
+      : "요약 생성 중…";
+    box.append(note);
+    return;
+  }
+
+  const dl = document.createElement("dl");
+  const rows = summary.aicc
+    ? [["분류", [summary.aicc.category, summary.aicc.subcategory].filter(Boolean).join(" / ")],
+       ["고객 요청", summary.aicc.customer_request],
+       ["상담원 안내", summary.aicc.agent_response],
+       ["처리 결과", summary.aicc.resolution],
+       ["후속 조치", summary.aicc.follow_up]]
+    : [["제목", summary.meeting?.title],
+       ["안건", (summary.meeting?.agenda ?? []).join(" · ")],
+       ["결정사항", (summary.meeting?.decisions ?? []).join(" · ")],
+       ["실행항목", (summary.meeting?.action_items ?? [])
+         .map((a) => `${a.text}${a.owner ? ` (${a.owner})` : ""}`).join(" · ")]];
+
+  for (const [label, value] of rows) {
+    if (!value) continue;
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    escapeText(dd, value);
+    dl.append(dt, dd);
+  }
+  box.append(dl);
+
+  for (const keyword of summary.aicc?.keywords ?? []) {
+    const tag = document.createElement("span");
+    tag.className = "kw";
+    escapeText(tag, keyword);
+    box.append(tag);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "sub";
+  meta.style.marginTop = "8px";
+  meta.textContent = `모델 ${summary.model || "—"} · 프롬프트 ${summary.prompt_version} · ${summary.latency_ms}ms`;
+  box.append(meta);
+}
+
+// ── 연결 ─────────────────────────────────────────────────────────────────────
+els.connect.addEventListener("click", () => {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) { setState("세션 ID가 필요하다"); return; }
+
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${scheme}://${location.host}/v1/agent/stream?session_id=${encodeURIComponent(sessionId)}`);
+
+  ws.addEventListener("open", () => {
+    setState(`관찰 중 · ${sessionId}`, true);
+    els.connect.disabled = true;
+    els.disconnect.disabled = false;
+  });
+  ws.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.event === "agent_assist_update") {
+      if (message.stt_result) renderCaption(message.stt_result, message.compliance);
+      if (message.knowledge_popup?.length) renderPopups(message.knowledge_popup, message.query);
+    } else if (message.session_id && message.profile) {
+      // LLM-SUM이 요약을 같은 UI 채널로 밀어 준다.
+      renderSummary(message);
+    }
+  });
+  ws.addEventListener("close", () => { setState("연결 종료"); reset(); });
+  ws.addEventListener("error", () => setState("연결 오류"));
+});
+
+function reset() {
+  els.connect.disabled = false;
+  els.disconnect.disabled = true;
+  interimLine = null;
+}
+
+els.disconnect.addEventListener("click", () => { ws?.close(); reset(); setState("대기"); });
+
+$("load-summary").addEventListener("click", async () => {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) return;
+  const response = await fetch(`/v1/agent/summary/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) {
+    els.summary.innerHTML = `<p class="empty">요약이 아직 없다.</p>`;
+    return;
+  }
+  renderSummary(await response.json());
+});
+</script>
+</body>
+</html>

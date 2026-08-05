@@ -269,6 +269,28 @@ services:
     ports:
       - "8090:8090"
 
+  ui-agent:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: ui-agent
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: UI-AGENT
+      VAI_AGENTUI_STUDIO_URL: http://scn-studio:8090
+      VAI_AGENTUI_SUMMARY_URL: http://llm-sum:8089
+    depends_on:
+      redis:
+        condition: service_healthy
+      scn-studio:
+        condition: service_started
+      llm-sum:
+        condition: service_started
+    ports:
+      - "8091:8091"
+
 volumes:
   redis-data:
   qdrant-data:

@@ -1,6 +1,13 @@
 """블록 공통 인프라. 계약(:mod:`vai_contracts`)과 함께 블록 간 공유가 허용된다."""
 
 from vai_common.bus import Delivery, EventBus, InMemoryEventBus, RedisEventBus, build_bus
+from vai_common.config_store import (
+    CachedConfig,
+    ConfigKind,
+    ConfigStore,
+    InMemoryConfigStore,
+    RedisConfigStore,
+)
 from vai_common.license import BlockGrant, LicenseError, LicenseGate
 from vai_common.logging import configure_logging
 from vai_common.service import create_block_app
@@ -10,12 +17,17 @@ from vai_common.worker import BlockWorker
 __all__ = [
     "BlockGrant",
     "BlockWorker",
+    "CachedConfig",
     "CommonSettings",
+    "ConfigKind",
+    "ConfigStore",
     "Delivery",
     "EventBus",
+    "InMemoryConfigStore",
     "InMemoryEventBus",
     "LicenseError",
     "LicenseGate",
+    "RedisConfigStore",
     "RedisEventBus",
     "build_bus",
     "configure_logging",

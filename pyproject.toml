@@ -50,6 +50,7 @@ known-first-party = [
     "vai_scn_studio",
     "vai_stt_core",
     "vai_ta_assist",
+    "vai_ui_agent",
 ]
 
 [tool.pytest.ini_options]

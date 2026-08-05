@@ -16,6 +16,7 @@ from vai_contracts.events import AudioSegment, SttDelta
 from vai_contracts.topics import Topic
 from vai_contracts.ws import AgentAssistUpdate
 from vai_stt_core.adapters.base import BaseSTTAdapter
+from vai_stt_core.lexicon import LexiconCache, LexiconCorrector
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "STT-CORE"
@@ -36,10 +37,12 @@ class SttWorker(BlockWorker[AudioSegment]):
         group: str,
         consumer: str,
         publish_ui: bool = True,
+        lexicons: LexiconCache | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._adapter = adapter
         self._publish_ui = publish_ui
+        self._lexicons = lexicons
         self._seq: dict[str, int] = {}
 
     def _next_seq(self, session_id: str) -> int:
@@ -48,10 +51,16 @@ class SttWorker(BlockWorker[AudioSegment]):
         return seq
 
     async def handle(self, event: AudioSegment) -> None:
+        corrector = await self._corrector_for(event.tenant_id)
+
         async for result in self._adapter.transcribe_stream(event.pcm, event.sample_rate):
             text = result["text"].strip()
             if not text:
                 continue
+            if corrector is not None:
+                # 고유명사 교정은 여기서 한 번만 한다. 이후 필터·검색·요약은
+                # 교정된 텍스트를 쓰므로, 틀린 인식이 파이프라인 전체로 번지지 않는다.
+                text = corrector.correct(text)
 
             delta = SttDelta(
                 session_id=event.session_id,
@@ -71,6 +80,12 @@ class SttWorker(BlockWorker[AudioSegment]):
 
             if self._publish_ui:
                 await self.bus.publish_ui(event.session_id, AgentAssistUpdate.from_stt(delta))
+
+    async def _corrector_for(self, tenant_id: str) -> LexiconCorrector | None:
+        """테넌트의 배포된 사전으로 교정기를 얻는다. 사전이 없으면 None."""
+        if self._lexicons is None:
+            return None
+        return await self._lexicons.corrector(tenant_id)
 
     def release_session(self, session_id: str) -> None:
         self._seq.pop(session_id, None)

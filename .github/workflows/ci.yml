@@ -61,7 +61,7 @@ jobs:
       fail-fast: false
       matrix:
         block: [core-bus, core-gw, aud-vad, stt-core, flt-micro, llm-gw, llm-sum,
-                rag-kb, rag-srch, ta-assist, scn-studio]
+                rag-kb, rag-srch, ta-assist, scn-studio, ui-agent]
     steps:
       - uses: actions/checkout@v4
 

@@ -12,10 +12,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from vai_common.bus import build_bus
+from vai_common.bus import RedisEventBus, build_bus
+from vai_common.config_store import CachedConfig, ConfigKind, InMemoryConfigStore, RedisConfigStore
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_contracts.authoring import Lexicon
 from vai_stt_core.adapters import create_stt
+from vai_stt_core.lexicon import LexiconCache
 from vai_stt_core.worker import BLOCK_ID, SttWorker
 
 log = logging.getLogger(__name__)
@@ -35,6 +38,11 @@ class SttSettings(BaseSettings):
     publish_ui: bool = True
     """FLT-MICRO 투입 후 False로 바꿔 마스킹 전 텍스트의 화면 노출을 막는다."""
 
+    lexicon_enabled: bool = True
+    """커스텀 사전 교정 사용 여부. 사전이 배포되지 않았으면 자동으로 무시된다."""
+
+    lexicon_ttl_s: float = 30.0
+
 
 def create_app() -> FastAPI:
     common = get_settings()
@@ -47,6 +55,17 @@ def create_app() -> FastAPI:
         await adapter.initialize(stt_cfg.model_path, json.loads(stt_cfg.adapter_config))
         log.info("STT 어댑터 로드", extra={"adapter": adapter.name})
 
+        lexicons: LexiconCache | None = None
+        if stt_cfg.lexicon_enabled:
+            configs = (
+                RedisConfigStore(bus.redis)
+                if isinstance(bus, RedisEventBus)
+                else InMemoryConfigStore()
+            )
+            lexicons = LexiconCache(
+                CachedConfig(configs, ConfigKind.LEXICON, Lexicon, ttl_s=stt_cfg.lexicon_ttl_s)
+            )
+
         workers = [
             SttWorker(
                 bus,
@@ -54,6 +73,7 @@ def create_app() -> FastAPI:
                 group=common.consumer_group,
                 consumer=f"{common.consumer_name}-{i}",
                 publish_ui=stt_cfg.publish_ui,
+                lexicons=lexicons,
             )
             for i in range(max(1, stt_cfg.workers))
         ]
