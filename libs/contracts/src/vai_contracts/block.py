@@ -16,6 +16,10 @@ class BlockTier(StrEnum):
     FOUNDATION = "foundation"
     SPEECH = "speech"
     INTELLIGENCE = "intelligence"
+    AUTHORING = "authoring"
+    """저작·학습 도구. 고객사가 스스로 운영하기 위한 계층으로, 상담 실시간
+    경로와 부하 특성이 완전히 달라 별도 티어로 둔다."""
+
     EXPERIENCE = "experience"
 
 

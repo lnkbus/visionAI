@@ -22,6 +22,8 @@ root_packages =
     vai_rag_kb
     vai_rag_srch
     vai_ta_assist
+    vai_llm_sum
+    vai_scn_studio
     blockctl
 
 [importlinter:contract:block-independence]
@@ -37,12 +39,14 @@ modules =
     vai_rag_kb
     vai_rag_srch
     vai_ta_assist
+    vai_llm_sum
+    vai_scn_studio
 
 [importlinter:contract:layers]
 name = 계층 방향: 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
 type = layers
 layers =
-    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | blockctl
+    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | blockctl
     vai_retrieval
     vai_common
     vai_contracts
@@ -90,6 +94,8 @@ source_modules =
     vai_stt_core
     vai_flt_micro
     vai_ta_assist
+    vai_llm_sum
+    vai_scn_studio
 forbidden_modules =
     anthropic
     openai

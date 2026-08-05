@@ -1,0 +1,22 @@
+id: SCN-STUDIO
+name: 시나리오·룰 스튜디오
+tier: authoring
+version: 0.1.0
+description: >
+  고객사 운영자가 직접 쓰는 저작 도구. 컴플라이언스 룰을 초안-테스트-배포-되돌리기
+  흐름으로 관리하고, STT 커스텀 사전을 등록하며, 검색 튜닝과 평가셋 실행으로 품질을
+  스스로 확인한다. 이 블록이 없으면 룰 한 줄 바꾸는 데도 공급사 인력이 투입되어
+  유지보수 원가가 라이선스 수익을 잠식한다.
+depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - RAG-SRCH
+adapters: []
+contracts:
+  consumes: []
+  produces: []
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: seats
+  dev_effort_mm: 4.0
+  included_in_package: false

@@ -43,9 +43,11 @@ known-first-party = [
     "vai_core_gw",
     "vai_flt_micro",
     "vai_llm_gw",
+    "vai_llm_sum",
     "vai_rag_kb",
     "vai_rag_srch",
     "vai_retrieval",
+    "vai_scn_studio",
     "vai_stt_core",
     "vai_ta_assist",
 ]

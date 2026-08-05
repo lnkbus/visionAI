@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common.bus import build_bus
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_contracts.authoring import RuleTestRequest, RuleTestResult
 from vai_flt_micro.filter import MicroComplianceFilter, load_rules
 from vai_flt_micro.worker import BLOCK_ID, FilterWorker
 
@@ -77,9 +78,33 @@ def create_app() -> FastAPI:
                     await task
             await bus.close()
 
-    return create_block_app(
+    app = create_block_app(
         block_id=BLOCK_ID, title="VisionAI FLT-MICRO", settings=common, lifespan=lifespan
     )
+
+    @app.post("/internal/v1/filter/test", response_model=RuleTestResult, tags=["filter"])
+    async def test_filter(payload: RuleTestRequest) -> RuleTestResult:
+        """저작 도구(SCN-STUDIO)가 룰을 시험하는 엔드포인트.
+
+        저작 화면의 테스트 결과와 실제 상담에서의 동작이 다르면 도구가 아니라
+        함정이 된다. 그래서 저작 도구는 자체 필터를 두지 않고 **이 블록의
+        실제 구현**을 호출한다. 블록 경계를 지키면서 동작 일치도 보장하는 방법이다.
+        """
+        rules = (
+            load_rules([r.model_dump(mode="json") for r in payload.rules])
+            if payload.rules is not None
+            else []
+        )
+        outcome = MicroComplianceFilter(rules).process_text(payload.text)
+        return RuleTestResult(
+            clean_text=outcome.clean_text,
+            pii_masked=outcome.pii_masked,
+            pii_types=outcome.pii_types,
+            matched_rules=[rule.rule_id for rule in outcome.matched_rules],
+            elapsed_ms=round(outcome.elapsed_ms, 3),
+        )
+
+    return app
 
 
 app = create_app()

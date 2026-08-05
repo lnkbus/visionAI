@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI 저작 콘솔 — 룰 · 사전 · 검색 튜닝</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb;
+          --accent:#2563eb; --warn:#b45309; --danger:#b91c1c; --ok:#15803d; --card:#f9fafb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af;
+          --line:#272b33; --accent:#60a5fa; --warn:#fbbf24; --danger:#f87171; --ok:#4ade80; --card:#161a21; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  nav { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; flex-wrap:wrap; }
+  nav button { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted);
+               padding:8px 14px; font:inherit; cursor:pointer; }
+  nav button[aria-selected="true"] { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+  section[hidden] { display:none; }
+  .panel { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; background:var(--card); }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+  input, textarea, select { width:100%; font:inherit; padding:7px 9px; border:1px solid var(--line);
+                            border-radius:7px; background:var(--bg); color:var(--fg); }
+  textarea { min-height:70px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; }
+  button.act { background:var(--accent); color:#fff; border:1px solid transparent; border-radius:7px;
+               padding:7px 14px; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  button.danger { background:transparent; color:var(--danger); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:120px; }
+  .row > button { flex:0 0 auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); }
+  .tag.violation { color:var(--danger); border-color:var(--danger); }
+  .tag.warning { color:var(--warn); border-color:var(--warn); }
+  .tag.info { color:var(--muted); }
+  .tag.ok { color:var(--ok); border-color:var(--ok); }
+  .out { border-left:3px solid var(--accent); padding:8px 12px; margin-top:10px; font-size:13px; }
+  .empty { color:var(--muted); font-size:13px; }
+  .msg { font-size:13px; margin-top:8px; min-height:18px; }
+  .msg.err { color:var(--danger); }
+  .msg.ok { color:var(--ok); }
+  .metrics { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:10px; }
+  .metric b { display:block; font-size:20px; font-weight:600; }
+  .metric span { font-size:12px; color:var(--muted); }
+  .scores { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VisionAI 저작 콘솔</h1>
+  <p class="sub">
+    컴플라이언스 룰·STT 사전·검색 품질을 고객사가 직접 관리하는 화면.
+    룰은 <b>초안 → 테스트 → 배포</b> 순으로만 반영되어, 편집 중인 정규식이 상담에 새어 나가지 않는다.
+  </p>
+
+  <div class="row" style="margin-bottom:14px">
+    <div style="max-width:220px">
+      <label for="tenant">테넌트</label>
+      <input id="tenant" value="demo" />
+    </div>
+  </div>
+
+  <nav id="tabs">
+    <button data-tab="rules" aria-selected="true">컴플라이언스 룰</button>
+    <button data-tab="lexicon" aria-selected="false">STT 사전</button>
+    <button data-tab="tuning" aria-selected="false">검색 튜닝</button>
+    <button data-tab="eval" aria-selected="false">평가셋</button>
+    <button data-tab="feedback" aria-selected="false">팝업 채택률</button>
+  </nav>
+
+  <!-- 컴플라이언스 룰 -->
+  <section id="tab-rules">
+    <div class="panel">
+      <h2>룰 초안</h2>
+      <table id="rules-table">
+        <thead><tr><th style="width:22%">룰 ID</th><th style="width:36%">정규식</th>
+          <th style="width:14%">등급</th><th>안내 문구</th><th style="width:44px"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:10px">
+        <button class="act ghost" id="rule-add">행 추가</button>
+        <button class="act ghost" id="rules-load">불러오기</button>
+        <button class="act" id="rules-save">초안 저장</button>
+        <button class="act" id="rules-publish">배포</button>
+      </div>
+      <div class="msg" id="rules-msg"></div>
+    </div>
+
+    <div class="panel">
+      <h2>즉시 테스트 — 실제 필터 블록으로 검증</h2>
+      <label for="test-text">시험 문장</label>
+      <input id="test-text" value="고객님 주민등록번호를 불러주세요. 900101-1234567 맞으신가요?" />
+      <div class="row" style="margin-top:8px">
+        <button class="act" id="test-run">테스트</button>
+      </div>
+      <div id="test-out"></div>
+    </div>
+
+    <div class="panel">
+      <h2>배포 이력</h2>
+      <div id="rules-history"><p class="empty">불러오기를 누르면 표시된다.</p></div>
+    </div>
+  </section>
+
+  <!-- STT 사전 -->
+  <section id="tab-lexicon" hidden>
+    <div class="panel">
+      <h2>커스텀 사전 — 상품명 · 전문용어</h2>
+      <p class="sub" style="margin:0 0 8px">
+        범용 STT는 "무배당 행복플러스보험" 같은 고유명사를 거의 확실히 틀린다.
+        틀린 인식은 검색과 요약까지 함께 망가뜨리므로 여기서 교정한다.
+      </p>
+      <table id="lex-table">
+        <thead><tr><th style="width:32%">정답 표기</th><th>오인식 표기 (쉼표 구분)</th>
+          <th style="width:16%">분류</th><th style="width:44px"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:10px">
+        <button class="act ghost" id="lex-add">행 추가</button>
+        <button class="act ghost" id="lex-load">불러오기</button>
+        <button class="act" id="lex-save">저장</button>
+      </div>
+      <div class="msg" id="lex-msg"></div>
+    </div>
+  </section>
+
+  <!-- 검색 튜닝 -->
+  <section id="tab-tuning" hidden>
+    <div class="panel">
+      <h2>검색 튜닝 콘솔</h2>
+      <p class="sub" style="margin:0 0 8px">
+        "왜 이 문서가 안 나오지"를 직접 진단한다. Dense(의미)·Sparse(키워드)·리랭킹 중
+        어디서 밀렸는지가 개선 방향을 정한다.
+      </p>
+      <div class="row">
+        <div><label for="tune-kb">지식베이스</label><input id="tune-kb" value="default" /></div>
+        <div style="flex:3"><label for="tune-q">질의</label><input id="tune-q" value="결제일 연기 되나요?" /></div>
+        <button class="act" id="tune-run">검색</button>
+      </div>
+      <div class="msg" id="tune-msg"></div>
+      <div id="tune-out"></div>
+    </div>
+  </section>
+
+  <!-- 평가셋 -->
+  <section id="tab-eval" hidden>
+    <div class="panel">
+      <h2>평가셋 실행</h2>
+      <p class="sub" style="margin:0 0 8px">
+        룰·사전·청킹을 바꾼 뒤 좋아졌는지 나빠졌는지를 숫자로 확인하지 못하면
+        모든 튜닝이 추측이 된다.
+      </p>
+      <label for="eval-json">골든셋 (JSON 배열)</label>
+      <textarea id="eval-json">[
+  {"case_id": "c1", "query": "결제일 연기 되나요?", "expected_doc_ids": ["doc_card_policy_012"]},
+  {"case_id": "c2", "query": "연회비 면제 조건", "expected_doc_ids": ["doc_card_fee_001"]}
+]</textarea>
+      <div class="row" style="margin-top:8px">
+        <div style="max-width:180px"><label for="eval-kb">지식베이스</label><input id="eval-kb" value="default" /></div>
+        <button class="act" id="eval-run">실행</button>
+      </div>
+      <div class="msg" id="eval-msg"></div>
+      <div id="eval-out"></div>
+    </div>
+  </section>
+
+  <!-- 피드백 -->
+  <section id="tab-feedback" hidden>
+    <div class="panel">
+      <h2>팝업 채택률</h2>
+      <p class="sub" style="margin:0 0 8px">
+        상담원이 팝업을 실제로 썼는지가 품질 개선의 유일한 객관 신호다.
+        채택되지 않은 질의가 곧 다음 개선 대상이다.
+      </p>
+      <div class="row"><button class="act" id="fb-load">새로고침</button></div>
+      <div class="msg" id="fb-msg"></div>
+      <div id="fb-out"></div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const tenant = () => $("tenant").value.trim() || "demo";
+
+function say(el, text, kind = "") {
+  el.className = `msg ${kind}`;
+  el.textContent = text;
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "content-type": "application/json" },
+    ...options,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail ?? `HTTP ${response.status}`);
+  return body;
+}
+
+// ── 탭 ───────────────────────────────────────────────────────────────────────
+$("tabs").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-tab]");
+  if (!button) return;
+  for (const tab of $("tabs").querySelectorAll("button")) {
+    const active = tab === button;
+    tab.setAttribute("aria-selected", String(active));
+    $(`tab-${tab.dataset.tab}`).hidden = !active;
+  }
+});
+
+// ── 컴플라이언스 룰 ──────────────────────────────────────────────────────────
+const rulesBody = $("rules-table").querySelector("tbody");
+
+function ruleRow(rule = {}) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="r-id" placeholder="FORBIDDEN_GUARANTEE" /></td>
+    <td><input class="r-pattern mono" placeholder="원금.?보장" /></td>
+    <td><select class="r-sev">
+      <option value="info">info</option><option value="warning">warning</option>
+      <option value="violation">violation</option></select></td>
+    <td><input class="r-msg" placeholder="확정 수익 표현은 금지" /></td>
+    <td><button class="act danger r-del" title="삭제">×</button></td>`;
+  tr.querySelector(".r-id").value = rule.rule_id ?? "";
+  tr.querySelector(".r-pattern").value = rule.pattern ?? "";
+  tr.querySelector(".r-sev").value = rule.severity ?? "info";
+  tr.querySelector(".r-msg").value = rule.message ?? "";
+  tr.querySelector(".r-del").addEventListener("click", () => tr.remove());
+  return tr;
+}
+
+function collectRules() {
+  return [...rulesBody.querySelectorAll("tr")]
+    .map((tr) => ({
+      rule_id: tr.querySelector(".r-id").value.trim(),
+      pattern: tr.querySelector(".r-pattern").value,
+      severity: tr.querySelector(".r-sev").value,
+      message: tr.querySelector(".r-msg").value.trim(),
+      enabled: true,
+    }))
+    .filter((rule) => rule.rule_id && rule.pattern);
+}
+
+$("rule-add").addEventListener("click", () => rulesBody.append(ruleRow()));
+
+$("rules-load").addEventListener("click", async () => {
+  try {
+    const draft = await api(`/internal/v1/rules/${tenant()}`);
+    rulesBody.replaceChildren(...draft.rules.map(ruleRow));
+    if (!draft.rules.length) rulesBody.append(ruleRow());
+    say($("rules-msg"), `초안 ${draft.rules.length}건 로드 (버전 ${draft.version})`, "ok");
+    await loadHistory();
+  } catch (err) { say($("rules-msg"), err.message, "err"); }
+});
+
+$("rules-save").addEventListener("click", async () => {
+  try {
+    const saved = await api(`/internal/v1/rules/${tenant()}`, {
+      method: "PUT",
+      body: JSON.stringify({ tenant_id: tenant(), rules: collectRules() }),
+    });
+    say($("rules-msg"), `초안 저장 완료 — ${saved.rules.length}건 (아직 상담에 반영되지 않음)`, "ok");
+  } catch (err) { say($("rules-msg"), err.message, "err"); }
+});
+
+$("rules-publish").addEventListener("click", async () => {
+  try {
+    const result = await api(`/internal/v1/rules/${tenant()}/publish`, { method: "POST" });
+    say($("rules-msg"), `버전 ${result.ruleset.version} 배포 완료 — 상담 파이프라인에 반영된다`, "ok");
+    await loadHistory();
+  } catch (err) { say($("rules-msg"), err.message, "err"); }
+});
+
+async function loadHistory() {
+  const items = await api(`/internal/v1/rules/${tenant()}/history`);
+  const box = $("rules-history");
+  if (!items.length) { box.innerHTML = `<p class="empty">배포 이력이 없다.</p>`; return; }
+  box.innerHTML = "";
+  const table = document.createElement("table");
+  table.innerHTML = `<thead><tr><th>버전</th><th>룰 수</th><th>배포 시각</th></tr></thead><tbody></tbody>`;
+  for (const item of items) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>v${item.version}</td><td>${item.rules.length}</td>
+                    <td class="mono">${new Date(item.updated_at).toLocaleString("ko-KR")}</td>`;
+    table.querySelector("tbody").append(tr);
+  }
+  box.append(table);
+}
+
+$("test-run").addEventListener("click", async () => {
+  const out = $("test-out");
+  try {
+    const result = await api("/internal/v1/rules/test", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant(), text: $("test-text").value, rules: collectRules() }),
+    });
+    const tags = [
+      result.pii_masked
+        ? `<span class="tag warning">PII 마스킹: ${result.pii_types.join(", ")}</span>`
+        : `<span class="tag ok">PII 없음</span>`,
+      ...result.matched_rules.map((id) => `<span class="tag violation">${id}</span>`),
+    ].join(" ");
+    out.innerHTML = `<div class="out">
+        <div class="mono">${escapeHtml(result.clean_text)}</div>
+        <div style="margin-top:6px">${tags}</div>
+        <div class="scores" style="margin-top:4px">처리 ${result.elapsed_ms.toFixed(3)}ms
+          ${result.elapsed_ms < 10 ? "(예산 10ms 이내)" : "⚠ 예산 초과"}</div>
+      </div>`;
+  } catch (err) { out.innerHTML = `<div class="msg err">${escapeHtml(err.message)}</div>`; }
+});
+
+// ── STT 사전 ─────────────────────────────────────────────────────────────────
+const lexBody = $("lex-table").querySelector("tbody");
+
+function lexRow(entry = {}) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="l-surface" placeholder="무배당 행복플러스보험" /></td>
+    <td><input class="l-variants" placeholder="무배당 행복 플러스 보험, 무배담 행복플러스" /></td>
+    <td><select class="l-cat">
+      <option value="product">상품명</option><option value="company">사명</option>
+      <option value="jargon">전문용어</option><option value="person">인명</option></select></td>
+    <td><button class="act danger l-del">×</button></td>`;
+  tr.querySelector(".l-surface").value = entry.surface ?? "";
+  tr.querySelector(".l-variants").value = (entry.variants ?? []).join(", ");
+  tr.querySelector(".l-cat").value = entry.category ?? "product";
+  tr.querySelector(".l-del").addEventListener("click", () => tr.remove());
+  return tr;
+}
+
+$("lex-add").addEventListener("click", () => lexBody.append(lexRow()));
+
+$("lex-load").addEventListener("click", async () => {
+  try {
+    const lexicon = await api(`/internal/v1/lexicon/${tenant()}`);
+    lexBody.replaceChildren(...lexicon.entries.map(lexRow));
+    if (!lexicon.entries.length) lexBody.append(lexRow());
+    say($("lex-msg"), `${lexicon.entries.length}건 로드 (버전 ${lexicon.version})`, "ok");
+  } catch (err) { say($("lex-msg"), err.message, "err"); }
+});
+
+$("lex-save").addEventListener("click", async () => {
+  const entries = [...lexBody.querySelectorAll("tr")]
+    .map((tr) => ({
+      surface: tr.querySelector(".l-surface").value.trim(),
+      variants: tr.querySelector(".l-variants").value.split(",").map((v) => v.trim()).filter(Boolean),
+      category: tr.querySelector(".l-cat").value,
+      enabled: true,
+    }))
+    .filter((entry) => entry.surface);
+  try {
+    const saved = await api(`/internal/v1/lexicon/${tenant()}`, {
+      method: "PUT",
+      body: JSON.stringify({ tenant_id: tenant(), entries }),
+    });
+    say($("lex-msg"), `저장 완료 — ${saved.entries.length}건 (버전 ${saved.version})`, "ok");
+  } catch (err) { say($("lex-msg"), err.message, "err"); }
+});
+
+// ── 검색 튜닝 ────────────────────────────────────────────────────────────────
+$("tune-run").addEventListener("click", async () => {
+  try {
+    const result = await api("/internal/v1/tuning/search", {
+      method: "POST",
+      body: JSON.stringify({
+        tenant_id: tenant(), kb_id: $("tune-kb").value.trim(),
+        query: $("tune-q").value, top_k: 5, candidate_k: 10,
+      }),
+    });
+    say($("tune-msg"),
+      `총 ${result.latency_ms}ms — Dense ${result.dense_ms}ms · Sparse ${result.sparse_ms}ms · 리랭킹 ${result.rerank_ms}ms`,
+      result.latency_ms > 180 ? "err" : "ok");
+
+    if (!result.hits.length) { $("tune-out").innerHTML = `<p class="empty">검색 결과가 없다.</p>`; return; }
+    const table = document.createElement("table");
+    table.innerHTML = `<thead><tr><th style="width:34%">문서</th><th>본문</th>
+      <th style="width:24%">점수 분해</th></tr></thead><tbody></tbody>`;
+    for (const hit of result.hits) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><b></b><div class="scores"></div></td><td class="mono"></td>
+        <td class="scores"></td>`;
+      tr.querySelector("b").textContent = hit.chunk.title;
+      tr.querySelectorAll(".scores")[0].textContent = hit.chunk.doc_id;
+      tr.querySelector(".mono").textContent = hit.chunk.text.slice(0, 160);
+      tr.querySelectorAll(".scores")[1].textContent =
+        `최종 ${hit.score.toFixed(3)} / dense ${hit.dense_score.toFixed(3)} / sparse ${hit.sparse_score.toFixed(2)}`;
+      table.querySelector("tbody").append(tr);
+    }
+    $("tune-out").replaceChildren(table);
+  } catch (err) { say($("tune-msg"), err.message, "err"); }
+});
+
+// ── 평가셋 ───────────────────────────────────────────────────────────────────
+$("eval-run").addEventListener("click", async () => {
+  try {
+    const cases = JSON.parse($("eval-json").value);
+    const report = await api("/internal/v1/eval/run", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant(), kb_id: $("eval-kb").value.trim(), cases, top_k: 3 }),
+    });
+    say($("eval-msg"), `${report.total}건 실행 완료`, "ok");
+
+    const box = $("eval-out");
+    box.innerHTML = `<div class="metrics">
+      <div class="metric"><b>${(report.recall_at_k * 100).toFixed(1)}%</b><span>Recall@3</span></div>
+      <div class="metric"><b>${report.hits}/${report.total}</b><span>적중</span></div>
+      <div class="metric"><b>${report.mean_latency_ms}ms</b><span>평균 지연</span></div>
+      <div class="metric"><b>${report.p95_latency_ms}ms</b><span>p95 지연</span></div>
+    </div>`;
+    const table = document.createElement("table");
+    table.innerHTML = `<thead><tr><th style="width:8%">결과</th><th>질의</th>
+      <th style="width:10%">순위</th><th style="width:32%">반환 문서</th></tr></thead><tbody></tbody>`;
+    for (const item of report.results) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td></td><td></td><td></td><td class="mono"></td>`;
+      const cells = tr.querySelectorAll("td");
+      cells[0].innerHTML = item.hit
+        ? `<span class="tag ok">적중</span>` : `<span class="tag violation">실패</span>`;
+      cells[1].textContent = item.query;
+      cells[2].textContent = item.rank ?? "—";
+      cells[3].textContent = item.returned_doc_ids.join(", ") || "—";
+      table.querySelector("tbody").append(tr);
+    }
+    box.append(table);
+  } catch (err) { say($("eval-msg"), err.message, "err"); }
+});
+
+// ── 피드백 ───────────────────────────────────────────────────────────────────
+$("fb-load").addEventListener("click", async () => {
+  try {
+    const stats = await api(`/internal/v1/feedback/${tenant()}`);
+    say($("fb-msg"), "", "");
+    $("fb-out").innerHTML = `
+      <div class="metrics">
+        <div class="metric"><b>${(stats.acceptance_rate * 100).toFixed(1)}%</b><span>채택률</span></div>
+        <div class="metric"><b>${stats.accepted}/${stats.total}</b><span>채택 / 전체</span></div>
+      </div>
+      ${stats.worst_queries.length
+        ? `<h2 style="margin-top:12px">개선 대상 질의</h2><ol class="mono">` +
+          stats.worst_queries.map((q) => `<li>${escapeHtml(q)}</li>`).join("") + `</ol>`
+        : `<p class="empty">아직 피드백이 없다.</p>`}`;
+  } catch (err) { say($("fb-msg"), err.message, "err"); }
+});
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value);
+  return div.innerHTML;
+}
+
+rulesBody.append(ruleRow({ rule_id: "FORBIDDEN_GUARANTEE", pattern: "원금.?보장|무조건.?수익",
+                           severity: "violation", message: "확정 수익 표현은 금지" }));
+lexBody.append(lexRow());
+</script>
+</body>
+</html>

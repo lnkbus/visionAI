@@ -43,7 +43,7 @@ blocks/<block-id>/
 | `CORE-GW` | API/WS 게이트웨이 | 인증(JWT/SSO), 테넌트 라우팅, `/v1/audio/stream` WebSocket 프로토콜 | FastAPI, OIDC | 1.5 MM |
 | `CORE-LIC` | 오프라인 DRM 라이선스 | H/W Fingerprint(GPU UUID+CPU Serial+MAC, SHA-256) 검증, RSA-4096 `.lic`, 블록 플래그·동시 채널 수 게이팅 | 자체 구현 | 1.5 MM |
 | `CORE-SEC` | 암호화·감사 | KCMVP 검증모듈 연동(ARIA/AES-256), append-only 감사로그, PII 접근통제 | KCMVP 모듈 | 1.5 MM |
-| `CORE-ADM` | 관리자 콘솔 & MLOps | 테넌트/사용자/블록 상태, GPU 자원 모니터링, 지식 등록 UI, 통계 | Next.js, Prometheus | 3.0 MM |
+| `CORE-ADM` | 운영 콘솔 | 테넌트/사용자/권한, 블록 상태·GPU 자원 모니터링, 세션 이력 조회, 통계 대시보드, 라이선스 현황 | Next.js, Prometheus | 3.0 MM |
 
 ### 2.2 음성 블록 (Speech)
 
@@ -68,7 +68,24 @@ blocks/<block-id>/
 | `LLM-GW` | sLLM 서빙 게이트웨이 | vLLM(7B~14B INT4/FP8) 서빙, 모델 프로파일 관리, (SaaS: 상용 API Provider) | vLLM | 1.5 MM |
 | `LLM-SUM` | 요약 & 분석 | 세션 종료 배치: AICC 카테고리 분류·표준 요약, 회의록·안건·Action Item 추출 | vLLM | 2.0 MM |
 
-### 2.4 UX/채널 블록 (Experience)
+### 2.4 저작·학습 블록 (Authoring & Learning)
+
+**고객사가 스스로 운영할 수 있게 하는 블록들이다.** 이게 없으면 룰 한 줄, 상품명 하나
+바꾸는 데도 링버스 인력이 투입되어 유지보수 원가가 라이선스 수익을 잠식한다.
+온프레미스 B2B에서 이 계층은 선택이 아니라 수익성의 전제다.
+
+| ID | 블록명 | 기능 | 주요 기술 | 개발 규모(참고) |
+|----|--------|------|-----------|----------------|
+| `ADM-KB` | 지식 관리 스튜디오 | 문서 업로드·버전 관리·색인 상태 추적, 청킹 결과 미리보기, **검색 튜닝 콘솔**(질의 입력 → Dense/Sparse/리랭킹 점수 분해 표시) | Next.js | 2.0 MM |
+| `SCN-STUDIO` | 시나리오·룰 스튜디오 | ① 컴플라이언스 룰 저작(정규식 빌더 + **즉시 테스트**) ② 상담 시나리오 흐름 저작(분기·조건·기간계 액션 호출) ③ 시나리오 시뮬레이터(가상 대화로 흐름 검증) ④ 프롬프트 버전 관리 | Next.js, 플로우 에디터 | 4.0 MM |
+| `LRN-STUDIO` | 학습·품질 스튜디오 | ① **STT 커스텀 사전**(상품명·전문용어·사명 등록 → 인식 교정) ② 평가셋(골든셋) 관리·실행·리포트 ③ 상담원 피드백 수집(팝업 채택/거부) → 재학습 데이터 적재 ④ 오인식·오검색 사례 큐 | Next.js, 평가 파이프라인 | 3.5 MM |
+| `MLO-MODEL` | 모델 운영 (애드온) | 모델 버전 등록·전환·롤백, A/B 비교, GPU 배치 프로파일 관리, 반입 모델 무결성 검증 | vLLM/Triton 연동 | 2.0 MM |
+
+> **왜 별도 블록인가**: ① 부분 도입 고객(예: 컴플라이언스 필터만 구매)은 `SCN-STUDIO`만
+> 필요하고 `LRN-STUDIO`는 불필요하다 ② 저작 도구는 상담 실시간 경로와 부하 특성이 완전히
+> 달라 같은 프로세스에 둘 이유가 없다 ③ 애드온 과금으로 업셀 경로가 생긴다.
+
+### 2.5 UX/채널 블록 (Experience)
 
 | ID | 블록명 | 기능 | 주요 기술 | 개발 규모(참고) |
 |----|--------|------|-----------|----------------|
@@ -106,8 +123,8 @@ graph TB
 
 | 패키지 | 구성 블록 | 타겟 |
 |--------|-----------|------|
-| **A. 금융 AICC** | 기반 5 + AUD-RTP, AUD-VAD, STT-CORE, FLT-MICRO, RAG-KB, RAG-SRCH, TA-ASSIST, LLM-GW, LLM-SUM, UI-AGENT | 금융사 콜센터 (실시간 상담원 지원) |
-| **B. 스마트 회의록** | 기반 5 + AUD-WS, AUD-VAD, STT-CORE, SPK-DIA, LLM-GW, LLM-SUM, UI-MEET | 공공기관·기업 회의록 자동화 |
+| **A. 금융 AICC** | 기반 5 + AUD-RTP, AUD-VAD, STT-CORE, FLT-MICRO, RAG-KB, RAG-SRCH, TA-ASSIST, LLM-GW, LLM-SUM, UI-AGENT + **ADM-KB, SCN-STUDIO**(운영 필수) | 금융사 콜센터 (실시간 상담원 지원) |
+| **B. 스마트 회의록** | 기반 5 + AUD-WS, AUD-VAD, STT-CORE, SPK-DIA, LLM-GW, LLM-SUM, UI-MEET + **LRN-STUDIO**(용어 사전) | 공공기관·기업 회의록 자동화 |
 | **A+B 통합** | A ∪ B (STT/VAD/LLM 블록 공유 — 중복 비용 없음) | 금융지주·대형 공공 |
 | **C. AI 가상상담원** | A + TTS-CORE, BOT-VOICE, AVA-COUNSEL | 무인창구·키오스크·화상상담 |
 | **개별 블록 판매** | 예: STT-CORE 단독(타사 시스템에 STT API 공급), FLT-MICRO 단독(기존 콜인프라에 컴플라이언스만) | 부분 도입 고객 |
@@ -134,6 +151,8 @@ SaaS는 동일 카탈로그를 **요금제 모듈 토글**로 재사용: 패키�
 | AVA-COUNSEL | 동시 아바타 세션 수 | 10 세션 |
 | RAG-KB, RAG-SRCH | 문서 수/인덱스 크기 티어 | ~10만 청크 |
 | UI-AGENT | 상담원 시트 수 | 100석 |
+| ADM-KB, SCN-STUDIO, LRN-STUDIO | 편집자(에디터) 시트 수 | 5석 / 20석 |
+| MLO-MODEL | 관리 모델 수 | 5개 |
 | 기반 블록 | 패키지에 포함 (별도 미과금) | — |
 
 ### 4.3 견적서 표준 템플릿 (예: 금융 AICC 100채널)
@@ -174,8 +193,11 @@ SaaS는 동일 카탈로그를 **요금제 모듈 토글**로 재사용: 패키�
 Wave 1 (필수 뼈대):  CORE-BUS → CORE-GW → CORE-LIC(스텁)                    ✅ 완료
 Wave 2 (음성 코어):  AUD-WS → AUD-VAD → STT-CORE                           ✅ 완료 (실시간 자막 데모)
 Wave 3 (지능):       FLT-MICRO → RAG-KB → RAG-SRCH → TA-ASSIST → LLM-GW    ✅ 완료 (1초 지식 팝업)
-Wave 4 (제품화 A):   UI-AGENT + LLM-SUM + AUD-RTP          ← AICC 패키지 완성
+Wave 4 (제품화 A):   LLM-SUM + ADM-KB/SCN-STUDIO + UI-AGENT + AUD-RTP   ← AICC 패키지 완성
+                     (저작 도구를 여기 넣는 이유: PoC 단계부터 고객사가 자기 약관·룰을
+                      직접 넣어 봐야 도입 판단이 가능하다. 데모용 하드코딩으로는 계약이 안 된다)
 Wave 5 (제품화 B):   SPK-DIA + UI-MEET                     ← 회의록 패키지 완성
+Wave 5.5 (품질 운영): LRN-STUDIO + MLO-MODEL               ← 고객사 자립 운영 체계
 Wave 6 (패키징):     CORE-LIC(정식 DRM) + CORE-SEC + CORE-ADM + 에어갭 번들
 Wave 7 (확장):       TTS-CORE → BOT-VOICE → AVA-COUNSEL
 ```

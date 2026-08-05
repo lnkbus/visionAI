@@ -223,6 +223,52 @@ services:
       llm-gw:
         condition: service_started
 
+  llm-sum:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: llm-sum
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: LLM-SUM
+      VAI_CONSUMER_GROUP: sum
+      VAI_CONSUMER_NAME: sum-1
+      VAI_SUM_LLM_URL: http://llm-gw:8085
+    depends_on:
+      redis:
+        condition: service_healthy
+      llm-gw:
+        condition: service_started
+    ports:
+      - "8089:8089"
+
+  scn-studio:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: scn-studio
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: SCN-STUDIO
+      # 룰 테스트를 실제 필터 구현으로 돌린다 — 저작 화면 결과와 상담 동작이
+      # 갈라지면 도구가 아니라 함정이 된다.
+      VAI_STUDIO_FILTER_URL: http://flt-micro:8084
+      VAI_STUDIO_SEARCH_URL: http://rag-srch:8087
+      VAI_STUDIO_KB_URL: http://rag-kb:8086
+    depends_on:
+      redis:
+        condition: service_healthy
+      flt-micro:
+        condition: service_started
+      rag-srch:
+        condition: service_started
+    ports:
+      - "8090:8090"
+
 volumes:
   redis-data:
   qdrant-data:

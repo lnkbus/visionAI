@@ -1,0 +1,23 @@
+id: LLM-SUM
+name: 요약 & 분석
+tier: intelligence
+version: 0.1.0
+description: >
+  세션 종료 후 배치로 상담 표준 요약(카테고리 분류 포함)과 회의록(안건·결정사항·
+  Action Item)을 생성한다. 마스킹본만 입력으로 쓰며, 모델·프롬프트 버전을 산출물에
+  기록해 감사 시 재현 가능하게 한다.
+depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - LLM-GW
+adapters: []
+contracts:
+  consumes:
+    - filter.clean
+    - session.closed
+  produces:
+    - summary.done
+billing:
+  capacity_unit: audio_hours_monthly
+  dev_effort_mm: 2.0
+  included_in_package: false
