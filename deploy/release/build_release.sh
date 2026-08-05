@@ -74,10 +74,12 @@ version=$VERSION
 commit=$(git -C "$REPO_ROOT" rev-parse HEAD)
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 obfuscated=$OBFUSCATE
-public_key_sha256=$(sha256sum "$PUBLIC_KEY" | cut -d' ' -f1)
+# shellcheck source=../airgap/portable.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../airgap" && pwd)/portable.sh"
+public_key_sha256=$(sha256_of "$PUBLIC_KEY")
 EOF
 
 echo
 echo "✓ 릴리스 트리: $OUT"
-echo "  공개키 지문: $(sha256sum "$PUBLIC_KEY" | cut -c1-16)…"
+echo "  공개키 지문: $(sha256_of "$PUBLIC_KEY" | cut -c1-16)…"
 echo "  다음: deploy/airgap/build_bundle.sh 로 반입 번들을 만든다"
