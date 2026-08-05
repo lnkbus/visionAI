@@ -16,8 +16,18 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from evalctl.dataset import Article, GroundingCase, PiiCase, RetrievalCase, TtsCase
+from evalctl.dataset import (
+    Article,
+    GroundingCase,
+    IntentCase,
+    PiiCase,
+    RetrievalCase,
+    TtsCase,
+)
 from evalctl.metrics import CaseOutcome, CheckOutcome, rank_of
+from vai_bot_voice.classify import ChainClassifier, ExampleSimilarityClassifier
+from vai_bot_voice.engine import match_intent
+from vai_contracts.dialog import DialogNode, Intent, NodeKind
 from vai_contracts.retrieval import Chunk, SearchRequest
 from vai_flt_micro.filter import MicroComplianceFilter
 from vai_retrieval.chunking import split_text
@@ -217,6 +227,47 @@ def run_grounding(cases: list[GroundingCase]) -> list[CheckOutcome]:
                 known_limitation=case.known_limitation,
                 latency_ms=elapsed,
             )
+        )
+    return outcomes
+
+
+async def run_intent(cases: list[IntentCase], *, use_classifier: bool = True) -> list[CheckOutcome]:
+    """의도 라우팅 채점 — 정규식 + 어휘 분류기까지의 결정적 경로.
+
+    sLLM 계층은 여기서 재지 않는다. 가중치가 없으면 재현되지 않고, 재현되지
+    않는 수치를 회귀 게이트에 넣으면 게이트가 흔들린다. 이 숫자는 **모델 없이
+    도달 가능한 하한**이고, sLLM이 올려야 할 폭이기도 하다.
+
+    ``use_classifier=False``면 정규식만 — 어휘 계층의 기여를 A/B로 볼 수 있다.
+    """
+    classifier = ChainClassifier(ExampleSimilarityClassifier()) if use_classifier else None
+
+    outcomes: list[CheckOutcome] = []
+    for case in cases:
+        node = DialogNode(
+            node_id=case.case_id,
+            kind=NodeKind.ASK,
+            intents=[Intent.model_validate(spec) for spec in case.intents],
+        )
+        started = time.perf_counter()
+        matched = match_intent(node, case.utterance)
+        chosen = matched.name if matched else None
+        if chosen is None and classifier is not None:
+            chosen = await classifier.classify(node, case.utterance)
+        elapsed = (time.perf_counter() - started) * 1000
+
+        passed = chosen == case.expect
+        if passed:
+            detail = ""
+        elif case.expect is None:
+            detail = f"기권했어야 하는데 {chosen!r}로 라우팅했다 (오라우팅)"
+        elif chosen is None:
+            detail = f"{case.expect!r}로 가야 하는데 기권했다 (되묻기)"
+        else:
+            detail = f"기대 {case.expect!r} ≠ 실제 {chosen!r} (오라우팅)"
+
+        outcomes.append(
+            CheckOutcome(case_id=case.case_id, passed=passed, detail=detail, latency_ms=elapsed)
         )
     return outcomes
 

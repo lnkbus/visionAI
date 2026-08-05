@@ -86,6 +86,13 @@ class CheckOutcome:
     known_limitation: bool = False
     latency_ms: float = 0.0
 
+    severity: str = ""
+    """실패의 종류. 모든 실패가 같은 무게는 아니다.
+
+    의도 라우팅에서 ``abstain``(되묻기)은 고객이 다시 말하면 회복되지만
+    ``misroute``(오라우팅)는 엉뚱한 안내를 끝까지 듣고 나서야 드러난다.
+    정확도 한 숫자에 섞으면 그 차이가 사라진다."""
+
 
 @dataclass
 class CheckMetrics:

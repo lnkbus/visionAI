@@ -11,6 +11,9 @@
   띄우고 사람이 판단한다.
 - **사례 수**: 줄어들면 실패. 실패하는 사례를 지워서 초록을 만드는 것이 가장
   흔하고 가장 조용한 품질 하락 경로다.
+- **오라우팅 수**: 늘어나면 실패. 모든 실패가 같은 무게는 아니다 — 되묻기는
+  고객이 다시 말하면 회복되지만, 잘못된 갈래로 보내면 고객은 엉뚱한 안내를
+  끝까지 듣고 나서야 안다. 정확도가 같아도 이 숫자가 오르면 나빠진 것이다.
 - **알려진 한계 수**: 늘어나면 경고. 한계를 새로 고정하는 것은 정당한 선택이지만
   기록 없이 늘어나서는 안 된다.
 """
@@ -37,6 +40,9 @@ LATENCY_NOISE_FLOOR_MS = 5.0
 QUALITY_METRICS = ("recall_at_k", "mrr", "ndcg_at_k", "accuracy")
 LATENCY_METRICS = ("mean_latency_ms", "p95_latency_ms")
 COUNT_FLOOR_METRICS = ("total",)
+COUNT_CEILING_METRICS = ("misroutes",)
+"""늘어나면 실패인 지표. 되묻기는 회복되지만 오라우팅은 고객이 엉뚱한 안내를
+끝까지 듣고 나서야 드러난다 — 정확도가 같아도 이 숫자가 오르면 회귀다."""
 
 SuiteMetrics = dict[str, dict[str, float]]
 
@@ -152,6 +158,23 @@ def _compare_suite(suite: str, current: dict[str, float], base: dict[str, float]
                     message=(
                         f"사례가 {int(base[metric])}건 → {int(current[metric])}건으로 줄었다 "
                         "— 실패하는 사례를 지워 초록을 만든 것이 아닌지 본다"
+                    ),
+                    blocking=True,
+                )
+            )
+
+    for metric in COUNT_CEILING_METRICS:
+        if metric not in current or metric not in base:
+            continue
+        if current[metric] > base[metric]:
+            findings.append(
+                Finding(
+                    suite=suite,
+                    metric=metric,
+                    baseline=base[metric],
+                    current=current[metric],
+                    message=(
+                        f"오라우팅이 {int(base[metric])}건 → {int(current[metric])}건으로 늘었다"
                     ),
                     blocking=True,
                 )

@@ -56,3 +56,12 @@ def test_safety_suites_stay_perfect(current: dict[str, dict[str, float]]) -> Non
     assert current["pii"]["accuracy"] == 1.0
     assert current["tts"]["accuracy"] == 1.0
     assert current["grounding"]["accuracy"] == 1.0
+
+
+def test_no_misroutes(current: dict[str, dict[str, float]]) -> None:
+    """의도 라우팅은 정확도보다 **오라우팅 0건**이 먼저다.
+
+    기권(되묻기)은 고객이 다시 말하면 회복된다. 잘못된 갈래로 보내면 고객은
+    엉뚱한 안내를 끝까지 듣고 나서야 안다 — 같은 '실패 한 건'이 아니다.
+    """
+    assert current["intent"]["misroutes"] == 0.0

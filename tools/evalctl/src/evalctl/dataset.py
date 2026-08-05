@@ -86,6 +86,22 @@ class GroundingCase:
 
 
 @dataclass(frozen=True)
+class IntentCase:
+    """음성봇 의도 라우팅 사례.
+
+    ``expect``가 ``None``이면 **기권해야 한다**는 뜻이다. 잘못 라우팅하는 것보다
+    되묻는 편이 낫다는 판단을 사례로 고정한다 — 되묻기는 고객이 다시 말하면
+    회복되지만, 오라우팅은 엉뚱한 안내를 끝까지 듣고 나서야 드러난다.
+    """
+
+    case_id: str
+    intents: list[dict[str, Any]]
+    utterance: str
+    expect: str | None
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class Article:
     """코퍼스의 인용 단위. 검색 정답이 가리키는 대상이다."""
 
@@ -98,6 +114,7 @@ _RETRIEVAL_KEYS = {"case_id", "query", "expected", "note"}
 _PII_KEYS = {"case_id", "text", "expect_types", "must_not_contain", "known_limitation", "note"}
 _TTS_KEYS = {"case_id", "text", "expect", "note"}
 _GROUNDING_KEYS = {"case_id", "evidence", "answer", "accept", "known_limitation", "note"}
+_INTENT_KEYS = {"case_id", "intents", "utterance", "expect", "note"}
 
 
 def _read_rows(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -208,6 +225,29 @@ def load_grounding(path: Path) -> list[GroundingCase]:
             answer=str(row["answer"]),
             accept=bool(row["accept"]),
             known_limitation=bool(row.get("known_limitation", False)),
+            note=str(row.get("note", "")),
+        )
+        for row in rows
+    ]
+
+
+def load_intent(path: Path) -> list[IntentCase]:
+    _, rows = _read_rows(path)
+    _check_keys(path, rows, _INTENT_KEYS)
+    for row in rows:
+        if "expect" not in row:
+            raise DatasetError(
+                f"{path.name} [{row['case_id']}] expect가 없다 — "
+                "기권이 정답인 사례는 null을 명시한다"
+            )
+        if not row.get("intents"):
+            raise DatasetError(f"{path.name} [{row['case_id']}] intents가 비었다")
+    return [
+        IntentCase(
+            case_id=str(row["case_id"]),
+            intents=list(row["intents"]),
+            utterance=str(row["utterance"]),
+            expect=None if row["expect"] is None else str(row["expect"]),
             note=str(row.get("note", "")),
         )
         for row in rows
