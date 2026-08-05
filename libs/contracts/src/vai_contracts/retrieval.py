@@ -37,6 +37,13 @@ class Document(BaseModel):
     status: DocumentStatus = DocumentStatus.PENDING
     chunk_count: int = 0
     error: str | None = None
+
+    warnings: list[str] = Field(default_factory=list)
+    """온전하지 않게 읽힌 부분(표 안의 글자, 이미지 페이지, 머리말 등).
+
+    색인은 성공했지만 일부가 빠졌다는 사실을 여기 남긴다. 조용히 넘기면
+    "왜 이 조항만 검색이 안 되지"를 아무도 설명하지 못한다."""
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

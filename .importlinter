@@ -90,6 +90,11 @@ forbidden_modules =
     vai_aud_vad.adapters.energy
     vai_stt_core.adapters.faster_whisper
     vai_stt_core.adapters.fake
+    vai_rag_kb.parsers.hwp
+    vai_rag_kb.parsers.xmlzip
+    vai_rag_kb.parsers.simple
+    olefile
+    pypdf
     torch
     faster_whisper
     silero_vad

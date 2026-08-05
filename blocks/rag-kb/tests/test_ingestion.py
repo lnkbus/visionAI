@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 from httpx import ASGITransport
@@ -129,3 +131,80 @@ async def test_article_boundaries_survive_chunking(
     assert response.hits
     assert "연회비" in response.hits[0].chunk.text
     assert "결제일 연기" not in response.hits[0].chunk.text
+
+
+# --- 파일 업로드 ---------------------------------------------------------
+
+
+def _hwpx_bytes(paragraphs: list[str]) -> bytes:
+    import zipfile
+    from io import BytesIO
+
+    ns = 'xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"'
+    body = "".join(f"<hp:p><hp:run><hp:t>{p}</hp:t></hp:run></hp:p>" for p in paragraphs)
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("Contents/section0.xml", f"<hp:sec {ns}>{body}</hp:sec>")
+    return buffer.getvalue()
+
+
+async def test_HWPX_약관을_올리면_검색된다(client: httpx.AsyncClient) -> None:
+    """공공 조달의 핵심 경로: 문서 파일 → 색인 → 검색.
+
+    평문만 받으면 고객사는 "문서를 넣어 보세요"의 첫 단계에서 막힌다.
+    """
+    payload = _hwpx_bytes(["제 1 조 결제일 연기", "단기 결제 연기는 최대 5일까지 신청 가능합니다."])
+    response = await client.post(
+        f"/internal/v1/kb/{KB}/documents/upload",
+        files={"file": ("약관.hwpx", payload, "application/octet-stream")},
+        data={"tenant_id": TENANT, "title": "카드 약관"},
+    )
+    assert response.status_code == 202
+    doc_id = response.json()["doc_id"]
+
+    for _ in range(60):
+        status = (await client.get(f"/internal/v1/documents/{doc_id}")).json()
+        if status["status"] in (DocumentStatus.READY, DocumentStatus.FAILED):
+            break
+        await asyncio.sleep(0.05)
+    assert status["status"] == DocumentStatus.READY
+    assert status["chunk_count"] > 0
+
+
+async def test_읽을_수_없는_문서는_400으로_즉시_알린다(client: httpx.AsyncClient) -> None:
+    """빈 텍스트로 색인을 '성공' 처리하면 고객사는 문서를 넣었는데
+    검색이 안 되는 이유를 영영 모른다."""
+    response = await client.post(
+        f"/internal/v1/kb/{KB}/documents/upload",
+        files={"file": ("깨진문서.hwp", b"\xd0\xcf\x11\xe0not really", "application/octet-stream")},
+        data={"tenant_id": TENANT},
+    )
+    assert response.status_code == 400
+    assert "CFB" in response.json()["detail"] or "HWP" in response.json()["detail"]
+
+
+async def test_빈_파일은_거부한다(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        f"/internal/v1/kb/{KB}/documents/upload",
+        files={"file": ("empty.txt", b"", "text/plain")},
+        data={"tenant_id": TENANT},
+    )
+    assert response.status_code == 400
+
+
+async def test_추출_경고가_문서에_남는다(client: httpx.AsyncClient) -> None:
+    """온전하지 않게 읽힌 부분을 조용히 넘기면 '왜 이 조항만 검색이 안 되지'를
+    아무도 설명하지 못한다."""
+    response = await client.post(
+        f"/internal/v1/kb/{KB}/documents/upload",
+        files={"file": ("약관.txt", "제1조 목적".encode("cp949"), "text/plain")},
+        data={"tenant_id": TENANT},
+    )
+    assert response.status_code == 202
+    assert any("cp949" in w for w in response.json()["warnings"])
+
+
+async def test_지원_형식을_알려_준다(client: httpx.AsyncClient) -> None:
+    """고객사가 반입 전에 확인한다."""
+    body = (await client.get("/internal/v1/parsers")).json()
+    assert "hwp" in body["parsers"] and "pdf" in body["parsers"]

@@ -7,7 +7,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +17,7 @@ from vai_common.service import create_block_app
 from vai_common.settings import get_settings
 from vai_contracts.audit import AuditAction
 from vai_contracts.retrieval import Document, DocumentStatus, IngestRequest
+from vai_rag_kb import parsers
 from vai_rag_kb.indexer import DocumentStore, IngestionPipeline, new_doc_id
 from vai_retrieval.embedding import create_embedder
 from vai_retrieval.hybrid import HybridSearchEngine
@@ -106,6 +107,62 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
         request.app.state.documents.put(document)
         background.add_task(request.app.state.pipeline.run, document, payload.text)
         return document
+
+    @app.post(
+        "/internal/v1/kb/{kb_id}/documents/upload",
+        response_model=Document,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["knowledge"],
+    )
+    async def upload(
+        kb_id: str,
+        background: BackgroundTasks,
+        request: Request,
+        file: UploadFile = File(..., description="HWP·HWPX·PDF·DOCX·평문"),
+        tenant_id: str = Form(...),
+        title: str = Form(""),
+        source: str = Form(""),
+        parser: str = Form("", description="비우면 내용의 매직 바이트로 판별한다"),
+    ) -> Document:
+        """문서 파일을 올려 색인한다.
+
+        약관·매뉴얼은 평문으로 오지 않는다. 공공은 HWP, 금융은 PDF/DOCX가
+        대부분이라 이 경로가 없으면 고객사가 "문서를 넣어 보세요"의 첫 단계에서
+        막힌다.
+
+        **파싱 실패는 400으로 즉시 알린다.** 빈 텍스트로 색인을 '성공' 처리하면
+        고객사는 문서를 넣었는데 검색이 안 되는 이유를 영영 모른다.
+        """
+        content = await file.read()
+        if not content:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="빈 파일이다")
+
+        filename = file.filename or ""
+        try:
+            parsed = parsers.parse(content, filename=filename, parser=parser)
+        except parsers.ParseError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+        document = Document(
+            doc_id=new_doc_id(),
+            tenant_id=tenant_id,
+            kb_id=kb_id,
+            title=title or parsed.title or filename,
+            source=source or filename,
+        )
+        # 온전하지 않게 읽힌 부분은 문서에 남긴다. 조용히 넘기면
+        # "왜 이 조항이 검색이 안 되지"를 아무도 설명하지 못한다.
+        document.warnings = list(parsed.warnings)
+        request.app.state.documents.put(document)
+        background.add_task(request.app.state.pipeline.run, document, parsed.text)
+        return document
+
+    @app.get("/internal/v1/parsers", tags=["knowledge"])
+    async def list_parsers() -> dict[str, list[str]]:
+        """지원 형식. 고객사가 반입 전에 확인한다."""
+        return {"parsers": parsers.available()}
 
     @app.get("/internal/v1/documents/{doc_id}", response_model=Document, tags=["knowledge"])
     async def get_document(doc_id: str, request: Request) -> Document:
