@@ -191,6 +191,27 @@ tar -xzf dist/visionai-0.1.0.tar.gz -C /tmp && cd /tmp/visionai-0.1.0
 > 번들 빌드는 이미지를 `docker save` 로 담으므로 시간이 걸린다. 블록을 좁혀
 > (`--block`) 만드는 편이 시연에는 낫다 — 21개 전부 담으면 수 GB가 된다.
 
+### 7.1 모델은 번들에 없다 — 미리 놓는다
+
+번들은 이미지만 담는다. 모델 가중치는 크고(수 GB) 고객사마다 고르는 것이
+다르므로 **별도 반입**이다. 그래서 설치 직후 자가진단에서 STT-CORE·SPK-DIA 가
+"응답 없음"으로 나오는 것이 정상 경로다 — 모델을 놓고 그 둘만 다시 띄운다.
+
+```bash
+# 번들을 푼 자리에서
+mkdir -p models   # ← fetch_models.sh 로 받은 것을 여기 둔다
+VAI_MODEL_DIR=$(pwd)/models docker compose up -d stt-core spk-dia
+```
+
+모델 없이 화면만 보여 줄 거라면 두 블록을 가벼운 설정으로 내린다:
+
+```bash
+VAI_STT_ADAPTER=fake VAI_DIA_EMBEDDER=spectral docker compose up -d stt-core spk-dia
+```
+
+> `fake` 어댑터는 **인식하지 않는다.** 화면 흐름만 보여 줄 때만 쓰고,
+> 회의록 품질을 보여 줄 자리에서는 쓰지 않는다.
+
 ## 8. 회의 당일 순서 (권장)
 
 ```

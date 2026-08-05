@@ -3,7 +3,16 @@ name = "vai-stt-core"
 version = "0.2.0"
 description = "STT-CORE — STT 모델 추상화 레이어"
 requires-python = ">=3.12"
-dependencies = ["vai-contracts", "vai-common", "numpy>=1.26"]
+dependencies = [
+    "vai-contracts",
+    "vai-common",
+    "numpy>=1.26",
+    # 이 블록은 자기 프로세스로 HTTP 서버를 띄운다(vai_common.service.serve).
+    # 개발 워크스페이스에서는 다른 패키지가 깔아 둔 것을 빌려 쓰지만,
+    # `uv sync --package` 로 만드는 블록 이미지에서는 없어서 죽는다.
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
 
 [project.optional-dependencies]
 whisper = ["faster-whisper>=1.0"]

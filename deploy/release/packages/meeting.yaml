@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: e8f6a8142094298d4c1d705a4fd2956abae1b3aea5d21aee6bc84cd65c0e5daa
+configuration_hash: 5c81e5c87e6873f03c96f9d7f52ff30dc86ec8810bc5665e6118abea38e819ee
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 532925fe0c5abf14
+  source_hash: 84d8098de69327f9
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -92,7 +92,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: 27525148c4ce4ff8
+  source_hash: cec76229df9d0f72
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
