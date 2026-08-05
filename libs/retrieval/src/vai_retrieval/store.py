@@ -51,6 +51,16 @@ class BaseVectorStore(ABC):
     @abstractmethod
     async def get_chunks(self, tenant_id: str, kb_id: str) -> list[Chunk]: ...
 
+    @abstractmethod
+    async def get_by_ids(self, tenant_id: str, kb_id: str, chunk_ids: list[str]) -> list[Chunk]:
+        """청크 ID로 본문을 가져온다.
+
+        하이브리드 융합에 필요하다. 희소(BM25) 검색은 청크 ID만 돌려주는데,
+        그중 밀집 상위권에 없던 것은 본문을 따로 가져와야 결과에 실을 수 있다.
+        이 경로가 없으면 **키워드로만 걸린 문서가 조용히 버려진다** — 그러면
+        하이브리드라고 부를 이유가 없다.
+        """
+
     async def close(self) -> None:
         return None
 
@@ -110,6 +120,11 @@ class MemoryVectorStore(BaseVectorStore):
     async def get_chunks(self, tenant_id: str, kb_id: str) -> list[Chunk]:
         collection = self._data.get(collection_name(tenant_id, kb_id), {})
         return [chunk for chunk, _ in collection.values()]
+
+    async def get_by_ids(self, tenant_id: str, kb_id: str, chunk_ids: list[str]) -> list[Chunk]:
+        collection = self._data.get(collection_name(tenant_id, kb_id), {})
+        found = [collection.get(chunk_id) for chunk_id in chunk_ids]
+        return [entry[0] for entry in found if entry is not None]
 
 
 class QdrantVectorStore(BaseVectorStore):
@@ -183,6 +198,15 @@ class QdrantVectorStore(BaseVectorStore):
             return []
         points, _ = await self._client.scroll(key, limit=10_000, with_payload=True)
         return [Chunk.model_validate(p.payload) for p in points]
+
+    async def get_by_ids(self, tenant_id: str, kb_id: str, chunk_ids: list[str]) -> list[Chunk]:
+        key = collection_name(tenant_id, kb_id)
+        if not chunk_ids or not await self._client.collection_exists(key):
+            return []
+        points = await self._client.retrieve(
+            key, ids=[_point_id(chunk_id) for chunk_id in chunk_ids], with_payload=True
+        )
+        return [Chunk.model_validate(point.payload) for point in points]
 
     async def close(self) -> None:
         if self._client is not None:

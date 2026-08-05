@@ -203,3 +203,68 @@ async def test_sparse_index_can_be_rebuilt_after_restart(
 
     assert count == len(DOCS)
     assert response.hits
+
+
+# ── 희소 전용 히트 ───────────────────────────────────────────────────────────
+
+
+async def test_sparse_only_hit_is_not_dropped() -> None:
+    """키워드로만 걸린 문서가 결과에 실려야 한다.
+
+    밀집 후보 수를 좁게 잡으면 정답이 밀집 상위권에서 밀려난다. 예전 구현은
+    그런 청크를 본문이 없다는 이유로 조용히 버렸고, 그러면 하이브리드 검색이
+    희소 축을 갖고 있을 이유가 사라진다.
+    """
+    embedder = HashingEmbedder()
+    store = MemoryVectorStore()
+    await store.initialize({"multiprocess_warning": False})
+    engine = HybridSearchEngine(embedder, store, LexicalOverlapReranker())
+    await engine.index_chunks(chunks())
+
+    # candidate_k=1이면 밀집은 한 건만 돌려준다 — 나머지는 희소 축에만 남는다.
+    response = await search(engine, "연회비 면제 이용실적", top_k=3, candidate_k=1)
+
+    assert any(hit.chunk.doc_id == "doc2" for hit in response.hits)
+
+
+async def test_ghost_chunk_in_sparse_index_is_logged_not_silent(
+    engine: HybridSearchEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """벡터 저장소에 없는 청크가 희소 색인에만 남은 경우 — 진짜 색인 불일치다."""
+    engine._index(TENANT, KB).add("ghost", "연회비 면제 유령 청크")
+
+    with caplog.at_level("WARNING"):
+        await search(engine, "유령 청크")
+
+    assert any("불일치" in record.message for record in caplog.records)
+
+
+# ── 질의 확장 ────────────────────────────────────────────────────────────────
+
+
+async def test_colloquial_query_reaches_the_formal_article(
+    engine: HybridSearchEngine,
+) -> None:
+    """ "잃어버렸어요"와 "분실"은 글자가 하나도 겹치지 않는다.
+
+    사전이 없으면 어휘 검색으로는 영원히 못 만난다.
+    """
+    response = await search(engine, "카드 잃어버렸어요 어떻게 하죠")
+
+    assert response.expanded_terms
+    assert response.hits[0].chunk.doc_id == "doc1"
+
+
+async def test_expansion_can_be_disabled() -> None:
+    from vai_retrieval.lexicon import QueryExpander
+
+    store = MemoryVectorStore()
+    await store.initialize({"multiprocess_warning": False})
+    engine = HybridSearchEngine(
+        HashingEmbedder(), store, LexicalOverlapReranker(), expander=QueryExpander(enabled=False)
+    )
+    await engine.index_chunks(chunks())
+
+    response = await search(engine, "카드 잃어버렸어요")
+
+    assert response.expanded_terms == []

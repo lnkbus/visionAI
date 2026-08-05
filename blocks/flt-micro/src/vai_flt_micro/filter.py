@@ -33,19 +33,55 @@ class PiiPattern:
         return f"[{self.name.upper()}_MASKED]"
 
 
+# 경계를 ``\b``가 아니라 **숫자 여부 룩어라운드**로 잡는다.
+#
+# 한국어에서 조사는 숫자에 그대로 붙는다: "010-1234-5678로", "900101-1234567이고".
+# 파이썬 정규식의 ``\b``는 유니코드 기준이라 '8'과 '로' 사이에는 경계가 없다
+# (둘 다 단어 문자다). 그래서 ``\b``로 감싼 패턴은 조사가 붙는 순간 매칭에
+# 실패한다 — 그런데 조사가 붙은 형태가 STT 출력의 **다수**다. 골든셋이
+# 잡아낸 실제 유출 경로이며, 여기서 룩어라운드로 바꾼 이유다.
+_NOT_DIGIT_BEFORE = r"(?<![0-9])"
+_NOT_DIGIT_AFTER = r"(?![0-9])"
+
 # 사양서 §3 모듈 2의 패턴을 기반으로, 실제 상담에서 나오는 표기 변형을 흡수했다.
 # 하이픈 없이 말하거나 공백을 섞는 경우가 잦아 구분자를 선택적으로 둔다.
 DEFAULT_PII_PATTERNS: tuple[PiiPattern, ...] = (
-    PiiPattern("rrn", re.compile(r"\b\d{6}[-\s]?[1-4]\d{6}\b"), priority=0),
-    PiiPattern("card", re.compile(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"), priority=1),
+    PiiPattern(
+        "rrn",
+        re.compile(rf"{_NOT_DIGIT_BEFORE}\d{{6}}[-\s]?[1-4]\d{{6}}{_NOT_DIGIT_AFTER}"),
+        priority=0,
+    ),
+    PiiPattern(
+        "card",
+        re.compile(
+            rf"{_NOT_DIGIT_BEFORE}\d{{4}}[-\s]?\d{{4}}[-\s]?\d{{4}}[-\s]?\d{{4}}{_NOT_DIGIT_AFTER}"
+        ),
+        priority=1,
+    ),
     # 전화번호가 계좌 패턴보다 먼저다. 계좌 패턴이 더 느슨해서 010-1234-5678을
     # 먼저 집어삼키면, 마스킹은 되더라도 감사 로그에 '계좌 노출'로 잘못 남는다.
-    PiiPattern("phone", re.compile(r"\b01[016789][-\s]?\d{3,4}[-\s]?\d{4}\b"), priority=2),
+    # 지역번호(02·031·051…)도 포함한다. 유선으로 거는 고객이 남긴 번호도 PII이고,
+    # 빠뜨리면 계좌 패턴이 주워 감사 로그에 잘못된 유형으로 남는다.
+    PiiPattern(
+        "phone",
+        re.compile(
+            rf"{_NOT_DIGIT_BEFORE}(?:01[016789]|02|0[3-6][1-5])"
+            rf"[-\s]?\d{{3,4}}[-\s]?\d{{4}}{_NOT_DIGIT_AFTER}"
+        ),
+        priority=2,
+    ),
     # 마지막 그룹을 4자리 이상으로 묶어 "26-06-15" 같은 날짜 표기를 배제한다.
-    PiiPattern("account", re.compile(r"\b\d{2,4}[-\s]\d{2,6}[-\s]\d{4,7}\b"), priority=3),
+    PiiPattern(
+        "account",
+        re.compile(rf"{_NOT_DIGIT_BEFORE}\d{{2,4}}[-\s]\d{{2,6}}[-\s]\d{{4,7}}{_NOT_DIGIT_AFTER}"),
+        priority=3,
+    ),
     PiiPattern(
         "email",
-        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+        re.compile(
+            r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+            r"(?![A-Za-z0-9.-])"
+        ),
         priority=4,
     ),
 )

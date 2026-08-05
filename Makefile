@@ -1,4 +1,4 @@
-.PHONY: help install lint fmt type test check blocks up down logs demo
+.PHONY: help install lint fmt type test check blocks eval eval-gate up down logs demo
 
 help:  ## 사용 가능한 타깃
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}'
@@ -26,7 +26,14 @@ blocks:  ## 블록 카탈로그 검증 + 개발 규모 집계
 	uv run blockctl list --root .
 	uv run blockctl effort --root .
 
-check: lint type test blocks  ## CI가 도는 전부
+eval:  ## 골든셋 평가 (검색·PII·TTS) — 실패 사례까지
+	uv run evalctl validate --root .
+	uv run evalctl run --root . -v
+
+eval-gate:  ## 기준선 대비 품질 회귀 판정 (회귀 시 exit 1)
+	uv run evalctl compare --root . -v
+
+check: lint type test blocks eval-gate  ## CI가 도는 전부
 
 up:  ## compose 데모 환경 기동
 	docker compose -f deploy/compose/docker-compose.yml up --build -d

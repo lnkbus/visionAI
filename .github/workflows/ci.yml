@@ -53,6 +53,13 @@ jobs:
         # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
         run: uv run pytest -q
 
+      - name: 품질 회귀
+        # pytest도 같은 게이트를 돌지만, 여기서 한 번 더 도는 이유는 로그다.
+        # "왜 떨어졌는가"는 실패한 사례 목록을 봐야 알 수 있고, 그건 이 출력에만 있다.
+        run: |
+          uv run evalctl validate --root .
+          uv run evalctl compare --root . -v
+
   secrets-hygiene:
     name: 비밀 자산 검사
     runs-on: ubuntu-latest

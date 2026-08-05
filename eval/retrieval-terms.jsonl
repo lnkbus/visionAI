@@ -1,0 +1,43 @@
+{"_comment": "약관 검색 골든셋. 실제 상담 발화체로 쓴다 — 검색 질의처럼 다듬은 문장으로 평가하면 현장 성능이 과대평가된다.", "_corpus": "card-terms.md"}
+{"case_id": "reissue-fee", "query": "카드 재발급 받으려면 돈 내야 하나요", "expected": ["제3조"], "note": "수수료 금액이 아니라 조항을 찾는다"}
+{"case_id": "reissue-lost-free", "query": "카드 잃어버려서 다시 만드는데 수수료 있어요?", "expected": ["제3조"], "note": "분실 재발급 면제 — 제9조와 헷갈리기 쉽다"}
+{"case_id": "reissue-days", "query": "재발급 신청하면 며칠 걸려요", "expected": ["제3조"]}
+{"case_id": "annual-fee-waiver", "query": "연회비 안 낼 수 있는 조건이 뭐예요", "expected": ["제4조"]}
+{"case_id": "annual-fee-exclusion", "query": "세금 낸 것도 연회비 실적에 들어가나요", "expected": ["제4조"], "note": "실적 제외 항목"}
+{"case_id": "annual-fee-refund", "query": "카드 해지하면 연회비 돌려받나요", "expected": ["제4조", "제13조"], "note": "정답이 둘 — nDCG가 의미를 갖는 사례"}
+{"case_id": "limit-increase", "query": "한도 올리고 싶은데 어떻게 해요", "expected": ["제5조"]}
+{"case_id": "limit-increase-days", "query": "한도 상향 신청하면 얼마나 기다려야 하죠", "expected": ["제5조"]}
+{"case_id": "limit-decrease", "query": "회사가 마음대로 한도 줄일 수 있어요?", "expected": ["제5조"]}
+{"case_id": "payment-date-change", "query": "결제일 바꾸고 싶어요", "expected": ["제6조"]}
+{"case_id": "payment-date-options", "query": "결제일은 며칠로 정할 수 있나요", "expected": ["제6조"]}
+{"case_id": "payment-same-day", "query": "오늘이 결제일인데 잔액이 부족해요 지금 넣으면 되나요", "expected": ["제6조"], "note": "당일 5시 규정 — 연체(제8조)와 헷갈린다"}
+{"case_id": "defer-payment", "query": "이번 달만 결제 좀 미룰 수 있을까요", "expected": ["제7조"]}
+{"case_id": "defer-limit", "query": "결제 연기는 몇 번까지 되나요", "expected": ["제7조"]}
+{"case_id": "defer-interest", "query": "결제 미루면 이자도 안 붙나요", "expected": ["제7조"]}
+{"case_id": "late-fee", "query": "연체하면 얼마나 더 내야 해요", "expected": ["제8조"]}
+{"case_id": "late-suspension", "query": "연체하면 카드 못 쓰게 되나요", "expected": ["제8조"]}
+{"case_id": "lost-report", "query": "카드 잃어버렸어요 어떻게 하죠", "expected": ["제9조"]}
+{"case_id": "lost-liability", "query": "신고하기 전에 누가 쓴 건 제가 물어야 하나요", "expected": ["제9조"], "note": "60일 소급 보상"}
+{"case_id": "lost-negligence", "query": "비밀번호를 카드에 적어놨는데 보상 되나요", "expected": ["제9조"], "note": "중과실 면책 — 발화에 '중과실'이라는 말이 없다"}
+{"case_id": "overseas-fee", "query": "해외에서 쓰면 수수료가 얼마예요", "expected": ["제10조"]}
+{"case_id": "overseas-dcc", "query": "해외에서 원화로 결제하는 게 나은가요", "expected": ["제10조"]}
+{"case_id": "point-expiry", "query": "포인트 언제까지 쓸 수 있어요", "expected": ["제11조"]}
+{"case_id": "point-usage", "query": "포인트로 카드값 낼 수 있나요", "expected": ["제11조"]}
+{"case_id": "point-on-cancel", "query": "카드 없애면 포인트는 어떻게 되나요", "expected": ["제11조", "제13조"]}
+{"case_id": "installment-min", "query": "할부는 얼마부터 되나요", "expected": ["제12조"]}
+{"case_id": "installment-months", "query": "할부 몇 개월까지 돼요", "expected": ["제12조"]}
+{"case_id": "installment-rate", "query": "할부 이자가 몇 프로예요", "expected": ["제12조"]}
+{"case_id": "cancel-contract", "query": "카드 해지하려면 어떻게 해요", "expected": ["제13조"]}
+{"case_id": "dormant-cancel", "query": "안 쓰면 카드가 자동으로 없어지나요", "expected": ["제13조"]}
+{"case_id": "privacy-withdraw", "query": "개인정보 동의 취소하면 카드 못 쓰나요", "expected": ["제14조"]}
+{"case_id": "record-retention", "query": "거래 내역은 얼마나 보관하나요", "expected": ["제14조"]}
+{"case_id": "family-card", "query": "가족카드 대금은 누가 내는 거예요", "expected": ["제2조"]}
+{"case_id": "limit-definition", "query": "이용한도가 무슨 뜻이에요", "expected": ["제2조", "제5조"]}
+{"case_id": "suspend-resume", "query": "카드 정지되면 다시 쓸 수 있나요", "expected": ["제8조"]}
+{"case_id": "installment-free-where", "query": "무이자 할부는 아무 데서나 되나요", "expected": ["제12조"]}
+{"case_id": "point-what-for", "query": "포인트로 뭐 살 수 있어요", "expected": ["제11조"]}
+{"case_id": "annual-fee-when", "query": "연회비는 언제 청구되나요", "expected": ["제4조"]}
+{"case_id": "overseas-rate", "query": "해외 결제하면 환율은 어떻게 적용되나요", "expected": ["제10조"]}
+{"case_id": "credit-drop", "query": "신용도가 나빠지면 어떻게 되나요", "expected": ["제5조"]}
+{"case_id": "family-apply", "query": "가족카드는 누가 신청하는 건가요", "expected": ["제2조"]}
+{"case_id": "purpose", "query": "이 약관은 뭘 정하는 건가요", "expected": ["제1조"], "note": "코퍼스 전 조항 커버리지를 채운다"}

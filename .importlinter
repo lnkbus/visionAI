@@ -36,6 +36,7 @@ root_packages =
     vai_ui_meet
     blockctl
     licgen
+    evalctl
 
 [importlinter:contract:block-independence]
 name = 블록은 서로를 import 하지 않는다 (공유는 계약/공통 라이브러리로만)
@@ -63,10 +64,14 @@ modules =
     vai_spk_dia
     vai_ui_meet
 
+; evalctl이 블록보다 위 계층인 이유: 평가 하네스는 블록의 로직을 불러 채점하지만,
+; 블록은 평가 하네스를 절대 알아서는 안 된다. 반대 방향이 한 번 열리면 "평가에서만
+; 켜지는 분기"가 프로덕션 코드에 생기고, 그 순간 평가는 아무것도 증명하지 못한다.
 [importlinter:contract:layers]
-name = 계층 방향: 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
+name = 계층 방향: 평가 → 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
 type = layers
 layers =
+    evalctl
     vai_core_bus | vai_core_gw | vai_core_lic | vai_core_sec | vai_core_adm | vai_aud_vad | vai_stt_core | vai_tts_core | vai_bot_voice | vai_ava_counsel | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | vai_ui_agent | vai_aud_rtp | vai_spk_dia | vai_ui_meet | blockctl | licgen
     vai_retrieval
     vai_common
