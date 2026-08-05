@@ -55,6 +55,30 @@ spec:
   storageClassName: {{ . }}
   {{- end }}
 {{- end }}
+{{- $sum := index .Values.blocks "llm-sum" }}
+{{- if and $sum $sum.enabled .Values.summary.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-summary
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+  annotations:
+    # 회의록은 그 자체가 산출물이다. 릴리스를 지웠다고 함께 사라지면
+    # 그건 배포 사고가 아니라 데이터 소실 사고다.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    # 단일 라이터. 여러 파드가 같은 디렉토리에 쓰면 세션 인덱스가 어긋난다.
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.summary.persistence.size }}
+  {{- with .Values.summary.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
 {{- if and .Values.license.content (not .Values.license.existingSecret) }}
 ---
 apiVersion: v1

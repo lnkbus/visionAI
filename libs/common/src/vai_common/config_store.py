@@ -7,7 +7,9 @@
 해결: 저작 블록은 **배포된 설정을 공유 저장소에 쓰고**, 실시간 블록은 **읽기만**
 한다. 둘은 서로를 모르며, 저작 도구가 꺼져 있어도 마지막 배포본으로 계속 돈다.
 
-같은 통로로 Wave 6의 룰셋 자동 배포도 처리한다 — 지금은 사전만 쓴다.
+같은 통로로 두 종류가 흐른다: STT 커스텀 사전과 컴플라이언스 룰셋. 형태가
+달라도 성질이 같기 때문이다 — 저작 도구가 쓰고, 실시간 블록이 읽고, 배포 알림으로
+즉시 반영되며, 알림을 놓쳐도 TTL이 따라잡는다.
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ class ConfigKind(StrEnum):
     """STT 커스텀 사전."""
 
     RULESET = "ruleset"
-    """컴플라이언스 룰셋 (Wave 6에서 활성화)."""
+    """컴플라이언스 룰셋. SCN-STUDIO 배포 → FLT-MICRO가 테넌트별로 적용."""
 
 
 def config_key(kind: ConfigKind, tenant_id: str) -> str:

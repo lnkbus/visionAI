@@ -312,6 +312,12 @@ services:
       VAI_CONSUMER_GROUP: sum
       VAI_CONSUMER_NAME: sum-1
       VAI_SUM_LLM_URL: http://llm-gw:8085
+      # 회의록은 그 자체가 산출물이다. Redis TTL(7일)에 맡기지 않는다.
+      VAI_SUM_STORE: file
+      VAI_SUM_DATA_DIR: /var/lib/visionai/summaries
+    volumes:
+      - license-data:/licenses:ro
+      - summary-data:/var/lib/visionai/summaries
     depends_on:
       redis:
         condition: service_healthy
@@ -491,5 +497,6 @@ services:
 volumes:
   redis-data:
   audit-data:
+  summary-data:
   qdrant-data:
   license-data:

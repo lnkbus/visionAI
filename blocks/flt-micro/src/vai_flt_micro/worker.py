@@ -15,6 +15,7 @@ from vai_contracts.events import FilterResult, SttDelta
 from vai_contracts.topics import Topic
 from vai_contracts.ws import AgentAssistUpdate
 from vai_flt_micro.filter import MicroComplianceFilter
+from vai_flt_micro.rules import RuleSetCache
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "FLT-MICRO"
@@ -35,13 +36,21 @@ class FilterWorker(BlockWorker[SttDelta]):
         group: str,
         consumer: str,
         publish_ui: bool = True,
+        rulesets: RuleSetCache | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._filter = filters
+        """파일 주입본. 배포된 룰셋이 없는 테넌트가 쓴다."""
+
         self._publish_ui = publish_ui
+        self._rulesets = rulesets
+        """저작 콘솔이 배포한 테넌트별 룰셋. None이면 파일 주입본만 쓴다."""
 
     async def handle(self, event: SttDelta) -> None:
-        outcome = self._filter.process_text(event.text)
+        active = self._filter
+        if self._rulesets is not None:
+            active = await self._rulesets.filter_for(event.tenant_id)
+        outcome = active.process_text(event.text)
 
         result = FilterResult(
             session_id=event.session_id,

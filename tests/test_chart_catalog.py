@@ -109,11 +109,24 @@ def test_에어갭에서_이미지를_당겨오지_않는다() -> None:
     assert _values()["image"]["pullPolicy"] == "IfNotPresent"
 
 
-def test_라이선스와_감사_볼륨은_릴리스와_함께_지워지지_않는다() -> None:
+def test_모든_영속_볼륨이_릴리스와_함께_지워지지_않는다() -> None:
     """라이선스가 지워지면 발급 절차를 처음부터 다시 밟아야 하고(폐쇄망에서 며칠),
-    감사 로그가 지워지는 것은 그 자체로 감사 사고다."""
+    감사 로그가 지워지는 것은 그 자체로 감사 사고이며, 회의록이 지워지는 것은
+    데이터 소실 사고다.
+
+    개수를 세지 않고 **PVC마다** 확인한다. 세는 방식은 볼륨이 하나 늘 때마다
+    숫자만 고치게 만들고, 그러면 정작 새 볼륨에 정책이 빠져도 통과한다.
+    """
     storage = (CHART_DIR / "templates" / "storage.yaml").read_text(encoding="utf-8")
-    assert storage.count("helm.sh/resource-policy: keep") == 2
+    claims = [block for block in storage.split("---") if "kind: PersistentVolumeClaim" in block]
+
+    assert claims, "영속 볼륨이 하나도 없다"
+    for claim in claims:
+        name = next(
+            (line.strip() for line in claim.splitlines() if line.strip().startswith("name:")),
+            "?",
+        )
+        assert "helm.sh/resource-policy: keep" in claim, f"{name}: 삭제 보호가 없다"
 
 
 # --- 렌더링 (helm이 있을 때만) --------------------------------------------

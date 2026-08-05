@@ -63,5 +63,5 @@ values에서 replicas를 올려도 여기서 1로 되돌린다. "성능을 올�
 못 쓰게 만드는" 사고를 설정 실수로 낼 수 있게 두지 않는다.
 */}}
 {{- define "visionai.singleWriter" -}}
-{{- if or (eq . "core-sec") (eq . "core-lic") -}}true{{- else -}}false{{- end -}}
+{{- if or (eq . "core-sec") (eq . "core-lic") (eq . "llm-sum") -}}true{{- else -}}false{{- end -}}
 {{- end -}}

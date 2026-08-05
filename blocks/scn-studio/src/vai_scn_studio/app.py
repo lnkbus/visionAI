@@ -75,8 +75,10 @@ class StudioSettings(BaseSettings):
 class PublishResult(BaseModel):
     ruleset: RuleSet
     exported: str
-    """FLT-MICRO가 읽는 형식. 현재는 운영자가 이 내용을 룰 파일로 반영한다
-    (Wave 6에서 API 배포로 자동화)."""
+    """FLT-MICRO가 읽는 형식.
+
+    배포는 설정 채널로 자동 반영된다. 이 문자열은 채널을 쓰지 않는 구성
+    (파일 주입)이나 형상 검토·백업용으로 남긴다."""
 
 
 def create_app(
@@ -187,6 +189,9 @@ def create_app(
                 tenant_id=tenant_id,
                 detail={"version": str(published.version), "rule_count": str(len(published.rules))},
             )
+        # 배포 채널로 흘린다. 이 한 줄이 없으면 "배포"는 운영자가 JSON을 파일에
+        # 붙여 넣고 블록을 재기동하는 일이 된다 — 저작 도구를 만든 이유가 사라진다.
+        await request.app.state.configs.publish(ConfigKind.RULESET, tenant_id, published)
         return PublishResult(ruleset=published, exported=export_rules_for_pipeline(published))
 
     @app.get("/internal/v1/rules/{tenant_id}/history", response_model=list[RuleSet], tags=["rules"])

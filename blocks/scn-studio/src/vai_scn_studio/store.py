@@ -163,8 +163,8 @@ class InMemoryAuthoringStore(AuthoringStore):
 def export_rules_for_pipeline(ruleset: RuleSet) -> str:
     """배포본을 FLT-MICRO가 읽는 형식으로 직렬화한다.
 
-    저작 도구와 실행 블록이 같은 형식을 쓰게 해 두면, 파일 주입 방식(현재)에서
-    API 배포 방식(Wave 6)으로 넘어갈 때 실행 블록을 고치지 않아도 된다.
+    배포는 설정 채널로 자동 반영되므로 이 형식이 주 경로는 아니다. 채널을 쓰지
+    않는 구성(파일 주입)과 형상 검토·백업을 위해 같은 형식을 유지한다.
     """
     return json.dumps(
         {

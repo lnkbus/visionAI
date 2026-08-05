@@ -13,11 +13,19 @@ from pathlib import Path
 from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from vai_common.bus import build_bus
+from vai_common.bus import RedisEventBus, build_bus
+from vai_common.config_store import (
+    CachedConfig,
+    ConfigKind,
+    ConfigStore,
+    InMemoryConfigStore,
+    RedisConfigStore,
+)
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
-from vai_contracts.authoring import RuleTestRequest, RuleTestResult
+from vai_contracts.authoring import RuleSet, RuleTestRequest, RuleTestResult
 from vai_flt_micro.filter import MicroComplianceFilter, load_rules
+from vai_flt_micro.rules import RuleSetCache
 from vai_flt_micro.worker import BLOCK_ID, FilterWorker
 
 log = logging.getLogger(__name__)
@@ -27,8 +35,15 @@ class FilterSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="VAI_FLT_", extra="ignore")
 
     rules_path: str = ""
-    """컴플라이언스 룰 JSON 경로. 테넌트별 룰셋은 CORE-ADM이 관리하고
-    이 블록은 파일로 주입받는다(Wave 4에서 API 기반으로 승격)."""
+    """파일로 주입하는 기본 룰셋(선택).
+
+    저작 콘솔이 배포한 테넌트 룰셋이 있으면 그쪽이 이긴다. 이 파일은 배포본이
+    없는 테넌트의 기본값이자, 저작 콘솔을 쓰지 않는 구성의 유일한 경로다."""
+
+    ruleset_enabled: bool = True
+    """저작 콘솔 배포 채널 구독. 끄면 파일 주입본만 쓴다."""
+
+    ruleset_ttl_s: float = 30.0
 
     publish_ui: bool = True
     workers: int = 1
@@ -39,6 +54,23 @@ def _load_rule_file(path: str) -> list[dict[str, object]]:
         return []
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     return list(raw.get("rules", raw)) if isinstance(raw, dict) else list(raw)
+
+
+async def _watch_ruleset_updates(store: ConfigStore, rulesets: RuleSetCache) -> None:
+    """룰셋 배포 알림 구독.
+
+    알림을 놓쳐도 캐시 TTL이 만료되면 따라잡는다 — 이 태스크가 죽어도 반영이
+    늦어질 뿐 동작이 깨지지는 않는다.
+    """
+    try:
+        async for kind, tenant_id in store.watch():
+            if kind is ConfigKind.RULESET:
+                rulesets.invalidate(tenant_id)
+                log.info("룰셋 갱신 알림 수신", extra={"tenant_id": tenant_id})
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("룰셋 알림 구독 중단 — TTL 갱신으로 계속 동작한다")
 
 
 def create_app() -> FastAPI:
@@ -52,6 +84,21 @@ def create_app() -> FastAPI:
         micro = MicroComplianceFilter(rules)
         log.info("컴플라이언스 룰 로드", extra={"rule_count": micro.rule_count})
 
+        rulesets: RuleSetCache | None = None
+        config_store: ConfigStore | None = None
+        if flt_cfg.ruleset_enabled:
+            config_store = (
+                RedisConfigStore(bus.redis)
+                if isinstance(bus, RedisEventBus)
+                else InMemoryConfigStore()
+            )
+            rulesets = RuleSetCache(
+                CachedConfig(
+                    config_store, ConfigKind.RULESET, RuleSet, ttl_s=flt_cfg.ruleset_ttl_s
+                ),
+                micro,
+            )
+
         workers = [
             FilterWorker(
                 bus,
@@ -59,6 +106,7 @@ def create_app() -> FastAPI:
                 group=common.consumer_group,
                 consumer=f"{common.consumer_name}-{i}",
                 publish_ui=flt_cfg.publish_ui,
+                rulesets=rulesets,
             )
             for i in range(max(1, flt_cfg.workers))
         ]
@@ -66,6 +114,13 @@ def create_app() -> FastAPI:
         tasks = [
             asyncio.create_task(w.run(), name=f"flt-worker-{i}") for i, w in enumerate(workers)
         ]
+        if rulesets is not None and config_store is not None:
+            # 배포 알림을 받으면 캐시 TTL을 기다리지 않고 즉시 새 룰을 쓴다.
+            tasks.append(
+                asyncio.create_task(
+                    _watch_ruleset_updates(config_store, rulesets), name="flt-ruleset-watch"
+                )
+            )
         try:
             yield
         finally:
