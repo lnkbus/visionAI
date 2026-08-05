@@ -239,12 +239,21 @@ function renderMinutes(summary) {
   if (summary.status !== "ready") {
     const note = document.createElement("p");
     note.className = "empty";
-    note.textContent = summary.status === "failed"
-      ? `회의록 생성 실패: ${summary.error ?? "원인 미상"}`
-      : "회의록 생성 중…";
+    // "기다리는 중"과 "만드는 중"을 구분해서 적는다. 둘 다 "생성 중…"으로
+    // 뭉뚱그리면, 실시간 인식에 양보하느라 안 시작한 것인지 모델이 느린 것인지
+    // 알 수 없고, 사용자는 대개 실패했다고 판단한다.
+    if (summary.status === "failed") {
+      note.textContent = `회의록 생성 실패: ${summary.error ?? "원인 미상"}`;
+    } else if (summary.status === "waiting") {
+      note.textContent = "실시간 인식이 끝나기를 기다리는 중 — 회의록은 인식이 한가해지면 시작한다";
+    } else {
+      note.textContent = "회의록 생성 중…";
+    }
     box.append(note);
+    scheduleRefresh(summary.status);
     return;
   }
+  stopRefresh();
 
   const meeting = summary.meeting ?? {};
   if (meeting.title) {
@@ -292,8 +301,43 @@ function renderMinutes(summary) {
   const meta = document.createElement("div");
   meta.className = "sub";
   meta.style.marginTop = "10px";
-  meta.textContent = `모델 ${summary.model || "—"} · 프롬프트 ${summary.prompt_version}`;
+  const bits = [`모델 ${summary.model || "—"}`, `프롬프트 ${summary.prompt_version}`];
+  if (summary.waited_for_stt_ms > 0) {
+    // 얼마나 기다렸는지 남긴다. 이 값이 자주 커지면 장비가 모자란다는 뜻이고,
+    // 증설 근거로 쓸 수 있는 유일한 숫자다.
+    const waited = `인식 대기 ${(summary.waited_for_stt_ms / 1000).toFixed(0)}초`;
+    bits.push(summary.yield_gave_up ? `${waited} (상한 초과, 그대로 진행)` : waited);
+  }
+  meta.textContent = bits.join(" · ");
   box.append(meta);
+}
+
+// 대기/생성 중이면 스스로 다시 확인한다. 요약 완료는 WebSocket 으로도 오지만,
+// 나중에 접속한 화면은 그 알림을 놓친다 — 그때 "생성 중…"에서 멈춘 화면만 남는다.
+let refreshTimer = null;
+function scheduleRefresh(status) {
+  if (refreshTimer !== null) return;
+  if (status !== "waiting" && status !== "running" && status !== "pending") return;
+  refreshTimer = setInterval(() => { void loadSummary(); }, 5000);
+}
+function stopRefresh() {
+  if (refreshTimer !== null) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+async function loadSummary() {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) return;
+  const response = await fetch(`/v1/meet/summary/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) {
+    stopRefresh();
+    els.minutes.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent = "회의록이 아직 없다.";
+    els.minutes.append(note);
+    return;
+  }
+  renderMinutes(await response.json());
 }
 
 // ── 연결 ─────────────────────────────────────────────────────────────────────
@@ -331,16 +375,7 @@ function reset() {
 
 els.disconnect.addEventListener("click", () => { ws?.close(); reset(); setState("대기"); });
 
-$("load").addEventListener("click", async () => {
-  const sessionId = els.session.value.trim();
-  if (!sessionId) return;
-  const response = await fetch(`/v1/meet/summary/${encodeURIComponent(sessionId)}`);
-  if (!response.ok) {
-    els.minutes.innerHTML = `<p class="empty">회의록이 아직 없다.</p>`;
-    return;
-  }
-  renderMinutes(await response.json());
-});
+$("load").addEventListener("click", () => { void loadSummary(); });
 </script>
 </body>
 </html>

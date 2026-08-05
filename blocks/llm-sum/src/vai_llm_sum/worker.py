@@ -15,6 +15,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from vai_common.bus import EventBus
+from vai_common.resource import Yield
 from vai_common.worker import BlockWorker
 from vai_contracts.events import FilterResult, SessionClosed, SpeakerLabel
 from vai_contracts.session import ChannelRole, SessionProfile
@@ -142,11 +143,13 @@ class SummaryWorker(BlockWorker[SessionClosed]):
         *,
         group: str,
         consumer: str,
+        yield_to_stt: Yield | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._buffer = buffer
         self._complete = complete
         self._store = store
+        self._yield_to_stt = yield_to_stt
 
     async def handle(self, event: SessionClosed) -> None:
         transcript = self._buffer.take(event.session_id)
@@ -162,6 +165,22 @@ class SummaryWorker(BlockWorker[SessionClosed]):
             summary.status = SummaryStatus.READY
             await self._store.put(summary)
             return
+
+        # 실시간 경로에 양보한다. 기다리는 동안 상태를 저장해 **화면에 보이게**
+        # 한다 — 아무 표시가 없으면 사용자는 요약이 실패했다고 생각한다.
+        if self._yield_to_stt is not None and self._yield_to_stt.enabled:
+            summary.status = SummaryStatus.WAITING
+            await self._store.put(summary)
+            waited = await self._yield_to_stt.wait_for_turn()
+            summary.waited_for_stt_ms = int(waited * 1000)
+            summary.yield_gave_up = self._yield_to_stt.gave_up
+            if self._yield_to_stt.gave_up:
+                # 늦은 회의록이 없는 회의록보다 낫다. 포기했다는 사실은 남긴다 —
+                # 자주 켜지면 장비가 모자란다는 뜻이고 증설 근거가 된다.
+                log.warning(
+                    "STT 양보 상한 초과 — 그대로 진행한다",
+                    extra={"session_id": event.session_id, "waited_ms": summary.waited_for_stt_ms},
+                )
 
         summary.status = SummaryStatus.RUNNING
         await self._store.put(summary)

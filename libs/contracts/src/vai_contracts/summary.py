@@ -17,6 +17,16 @@ from vai_contracts.session import SessionProfile
 
 class SummaryStatus(StrEnum):
     PENDING = "pending"
+
+    WAITING = "waiting"
+    """실시간 경로(STT)에 양보하며 차례를 기다리는 중.
+
+    한 장비에서 STT와 요약 sLLM이 메모리를 다투면 **먼저 무너지는 것이 실시간
+    자막**이다. 회의 중 자막이 끊기는 것과 회의록이 3분 늦는 것은 비용이 다르다.
+
+    이 상태가 화면에 보여야 한다. 아무 표시가 없으면 사용자는 요약이 실패했다고
+    생각하고, 그때 할 수 있는 일이 없다."""
+
     RUNNING = "running"
     READY = "ready"
     FAILED = "failed"
@@ -77,5 +87,12 @@ class Summary(BaseModel):
     error: str | None = None
     edited: bool = False
     """사람이 수정했는지. 수정률이 곧 요약 품질 지표다(docs/06 §5)."""
+
+    waited_for_stt_ms: int = 0
+    """실시간 경로에 양보하며 기다린 시간. 자주 커지면 장비가 모자란다는 뜻이고,
+    그건 증설 근거가 된다."""
+
+    yield_gave_up: bool = False
+    """상한을 넘겨 양보를 포기했는가. 실패가 아니라 기록이다."""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

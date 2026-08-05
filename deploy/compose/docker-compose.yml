@@ -198,6 +198,8 @@ services:
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
       VAI_STT_PUBLISH_UI: "false"
+      # 인식 중임을 알린다. LLM-SUM이 이 표시를 보고 요약을 미룬다.
+      VAI_STT_BUSY_SIGNAL: ${VAI_STT_BUSY_SIGNAL:-true}
     # volumes:
     #   - /opt/visionai/models:/models:ro   # 폐쇄망 반입 모델 마운트
 
@@ -324,6 +326,10 @@ services:
       # 회의록은 그 자체가 산출물이다. Redis TTL(7일)에 맡기지 않는다.
       VAI_SUM_STORE: file
       VAI_SUM_DATA_DIR: /var/lib/visionai/summaries
+      # 실시간 인식에 양보한다. 한 장비에 STT와 sLLM을 함께 올리면 메모리를
+      # 다투고, 그때 먼저 무너지는 것이 실시간 자막이다. GPU가 넉넉하면 끈다.
+      VAI_SUM_YIELD_TO_STT: ${VAI_SUM_YIELD_TO_STT:-true}
+      VAI_SUM_YIELD_MAX_WAIT_S: ${VAI_SUM_YIELD_MAX_WAIT_S:-180}
     volumes:
       - license-data:/licenses:ro
       - summary-data:/var/lib/visionai/summaries

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from vai_common.bus import EventBus
+from vai_common.resource import Heartbeat
 from vai_common.worker import BlockWorker
 from vai_contracts.events import AudioSegment, SttDelta
 from vai_contracts.topics import Topic
@@ -38,11 +39,13 @@ class SttWorker(BlockWorker[AudioSegment]):
         consumer: str,
         publish_ui: bool = True,
         lexicons: LexiconCache | None = None,
+        heartbeat: Heartbeat | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._adapter = adapter
         self._publish_ui = publish_ui
         self._lexicons = lexicons
+        self._heartbeat = heartbeat
         self._seq: dict[str, int] = {}
 
     def _next_seq(self, session_id: str) -> int:
@@ -51,6 +54,10 @@ class SttWorker(BlockWorker[AudioSegment]):
         return seq
 
     async def handle(self, event: AudioSegment) -> None:
+        # 인식 중임을 알린다. 배치 경로(요약)가 이 표시를 보고 양보한다 —
+        # 한 장비에서 메모리를 다투면 먼저 무너지는 것이 실시간 자막이다.
+        if self._heartbeat is not None:
+            await self._heartbeat.touch()
         corrector = await self._corrector_for(event.tenant_id)
 
         hint = corrector.initial_prompt if corrector is not None else ""
