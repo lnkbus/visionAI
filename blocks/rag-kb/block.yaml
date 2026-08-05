@@ -1,0 +1,21 @@
+id: RAG-KB
+name: 지식베이스 수집기
+tier: intelligence
+version: 0.1.0
+description: >
+  약관·FAQ·매뉴얼을 조항 경계를 존중해 청킹하고 임베딩해 색인한다.
+  문서 버전을 관리해 "당시 어느 판본으로 답했는지" 추적할 수 있게 한다.
+  색인은 배치성 부하라 조회(RAG-SRCH)와 프로세스를 분리한다.
+depends_on:
+  - CORE-BUS
+adapters:
+  - hashing
+  - sentence_transformers
+contracts:
+  consumes: []
+  produces: []
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: index_chunks
+  dev_effort_mm: 2.0
+  included_in_package: false

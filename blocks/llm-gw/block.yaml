@@ -1,0 +1,23 @@
+id: LLM-GW
+name: sLLM 서빙 게이트웨이
+tier: intelligence
+version: 0.1.0
+description: >
+  vLLM(7B~14B INT4/FP8) 로컬 서빙과 상용 API를 하나의 인터페이스 뒤에 둔다.
+  프로파일(slm/default)로 크기가 다른 모델을 나눠 서빙하고, 토큰 사용량을
+  한곳에서 계측한다. 폐쇄망에서 외부 호출이 일어날 수 있는 유일한 지점이므로
+  네트워크 정책의 검증 대상도 여기 하나로 좁혀진다.
+depends_on:
+  - CORE-BUS
+adapters:
+  - echo
+  - openai_compatible
+  - anthropic
+contracts:
+  consumes: []
+  produces: []
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 1.5
+  included_in_package: false

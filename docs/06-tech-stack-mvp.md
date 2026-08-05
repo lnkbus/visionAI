@@ -27,7 +27,7 @@
 
 ## 2. 모노레포 구조 (블록 = 최상위 단위)
 
-`✅` = 구현 완료(Wave 1~2), 나머지는 예정.
+`✅` = 구현 완료(Wave 1~3), 나머지는 예정.
 
 ```
 visionAI/
@@ -36,17 +36,22 @@ visionAI/
 │   ├── core-gw/   ✅              #   src/ adapters/ contracts/ block.yaml tests/
 │   ├── aud-vad/   ✅
 │   ├── stt-core/  ✅
+│   ├── flt-micro/ ✅
+│   ├── rag-kb/    ✅
+│   ├── rag-srch/  ✅
+│   ├── ta-assist/ ✅
+│   ├── llm-gw/    ✅
 │   ├── core-lic/                  # (Wave 6 — 게이트 인터페이스는 libs/common에 선구현)
 │   ├── core-sec/ · core-adm/      # (Wave 6)
-│   ├── aud-rtp/ · aud-ws/         # (Wave 4 / Wave 2 후속)
+│   ├── aud-rtp/ · aud-ws/         # (Wave 4)
 │   ├── stt-trt/ · spk-dia/        # (Wave 4~5)
-│   ├── flt-micro/                 # (Wave 3)
-│   ├── rag-kb/ · rag-srch/ · ta-assist/ · llm-gw/ · llm-sum/   # (Wave 3~4)
+│   ├── llm-sum/                   # (Wave 4)
 │   ├── ui-agent/ · ui-meet/       # (Wave 4~5, Next.js)
 │   └── bot-voice/ · ava-counsel/  # (Wave 7)
 ├── libs/
 │   ├── contracts/ ✅              # 이벤트·프로토콜·매니페스트 스키마 — 블록 간 유일한 공유물
-│   └── common/    ✅              # 설정·로깅·이벤트 버스 클라이언트·라이선스 게이트·워커 골격
+│   ├── common/    ✅              # 설정·로깅·이벤트 버스 클라이언트·라이선스 게이트·워커 골격
+│   └── retrieval/ ✅              # 청킹·임베딩·벡터/BM25 색인·리랭킹 (RAG 블록 공유)
 ├── deploy/
 │   ├── docker/    ✅              # 전 블록 공용 Dockerfile (BLOCK 인자로 대상 지정)
 │   ├── compose/   ✅              # PoC·데모용 단일 서버 구성
@@ -59,20 +64,39 @@ visionAI/
 └── Makefile       ✅              # make check / up / demo
 ```
 
-### 구현 현황 (Wave 1~2 완료)
+### 구현 현황 (Wave 1~3 완료)
 
 | 항목 | 상태 |
 |------|------|
-| 이벤트 계약 v1 (`audio.in` → `audio.segment` → `stt.delta` → …) | ✅ |
+| 이벤트 계약 v1 (`audio.in` → `audio.segment` → `stt.delta` → `filter.clean` → `assist.popup`) | ✅ |
 | WebSocket 프로토콜 `/v1/audio/stream` (사양서 §4 규격) | ✅ |
 | 세션 레지스트리 + Dual-Profile(AICC/MEETING) 컨텍스트 전파 | ✅ |
 | VAD 발화 분할기 (패딩·interim·행오버·최대길이·채널 격리) | ✅ |
 | STT 어댑터 ABC + fake/Faster-Whisper 어댑터, 레지스트리 핫스왑 | ✅ |
-| JWT 인증 + 세션 스코프 WS 토큰, 테넌트 격리 | ✅ |
-| 마이크→자막 데모 페이지 (`/demo`) | ✅ |
-| 블록 경계 CI 강제 (import-linter 3개 계약) | ✅ |
+| PII 마스킹 + 컴플라이언스 룰 체크 (Fast-Path, 10ms 예산 테스트 포함) | ✅ |
+| 조항 경계 존중 청킹 + 임베딩 어댑터(hashing/로컬 모델) | ✅ |
+| 하이브리드 검색 (Qdrant Dense + BM25 Sparse RRF 융합) + 리랭킹 | ✅ |
+| 맥락 기반 질의 추출(SLM + 어휘 폴백) → 지식 팝업, 1초 예산 | ✅ |
+| LLM 프로바이더 추상화 (vLLM/상용 API/echo), 프로파일별 모델, 토큰 계측 | ✅ |
+| JWT 인증 + 세션 스코프 WS 토큰, 테넌트 격리(컬렉션 분리) | ✅ |
+| 마이크→자막→팝업 데모 페이지 (`/demo`) | ✅ |
+| 블록 경계 CI 강제 (import-linter 4개 계약) | ✅ |
 | 라이선스 게이트 인터페이스 (DRM 본체는 Wave 6) | 부분 |
-| FLT-MICRO 이후 블록 | 예정 |
+| 문서 파서(PDF/DOCX/HWP) — 현재는 평문 수집만 | 예정 |
+| LLM-SUM(요약)·AUD-RTP(전화)·UI-AGENT | 예정 |
+
+### 알려진 제약
+
+- **`memory` 벡터 저장소는 단일 프로세스 전용이다.** RAG-KB와 RAG-SRCH를 별도
+  컨테이너로 띄우면 색인한 문서가 검색에 보이지 않는다. 다중 컨테이너 배포에는
+  Qdrant를 쓴다(compose 기본값). 오설정 시 기동 로그에 경고가 남는다.
+- **BM25 색인은 메모리 상주다.** 프로세스 재시작 시 `VAI_SRCH_WARM_TENANTS`
+  또는 `/internal/v1/kb/{kb}/rebuild`로 복원해야 한다. 복원하지 않으면 검색이
+  밀집 축만으로 도는 "절반만 동작하는" 상태가 되는데, 장애로 보이지 않아 더 위험하다.
+- **한국어 토큰화는 어절 + 음절 바이그램**이다. 형태소 분석기(kiwi/mecab)는
+  평가셋으로 이득을 측정한 뒤 어댑터로 교체한다.
+- **추천 답변 생성은 아직 없다.** 팝업은 근거 원문을 그대로 보여준다 —
+  없는 답을 지어내느니 원문이 낫다는 판단이며, sLLM 생성은 Wave 4다.
 
 ### 로컬 실행
 
@@ -87,7 +111,8 @@ Redis가 떠 있으면 실프로세스 스택 스모크 테스트까지 함께 �
 
 ### 블록 개발 규칙
 
-1. **블록 간 코드 import 금지** — 공유는 `libs/contracts`, `libs/common`만 허용. CI에서 import-linter로 강제
+1. **블록 간 코드 import 금지** — 공유는 `libs/` 아래 명시적으로 올린 것만 허용
+   (`vai_contracts` 계약 · `vai_common` 런타임 인프라 · `vai_retrieval` 검색 인프라). CI에서 import-linter로 강제
 2. **계약 우선**: 이벤트 스키마(AsyncAPI)·API(OpenAPI)를 먼저 정의 → 코드 생성. 계약 변경은 하위 호환 검사 통과 필수
 3. **어댑터 플러그인**: 엔진 추가는 `adapters/`에 클래스 추가 + entry-point 등록. 코어 수정 발생 시 설계 리뷰
 4. **환경 분기 금지**: `if is_onprem:` 대신 어댑터/설정 주입
@@ -132,13 +157,15 @@ Redis가 떠 있으면 실프로세스 스택 스모크 테스트까지 함께 �
 | 요약 품질 | 표준요약 골든셋 + 사람 평가 루브릭(주기 샘플링) |
 | 부하 | 동시 채널 시뮬레이터(오디오 재생기) — 프로파일 S/M 사양 검증 리포트 |
 
-## 6. 첫 스프린트 백로그 (바로 착수)
+## 6. 다음 스프린트 백로그 (Wave 4)
 
-1. 모노레포 스캐폴딩: uv workspace + pnpm, `tools/blockctl`로 블록 템플릿 생성기(`blockctl new <id>`)
-2. `libs/contracts` v0: 세션·오디오·STT Delta·팝업 이벤트 스키마 (사양서 §4 프로토콜 반영)
-3. `core-bus`: Redis Streams 발행/구독 래퍼, 세션 상태 머신(AICC/MEETING 프로파일)
-4. `core-gw`: FastAPI + `/v1/audio/stream` WebSocket(수신·발행), JWT 인증 스텁
-5. `aud-vad`: Silero VAD + 청크 분할 워커
-6. `stt-core`: BaseSTTAdapter + fake 어댑터(테스트) + Faster-Whisper 어댑터(GPU)
-7. compose 환경: redis + postgres + 위 블록 기동, 데모 페이지(마이크→자막)
-8. CI: 블록별 빌드 매트릭스, import-linter, 계약 스키마 검증
+Wave 1~3은 완료되었다(§2 구현 현황). 다음 목표는 **AICC 패키지 통합 데모**다.
+
+1. `LLM-SUM`: `session.closed` → 상담 카테고리 분류 + 표준 요약 템플릿 생성
+2. `TA-ASSIST` 추천 답변 생성: 검색 근거 + sLLM으로 상담원용 답변 초안 (인용 강제)
+3. `RAG-KB` 문서 파서 어댑터: PDF/DOCX/**HWP**(공공 필수)
+4. `AUD-RTP`: SIP/RTP 인입, Stereo 채널 분리(고객/상담원)
+5. `UI-AGENT`: Next.js 상담원 워크스페이스 (자막·팝업·컴플라이언스 경고·요약)
+6. 평가셋 구축: 카드/보험 약관 Q&A 골든셋 100문항 → CI 야간 회귀
+7. 형태소 분석기 어댑터 후보 검증 (평가셋으로 BM25 이득 측정 후 채택 결정)
+8. `CORE-ADM` 초안: 테넌트별 컴플라이언스 룰셋 API (현재는 파일 주입)

@@ -22,7 +22,7 @@ from vai_core_gw.app import GatewaySettings, create_app
 from vai_core_gw.auth import issue_access_token, issue_session_token
 from vai_core_gw.bus_client import CoreBusClient
 
-SECRET = "test-secret"
+SECRET = "test-secret-long-enough-for-hmac-sha256"
 PCM = b"\x10\x00" * 160  # 16bit 정렬된 10ms 분량
 
 

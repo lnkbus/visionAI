@@ -3,16 +3,25 @@
 ; 이 규칙이 없으면 레고블록은 문서상의 약속일 뿐이다. 블록 하나를 떼어
 ; 단독 판매하거나 교체할 수 있으려면, 다른 블록의 내부를 import 하지 않는다는
 ; 것이 기계적으로 보장되어야 한다.
+;
+; 공유가 허용되는 대상은 libs/ 아래에 명시적으로 올린 것뿐이다:
+;   vai_contracts(계약) · vai_common(런타임 인프라) · vai_retrieval(검색 인프라)
 
 [importlinter]
 include_external_packages = True
 root_packages =
     vai_contracts
     vai_common
+    vai_retrieval
     vai_core_bus
     vai_core_gw
     vai_aud_vad
     vai_stt_core
+    vai_flt_micro
+    vai_llm_gw
+    vai_rag_kb
+    vai_rag_srch
+    vai_ta_assist
     blockctl
 
 [importlinter:contract:block-independence]
@@ -23,18 +32,24 @@ modules =
     vai_core_gw
     vai_aud_vad
     vai_stt_core
+    vai_flt_micro
+    vai_llm_gw
+    vai_rag_kb
+    vai_rag_srch
+    vai_ta_assist
 
 [importlinter:contract:layers]
-name = 계층 방향: 블록 → 공통 → 계약 (역방향 금지)
+name = 계층 방향: 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
 type = layers
 layers =
-    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | blockctl
+    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | blockctl
+    vai_retrieval
     vai_common
     vai_contracts
 
 ; Model-Agnostic Abstraction(사양서 §1)의 기계적 보증.
-; 워커가 특정 엔진 모듈을 직접 알면 "엔진 코드를 고치지 않고 교체"가 성립하지 않는다.
-; 서비스 로직은 오직 ABC와 레지스트리만 본다.
+; 서비스 로직이 특정 엔진 모듈을 직접 알면 "엔진 코드를 고치지 않고 교체"가
+; 성립하지 않는다. 서비스 로직은 오직 ABC와 레지스트리만 본다.
 [importlinter:contract:engine-agnostic-workers]
 name = 서비스 로직은 구체 엔진 어댑터를 직접 import 하지 않는다
 type = forbidden
@@ -47,6 +62,10 @@ source_modules =
     vai_aud_vad.main
     vai_stt_core.worker
     vai_stt_core.main
+    vai_rag_kb.app
+    vai_rag_srch.app
+    vai_llm_gw.app
+    vai_retrieval.hybrid
 forbidden_modules =
     vai_aud_vad.adapters.silero
     vai_aud_vad.adapters.energy
@@ -55,3 +74,22 @@ forbidden_modules =
     torch
     faster_whisper
     silero_vad
+    qdrant_client
+    sentence_transformers
+    anthropic
+    FlagEmbedding
+
+; 폐쇄망 원칙의 코드 수준 방어선.
+; 외부로 나갈 수 있는 지점을 LLM-GW 하나로 몰아 두면, "외부 통신 0건"을
+; 네트워크 정책으로 증명할 대상도 그 블록 하나로 좁혀진다.
+[importlinter:contract:no-stray-egress]
+name = 상담 파이프라인 블록은 외부 SDK를 직접 쓰지 않는다
+type = forbidden
+source_modules =
+    vai_aud_vad
+    vai_stt_core
+    vai_flt_micro
+    vai_ta_assist
+forbidden_modules =
+    anthropic
+    openai

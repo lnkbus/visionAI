@@ -10,7 +10,7 @@
 | # | 계약 요소 | 내용 |
 |---|-----------|------|
 | 1 | **독립 배포 단위** | 블록 = 컨테이너 이미지 1개 이상 + Helm 서브차트(또는 compose 프로파일). 단독 기동/중지 가능 |
-| 2 | **표준 인터페이스** | 동기: OpenAPI(REST/WebSocket) · 비동기: 이벤트 버스 토픽(AsyncAPI 스키마). 블록 간 직접 import 금지 |
+| 2 | **표준 인터페이스** | 동기: OpenAPI(REST/WebSocket) · 비동기: 이벤트 버스 토픽. 블록 간 직접 import 금지 — 공유는 `libs/` 아래 명시적으로 올린 것만(계약·런타임 인프라·검색 인프라) |
 | 3 | **어댑터 교체성** | 내부 모델/엔진은 Abstract Base Class 어댑터로 감싼다(예: STT의 Faster-Whisper ↔ Triton 핫스왑) |
 | 4 | **라이선스 게이팅** | 블록 활성화 여부·용량(채널 수 등)은 `.lic` 파일의 블록 플래그로 제어 — 코드 재배포 없이 개통 |
 | 5 | **청구 단위(Billing Unit)** | 블록마다 ①구축 개발비(견적 항목) ②라이선스 단가 ③유지보수율이 정의됨 |
@@ -171,13 +171,17 @@ SaaS는 동일 카탈로그를 **요금제 모듈 토글**로 재사용: 패키�
 ## 5. 블록 개발 순서와 의존 관계
 
 ```
-Wave 1 (필수 뼈대):  CORE-BUS → CORE-GW → CORE-LIC(스텁) 
-Wave 2 (음성 코어):  AUD-WS → AUD-VAD → STT-CORE          ← 여기서 첫 데모 가능 (실시간 자막)
-Wave 3 (지능):       FLT-MICRO → RAG-KB → RAG-SRCH → TA-ASSIST → LLM-GW
+Wave 1 (필수 뼈대):  CORE-BUS → CORE-GW → CORE-LIC(스텁)                    ✅ 완료
+Wave 2 (음성 코어):  AUD-WS → AUD-VAD → STT-CORE                           ✅ 완료 (실시간 자막 데모)
+Wave 3 (지능):       FLT-MICRO → RAG-KB → RAG-SRCH → TA-ASSIST → LLM-GW    ✅ 완료 (1초 지식 팝업)
 Wave 4 (제품화 A):   UI-AGENT + LLM-SUM + AUD-RTP          ← AICC 패키지 완성
 Wave 5 (제품화 B):   SPK-DIA + UI-MEET                     ← 회의록 패키지 완성
 Wave 6 (패키징):     CORE-LIC(정식 DRM) + CORE-SEC + CORE-ADM + 에어갭 번들
 Wave 7 (확장):       TTS-CORE → BOT-VOICE → AVA-COUNSEL
 ```
+
+블록 매니페스트(`blocks/*/block.yaml`)가 이 카탈로그의 기계 판독 형태다.
+`blockctl list` / `blockctl effort`로 현재 구현된 블록의 청구 단위와 개발 규모 합계를
+언제든 뽑을 수 있다 — 견적서 라인 아이템이 문서와 코드에서 갈라지지 않게 하기 위해서다.
 
 - 각 Wave 종료 시점 = **청구 가능한 산출물 단위**(블록 인수 테스트 통과 기준) — 개발 용역으로 수주 시 마일스톤 검수·기성 청구 지점과 일치시킨다

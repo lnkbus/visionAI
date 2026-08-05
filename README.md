@@ -37,9 +37,14 @@
 | [05. 데이터·보안·컴플라이언스](docs/05-data-security-compliance.md) | 망분리·KCMVP·개인정보·AI 리스크 통제 |
 | [06. 기술 스택 & MVP 개발 계획](docs/06-tech-stack-mvp.md) | 블록 모노레포 구조, Wave별 개발 계획 — **코딩 착수용** |
 
-## 현재 구현 상태 (Wave 1~2 완료)
+## 현재 구현 상태 (Wave 1~3 완료)
 
-마이크 입력이 실시간 자막으로 나오는 경로가 실제로 동작한다.
+**고객이 질문하면 1초 안에 상담원 화면에 근거 팝업이 뜬다** — 사양서의 핵심 경로가 동작한다.
+
+```
+마이크 → VAD → STT → 컴플라이언스 필터(<10ms) → 질의 추출(SLM)
+      → 하이브리드 검색(Dense+BM25) → 리랭킹 → 지식 팝업
+```
 
 | 블록 | 역할 | 상태 |
 |------|------|------|
@@ -47,7 +52,12 @@
 | `CORE-GW` | JWT 인증, `/v1/audio/stream` WebSocket(사양서 §4), 데모 페이지 | ✅ |
 | `AUD-VAD` | 발화 구간 분할(패딩·interim·행오버), VAD 어댑터(energy/silero) | ✅ |
 | `STT-CORE` | `BaseSTTAdapter` ABC, fake/Faster-Whisper 어댑터 핫스왑 | ✅ |
-| `FLT-MICRO` 이후 | 컴플라이언스 필터, RAG, Agent Assist, 요약 | Wave 3~ |
+| `FLT-MICRO` | PII 마스킹 + 컴플라이언스 룰 체크 (Fast-Path <10ms) | ✅ |
+| `RAG-KB` | 조항 경계를 존중하는 청킹, 임베딩, 색인, 문서 파기 | ✅ |
+| `RAG-SRCH` | Qdrant Dense + BM25 Sparse RRF 융합, 리랭킹 | ✅ |
+| `TA-ASSIST` | 맥락 기반 질의 추출 → 검색 → 지식 팝업 (1초 예산) | ✅ |
+| `LLM-GW` | vLLM/상용 API 추상화, 프로파일별 모델 분기, 토큰 계측 | ✅ |
+| `AUD-RTP`·`LLM-SUM`·`UI-AGENT` 등 | 전화 인입, 요약, 상담원 UI | Wave 4~ |
 
 ```bash
 make install          # uv 워크스페이스 동기화
@@ -55,12 +65,12 @@ make check            # 린트 · 블록 경계 · 타입 · 테스트 · 카탈
 make up && make demo  # compose 기동 → http://localhost:8080/demo
 ```
 
-테스트는 **GPU도 Redis도 없이** 파이프라인 전체를 검증한다(인메모리 버스 + fake 어댑터).
-Redis가 있으면 네 블록을 실제 프로세스로 띄우는 스택 스모크 테스트까지 함께 돈다.
+테스트는 **GPU도 Redis도 없이** 파이프라인 전체를 검증한다(인메모리 버스 + fake/hashing 어댑터).
+Redis가 있으면 블록들을 실제 프로세스로 띄우는 스택 스모크 테스트까지 함께 돈다.
 
 레고블록 원칙은 문서상의 약속이 아니라 CI 게이트다 — `import-linter`가 블록 간 직접
-import, 계층 역전, 서비스 로직의 엔진 직접 참조를 차단하고, `blockctl check`가
-매니페스트·의존·토픽 생산자·청구 단위 정합성을 검사한다.
+import, 계층 역전, 서비스 로직의 엔진 직접 참조, 상담 경로에서의 외부 SDK 사용을
+차단하고, `blockctl check`가 매니페스트·의존·토픽 생산자·청구 단위 정합성을 검사한다.
 
 ## 빠른 이해를 위한 그림 한 장
 

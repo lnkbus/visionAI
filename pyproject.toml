@@ -10,6 +10,7 @@ members = ["libs/*", "blocks/*", "tools/*"]
 [tool.uv.sources]
 vai-contracts = { workspace = true }
 vai-common = { workspace = true }
+vai-retrieval = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -40,13 +41,23 @@ known-first-party = [
     "vai_contracts",
     "vai_core_bus",
     "vai_core_gw",
+    "vai_flt_micro",
+    "vai_llm_gw",
+    "vai_rag_kb",
+    "vai_rag_srch",
+    "vai_retrieval",
     "vai_stt_core",
+    "vai_ta_assist",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["libs", "blocks", "tools", "tests"]
 filterwarnings = ["error::DeprecationWarning:vai_.*"]
+# 블록마다 tests/ 디렉토리를 두므로 test_gateway.py 같은 이름이 겹친다.
+# importlib 모드는 파일 경로로 모듈을 구분해 basename 충돌을 없앤다.
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.11"

@@ -34,6 +34,18 @@ services:
     volumes:
       - redis-data:/data
 
+  qdrant:
+    # 사양서 지정 벡터 DB. RAG-KB(색인)와 RAG-SRCH(조회)가 별도 컨테이너이므로
+    # 반드시 공유 저장소가 필요하다 — memory 어댑터는 단일 프로세스 전용이다.
+    image: qdrant/qdrant:v1.12.1
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6333 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - qdrant-data:/qdrant/storage
+
   core-bus:
     <<: *block
     build:
@@ -100,8 +112,117 @@ services:
       #   VAI_STT_ADAPTER: faster_whisper
       #   VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3
       VAI_STT_ADAPTER: fake
+      # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
+      # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
+      VAI_STT_PUBLISH_UI: "false"
     # volumes:
     #   - /opt/visionai/models:/models:ro   # 폐쇄망 반입 모델 마운트
 
+  flt-micro:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: flt-micro
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: FLT-MICRO
+      VAI_CONSUMER_GROUP: flt
+      VAI_CONSUMER_NAME: flt-1
+      VAI_FLT_RULES_PATH: /etc/visionai/compliance-rules.json
+    volumes:
+      - ./compliance-rules.json:/etc/visionai/compliance-rules.json:ro
+
+  llm-gw:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: llm-gw
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: LLM-GW
+      # 폐쇄망 운영에서는 vLLM을 가리킨다:
+      #   VAI_LLM_ADAPTER: openai_compatible
+      #   VAI_LLM_ADAPTER_CONFIG: '{"base_url":"http://vllm:8000/v1",
+      #     "models":{"slm":"qwen2.5-1.5b","default":"qwen2.5-14b"}}'
+      VAI_LLM_ADAPTER: echo
+    ports:
+      - "8085:8085"
+
+  rag-kb:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: rag-kb
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: RAG-KB
+      # 운영에서는 로컬 임베딩 모델로 바꾼다:
+      #   VAI_RAG_EMBEDDER: sentence_transformers
+      #   VAI_RAG_EMBEDDER_MODEL: /models/ko-embedding
+      VAI_RAG_EMBEDDER: hashing
+      VAI_RAG_STORE: qdrant
+      VAI_RAG_STORE_CONFIG: '{"url":"http://qdrant:6333"}'
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+
+  rag-srch:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: rag-srch
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: RAG-SRCH
+      VAI_SRCH_EMBEDDER: hashing
+      VAI_SRCH_STORE: qdrant
+      VAI_SRCH_STORE_CONFIG: '{"url":"http://qdrant:6333"}'
+      VAI_SRCH_RERANKER: lexical
+      # 재시작 시 BM25 색인을 Qdrant 기준으로 복원한다. 빠뜨리면 검색이
+      # 밀집 축만으로 도는 '절반만 동작하는' 상태가 된다.
+      VAI_SRCH_WARM_TENANTS: demo:default
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8087:8087"
+
+  ta-assist:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: ta-assist
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: TA-ASSIST
+      VAI_CONSUMER_GROUP: assist
+      VAI_CONSUMER_NAME: assist-1
+      VAI_ASSIST_SEARCH_URL: http://rag-srch:8087
+      VAI_ASSIST_LLM_URL: http://llm-gw:8085
+    depends_on:
+      redis:
+        condition: service_healthy
+      rag-srch:
+        condition: service_started
+      llm-gw:
+        condition: service_started
+
 volumes:
   redis-data:
+  qdrant-data:

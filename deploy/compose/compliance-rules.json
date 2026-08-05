@@ -1,0 +1,23 @@
+{
+  "_comment": "데모용 컴플라이언스 룰셋. 운영에서는 CORE-ADM이 테넌트별로 관리한다.",
+  "rules": [
+    {
+      "rule_id": "MANDATORY_RECORDING",
+      "pattern": "녹취|녹음.*안내",
+      "severity": "info",
+      "message": "녹취 고지 확인"
+    },
+    {
+      "rule_id": "FORBIDDEN_GUARANTEE",
+      "pattern": "원금.?보장|무조건.?수익|손실.?없",
+      "severity": "violation",
+      "message": "확정 수익 표현은 금지된다"
+    },
+    {
+      "rule_id": "PII_SOLICITATION",
+      "pattern": "주민(등록)?번호.*(불러|말씀|알려)",
+      "severity": "warning",
+      "message": "음성으로 주민번호를 받지 않는다"
+    }
+  ]
+}

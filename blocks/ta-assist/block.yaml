@@ -1,0 +1,23 @@
+id: TA-ASSIST
+name: 실시간 Agent Assist
+tier: intelligence
+version: 0.1.0
+description: >
+  상담 맥락에서 SLM이 검색 질의를 뽑고(<200ms), 하이브리드 검색과 리랭킹을 거쳐
+  상담원 화면에 지식 팝업을 밀어 넣는다(<50ms). STT 수신부터 팝업까지
+  총 1초 미만이 이 블록의 책임이다.
+depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - RAG-SRCH
+  - LLM-GW
+adapters: []
+contracts:
+  consumes:
+    - filter.clean
+  produces:
+    - assist.popup
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 2.5
+  included_in_package: false

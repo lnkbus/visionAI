@@ -1,0 +1,24 @@
+id: RAG-SRCH
+name: 하이브리드 검색 & 리랭킹
+tier: intelligence
+version: 0.1.0
+description: >
+  Qdrant 밀집 검색과 BM25 희소 검색을 RRF로 융합하고(<100ms), 크로스 인코더로
+  상위 후보를 재정렬한다(<80ms). 밀집만으로는 조항 번호·상품명 같은 고유 토큰을
+  놓치고, 희소만으로는 표현이 다른 같은 의미를 놓친다.
+depends_on:
+  - CORE-BUS
+  - RAG-KB
+adapters:
+  - hashing
+  - sentence_transformers
+  - lexical
+  - bge
+contracts:
+  consumes: []
+  produces: []
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: index_chunks
+  dev_effort_mm: 2.0
+  included_in_package: false

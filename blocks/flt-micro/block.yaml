@@ -1,0 +1,22 @@
+id: FLT-MICRO
+name: Micro-Filter & 컴플라이언스 엔진
+tier: intelligence
+version: 0.1.0
+description: >
+  sLLM을 거치지 않는 Fast-Path. 정규식과 로컬 NER로 10ms 이내에 개인정보를
+  마스킹하고 금융 필수 고지 문구 발화 여부를 검증한다. 이 블록을 지나기 전의
+  텍스트는 화면에도 로그에도 남지 않는다.
+depends_on:
+  - CORE-BUS
+  - STT-CORE
+adapters:
+  - regex
+contracts:
+  consumes:
+    - stt.delta
+  produces:
+    - filter.clean
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 1.5
+  included_in_package: false
