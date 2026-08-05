@@ -2,7 +2,7 @@
 name = "visionai-workspace"
 version = "0.1.0"
 description = "VisionAI — 온프레미스/SaaS 하이브리드 음성 AI 플랫폼 (레고블록 모노레포)"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 [tool.uv.workspace]
 members = ["libs/*", "blocks/*", "tools/*"]
@@ -29,11 +29,18 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
-ignore = ["B008"]  # FastAPI Depends() in defaults
+ignore = [
+    "B008",  # FastAPI Depends() in defaults
+    # PEP 695 제네릭(`class Foo[T]`) 권고. 3.12 전용이라 이제 쓸 수는 있지만,
+    # 레포는 `Generic[T]`로 일관돼 있고 네 곳만 바꾸면 두 문법이 섞여 오히려
+    # 읽기 나빠진다. 옮긴다면 한 번에 전부 옮긴다 — 버전 정리와 묶을 일이 아니다.
+    "UP046",
+    "UP047",
+]
 
 # 전각 문장부호는 이 레포에서 오타가 아니라 **처리 대상 데이터**다.
 # 한국어 문서·발화에 실제로 등장하므로 정규식과 표에 그대로 들어간다.
@@ -82,7 +89,9 @@ addopts = "--import-mode=importlib"
 pythonpath = ["."]
 
 [tool.mypy]
-python_version = "3.11"
+# python_version을 고정하지 않는다. 설치된 서드파티 스텁은 **실행 중인**
+# 파이썬 것인데 mypy만 다른 버전으로 읽으면 남의 스텁에서 구문 오류가 난다
+# (실제로 CI를 세웠다). 버전은 .python-version 한 곳에서만 정한다.
 strict = true
 ignore_missing_imports = true
 # 테스트는 픽스처 제너레이터와 JSON 응답 dict를 많이 다뤄 strict 모드와 마찰이 크고,

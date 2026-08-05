@@ -2,7 +2,7 @@
 name = "vai-common"
 version = "0.2.0"
 description = "블록 공통 인프라 — 설정·로깅·이벤트 버스 클라이언트·라이선스 게이트"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "vai-contracts",
     "pydantic-settings>=2.4",

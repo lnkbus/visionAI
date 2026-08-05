@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 4b6e459618a48b6673eed39c72025717b4202c648959476d4fa65855ab2e6c16
+configuration_hash: e8a10974b1b179684ebd3453ddb9cf3c2a356f86484d2587584d1dc94b3c3800
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 51cd226c7c06904e
+  source_hash: 532925fe0c5abf14
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -19,7 +19,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: e210011c566d37b4
+  source_hash: 99cab4a3157f1cec
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -30,14 +30,14 @@ components:
   name: 세션 오케스트레이터 & 이벤트 버스
   version: 0.2.0
   kind: block
-  source_hash: 89c2a9e8bc7b43a9
+  source_hash: 863b8c728aad83f1
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: 0430a69634a9d39b
+  source_hash: b3d55cebdce276d5
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -46,14 +46,14 @@ components:
   name: 오프라인 DRM 라이선스
   version: 0.1.0
   kind: block
-  source_hash: 772edbc5e2d96c7a
+  source_hash: 32c2a1fe373d5b9b
   license_key: CORE-LIC
   capacity_unit: none
 - id: CORE-SEC
   name: 암호화·감사
   version: 0.1.0
   kind: block
-  source_hash: 71043383187731c7
+  source_hash: 02623cbeb62a3579
   license_key: CORE-SEC
   capacity_unit: none
   depends_on:
@@ -62,7 +62,7 @@ components:
   name: sLLM 서빙 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: 271d3cdbbc0e1ccb
+  source_hash: 691618f5ec1f0697
   license_key: LLM-GW
   capacity_unit: concurrent_channels
   depends_on:
@@ -71,7 +71,7 @@ components:
   name: 요약 & 분석
   version: 0.2.0
   kind: block
-  source_hash: 86223a3c27855719
+  source_hash: ef68030c7103ae83
   license_key: LLM-SUM
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -82,7 +82,7 @@ components:
   name: 화자분리
   version: 0.2.0
   kind: block
-  source_hash: f4d73e49cc7a56d1
+  source_hash: 284f997cef3ad5fc
   license_key: SPK-DIA
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -92,7 +92,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: 791a9cd80d5bbf67
+  source_hash: e209eba323c8edaf
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -102,7 +102,7 @@ components:
   name: 스마트 회의록 UI
   version: 0.2.0
   kind: block
-  source_hash: 527c2788bbb1ec10
+  source_hash: a0be8410cfc52dc5
   license_key: UI-MEET
   capacity_unit: seats
   depends_on:
@@ -113,17 +113,17 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: 68c574836374c838
+  source_hash: 6c7d30e81a67bb05
 - id: lib:common
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 64a1ce0648a4d18a
+  source_hash: 8a8b4f7427e45bc6
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0
   kind: library
-  source_hash: e6649069047e58e5
+  source_hash: 130f1ba09b885931
 - id: infra:redis
   name: redis
   version: ''

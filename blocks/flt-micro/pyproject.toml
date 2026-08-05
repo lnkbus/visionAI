@@ -2,7 +2,7 @@
 name = "vai-flt-micro"
 version = "0.2.0"
 description = "FLT-MICRO — Micro-Filter & 컴플라이언스 엔진 (Fast-Path)"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30"]
 
 [build-system]

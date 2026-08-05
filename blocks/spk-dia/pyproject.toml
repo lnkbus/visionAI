@@ -2,7 +2,7 @@
 name = "vai-spk-dia"
 version = "0.2.0"
 description = "SPK-DIA — 화자분리"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30", "numpy>=1.26"]
 
 [project.optional-dependencies]

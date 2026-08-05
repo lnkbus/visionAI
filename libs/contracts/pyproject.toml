@@ -2,7 +2,7 @@
 name = "vai-contracts"
 version = "0.1.0"
 description = "블록 간 유일한 공유 계약 — 이벤트/프로토콜/매니페스트 스키마"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = ["pydantic>=2.8"]
 
 [build-system]
