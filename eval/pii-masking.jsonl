@@ -1,0 +1,21 @@
+{"_comment": "PII 마스킹 골든셋. 상담 발화체 그대로 쓴다 — 숫자 사이에 조사·감탄사가 섞이는 것이 실제 STT 출력이다. 놓치면 유출이고, 과하게 지우면 상담이 안 된다(둘 다 사고).", "_kind": "pii"}
+{"case_id": "rrn-plain", "text": "주민번호는 900101-1234567 입니다", "expect_types": ["rrn"], "must_not_contain": ["900101-1234567"]}
+{"case_id": "rrn-spoken", "text": "구공공일공일에 일이삼사오육칠이요", "expect_types": [], "known_limitation": true, "note": "한글로 읽은 주민번호는 현재 못 잡는다 — 알려진 한계를 고정한다"}
+{"case_id": "card-16", "text": "카드번호 1234-5678-9012-3456 확인해 주세요", "expect_types": ["card"], "must_not_contain": ["9012-3456"]}
+{"case_id": "card-nospace", "text": "1234567890123456 이 번호 맞나요", "expect_types": ["card"], "must_not_contain": ["1234567890123456"]}
+{"case_id": "phone-mobile", "text": "연락처는 010-1234-5678 입니다", "expect_types": ["phone"], "must_not_contain": ["1234-5678"]}
+{"case_id": "phone-seoul", "text": "02-1234-5678로 전화 주세요", "expect_types": ["phone"], "must_not_contain": ["02-1234-5678"]}
+{"case_id": "account", "text": "계좌는 110-123-456789 신한은행이요", "expect_types": ["account"], "must_not_contain": ["110-123-456789"]}
+{"case_id": "email", "text": "메일은 hong.gildong@example.com 으로 보내주세요", "expect_types": ["email"], "must_not_contain": ["hong.gildong@example.com"]}
+{"case_id": "mixed", "text": "주민번호 900101-1234567이고 연락처는 010-9876-5432예요", "expect_types": ["rrn", "phone"], "must_not_contain": ["900101-1234567", "9876-5432"]}
+{"case_id": "phone-not-account", "text": "010-1234-5678", "expect_types": ["phone"], "note": "계좌 패턴이 먼저 잡으면 안 된다 — 과거 실제로 있었던 오분류"}
+{"case_id": "amount-not-pii", "text": "결제 금액은 1,234,567원입니다", "expect_types": [], "note": "금액을 지우면 상담이 안 된다"}
+{"case_id": "date-not-pii", "text": "결제일은 2026-09-15입니다", "expect_types": [], "note": "날짜는 PII가 아니다"}
+{"case_id": "card-last4-ok", "text": "카드 뒷자리 3456 맞으신가요", "expect_types": [], "note": "뒷 네 자리는 본인확인에 쓴다. 지우면 확인 절차가 불가능해진다"}
+{"case_id": "order-number", "text": "주문번호 20260915001 조회해 주세요", "expect_types": [], "note": "11자리 숫자지만 PII가 아니다"}
+{"case_id": "phone-particle", "text": "010-1234-5678로 연락 주세요", "expect_types": ["phone"], "must_not_contain": ["1234-5678"], "note": "조사가 숫자에 붙는다 — \\b 경계로는 못 잡던 실제 유출 경로"}
+{"case_id": "rrn-particle", "text": "900101-1234567이고요", "expect_types": ["rrn"], "must_not_contain": ["900101-1234567"]}
+{"case_id": "email-particle", "text": "hong@example.com으로 보내주세요", "expect_types": ["email"], "must_not_contain": ["hong@example.com"]}
+{"case_id": "phone-local", "text": "031-123-4567도 제 번호예요", "expect_types": ["phone"], "note": "지역번호도 PII다. 빠뜨리면 계좌 패턴이 주워 감사 로그 유형이 틀어진다"}
+{"case_id": "empty", "text": "", "expect_types": []}
+{"case_id": "no-pii", "text": "카드 재발급 신청하려고 하는데요", "expect_types": []}

@@ -1,0 +1,50 @@
+name: 야간 품질 회귀
+
+# 매 PR에서 도는 게이트(ci.yml)는 모델 없이 도는 결정적 스위트만 본다.
+# 여기는 그보다 무거운 것을 맡는 자리다:
+#
+#   * 시간이 걸리는 전체 리포트를 아티팩트로 남겨 품질 추이를 눈으로 본다.
+#   * 로컬 임베딩·리랭커 가중치가 번들에 들어오면(폐쇄망 반입 대상) 그 프로파일은
+#     PR마다 돌리기엔 비싸다 — 여기서 돈다.
+#
+# 야간에만 도는 것을 게이트로 삼지 않는 이유: 하루 뒤에 알려주는 실패는
+# 이미 다른 커밋 열 개가 그 위에 쌓인 뒤라 원인을 짚기 어렵다. 게이트는 PR에 두고,
+# 여기서는 **추이와 무거운 프로파일**을 본다.
+
+on:
+  schedule:
+    # 03:20 KST (UTC 18:20). 정각을 피해 러너 혼잡을 비켜난다.
+    - cron: "20 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  eval:
+    name: 골든셋 전체 평가
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 의존성 설치
+        run: uv sync --all-packages
+
+      - name: 골든셋 정합성
+        run: uv run evalctl validate --root .
+
+      - name: 평가 실행
+        run: uv run evalctl run --root . -v --json eval-report.json
+
+      - name: 기준선 대비 비교
+        # 실패해도 리포트는 남겨야 하므로 업로드 뒤에 판정하지 않고 여기서 본다.
+        run: uv run evalctl compare --root . -v
+
+      - name: 리포트 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: eval-report.json
+          retention-days: 90

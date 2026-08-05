@@ -11,6 +11,10 @@ members = ["libs/*", "blocks/*", "tools/*"]
 vai-contracts = { workspace = true }
 vai-common = { workspace = true }
 vai-retrieval = { workspace = true }
+# 평가 하네스는 블록의 로직을 in-process로 돌린다(HTTP 없이 결정적으로 재현하려면
+# 이 방법뿐이다). 워크스페이스 소스로 묶어야 uv가 로컬 코드를 쓴다.
+vai-flt-micro = { workspace = true }
+vai-tts-core = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -39,6 +43,7 @@ allowed-confusables = ["％", "？", "！", "。", "、", "－", "／"]
 # 워크스페이스 패키지를 서드파티로 분류하면 블록 경계가 import 블록에서 안 보인다.
 known-first-party = [
     "blockctl",
+    "evalctl",
     "licgen",
     "tests",
     "vai_ava_counsel",

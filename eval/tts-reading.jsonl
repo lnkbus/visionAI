@@ -1,0 +1,19 @@
+{"_comment": "TTS 읽기 골든셋. 한국어 음성봇에서 숫자를 잘못 읽으면 그 통화는 실패한 통화다. 고유어/한자어 수사 구분이 핵심.", "_kind": "tts"}
+{"case_id": "money-basic", "text": "결제 금액은 50,000원입니다", "expect": "결제 금액은 오만 원입니다"}
+{"case_id": "money-large", "text": "잔여 한도는 1,234,567원입니다", "expect": "잔여 한도는 백이십삼만 사천오백육십칠 원입니다"}
+{"case_id": "money-ten-thousand", "text": "10,000원", "expect": "만 원", "note": "'일만 원'이라 말하는 사람은 없다"}
+{"case_id": "money-mixed-unit", "text": "1억 5천만원 대출", "expect": "일억 오천만원 대출", "note": "'일 억 오 천만원'으로 끊기면 안 된다"}
+{"case_id": "counter-native", "text": "상품 3개를 주문하셨습니다", "expect": "상품 세 개를 주문하셨습니다", "note": "'삼 개'는 듣자마자 기계다"}
+{"case_id": "counter-cups", "text": "커피 2잔", "expect": "커피 두 잔"}
+{"case_id": "duration-sino", "text": "회의는 45분 걸립니다", "expect": "회의는 사십오 분 걸립니다", "note": "'마흔다섯 분'은 사람 수가 된다"}
+{"case_id": "people-native", "text": "고객 3분이 대기 중입니다", "expect": "고객 세 분이 대기 중입니다"}
+{"case_id": "time-mixed", "text": "3시 30분에 방문", "expect": "세 시 삼십 분에 방문", "note": "한 문장에 고유어+한자어가 섞인다"}
+{"case_id": "time-oclock", "text": "10시 정각", "expect": "열 시 정각"}
+{"case_id": "date", "text": "2024-03-05", "expect": "이천이십사년 삼월 오일"}
+{"case_id": "phone", "text": "010-1234-5678", "expect": "공일공 일이삼사 오육칠팔", "note": "0은 '공'. 붙여 읽으면 받아 적지 못한다"}
+{"case_id": "percent", "text": "이자율 15%", "expect": "이자율 십오 퍼센트"}
+{"case_id": "abbrev", "text": "VIP 고객", "expect": "브이아이피 고객"}
+{"case_id": "months", "text": "20개월 무이자 할부", "expect": "이십 개월 무이자 할부"}
+{"case_id": "fee-and-days", "text": "재발급 수수료는 3,000원이고 3일 걸립니다.", "expect": "재발급 수수료는 삼천 원이고 삼 일 걸립니다."}
+{"case_id": "no-number", "text": "안녕하세요 무엇을 도와드릴까요", "expect": "안녕하세요 무엇을 도와드릴까요"}
+{"case_id": "empty", "text": "", "expect": ""}

@@ -1,0 +1,32 @@
+{
+  "_comment": "evalctl 회귀 기준선. 갱신은 품질 변화를 의도했을 때만 한다.",
+  "note": "최초 고정: 모델 없는 기본 어댑터(HashingEmbedder+어휘 리랭커) 기준. PII는 조사 결합 유출 수정 이후 수치.",
+  "suites": {
+    "pii": {
+      "accuracy": 1.0,
+      "known_limitations": 1.0,
+      "mean_latency_ms": 0.008,
+      "p95_latency_ms": 0.009,
+      "passed": 20.0,
+      "total": 20.0
+    },
+    "retrieval": {
+      "hits": 32.0,
+      "mean_latency_ms": 0.47,
+      "mrr": 0.8627,
+      "ndcg_at_k": 0.8717,
+      "p95_latency_ms": 0.539,
+      "recall_at_k": 0.9412,
+      "top_k": 3.0,
+      "total": 34.0
+    },
+    "tts": {
+      "accuracy": 1.0,
+      "known_limitations": 0.0,
+      "mean_latency_ms": 0.021,
+      "p95_latency_ms": 0.083,
+      "passed": 18.0,
+      "total": 18.0
+    }
+  }
+}
