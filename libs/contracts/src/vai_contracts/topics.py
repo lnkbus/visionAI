@@ -50,6 +50,26 @@ class Topic(StrEnum):
     SUMMARY_DONE = "summary.done"
     """LLM-SUM → UI. 요약 완료."""
 
+    TTS_REQUEST = "tts.request"
+    """BOT-VOICE / TA-ASSIST → TTS-CORE. 합성 요청."""
+
+    TTS_AUDIO = "tts.audio"
+    """TTS-CORE → AUD-RTP / UI. 합성된 오디오 조각(문장 단위).
+
+    전체 합성을 기다렸다 보내면 첫 소리가 문장 수만큼 늦어진다. 사람은 상대가
+    0.5초 안에 반응하지 않으면 다시 말하기 시작한다."""
+
+    TTS_CANCEL = "tts.cancel"
+    """끼어들기. 고객이 말을 시작했는데 봇이 계속 떠들면 그 통화는 실패한다.
+
+    **Pub/Sub이 아니라 스트림인 이유**: 취소가 유실되면 봇이 멈추지 않는다.
+    화면 갱신이 한 번 빠지는 것과 무게가 다르다."""
+
+    BOT_TURN = "bot.turn"
+    """BOT-VOICE → UI / LLM-SUM / 감사. 봇이 한 마디 했다는 기록.
+
+    봇이 무슨 말을 했는지 남지 않으면 분쟁이 생겼을 때 아무것도 증명할 수 없다."""
+
     AUDIT_LOG = "audit.log"
     """모든 블록 → CORE-SEC. 감사 기록.
 

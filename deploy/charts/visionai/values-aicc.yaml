@@ -38,6 +38,12 @@ blocks:
   scn-studio: { enabled: true }
   ui-agent: { enabled: true, replicas: 2 }
 
+  # 음성봇은 애드온이다. 사람 상담원 구성에서 켜면 봇이 먼저 응답한다.
+  #   켤 때: tts-core.enabled=true, bot-voice.enabled=true,
+  #          aud-vad.env.VAI_VAD_BARGE_IN=true (끼어들기)
+  tts-core: { enabled: false }
+  bot-voice: { enabled: false }
+
   # 회의록 전용 블록은 끈다. 켜 두면 쓰지도 않는 GPU·메모리를 먹는다.
   spk-dia: { enabled: false }
   ui-meet: { enabled: false }

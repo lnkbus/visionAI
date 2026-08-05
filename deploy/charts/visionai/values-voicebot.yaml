@@ -1,0 +1,40 @@
+# 패키지 C — AI 음성상담원 (봇이 1차 응대, 막히면 사람에게)
+#
+#   helm install visionai . -f values-voicebot.yaml --set-file license.content=customer.lic
+#
+# AICC와 **같은 코어**를 쓰고 출력 쪽만 다르다. 상담원 화면 대신 TTS가 붙고,
+# 대화 진행을 BOT-VOICE가 맡는다. 봇이 막히면 UI-AGENT로 넘어가므로
+# 상담원 화면도 함께 띄운다 — 넘길 곳이 없으면 고객이 갇힌다.
+
+blocks:
+  core-bus: { enabled: true }
+  core-gw: { enabled: true }
+  core-lic: { enabled: true }
+  core-sec: { enabled: true }
+  core-adm: { enabled: true }
+
+  aud-rtp: { enabled: true, replicas: 3 }
+  aud-vad:
+    enabled: true
+    replicas: 3
+    env:
+      # 끼어들기. 고객이 말을 시작하면 봇이 즉시 멈춘다.
+      # **음성봇 구성에서만 켠다** — 봇이 없으면 취소 이벤트만 흐른다.
+      VAI_VAD_BARGE_IN: "true"
+  stt-core: { enabled: true, replicas: 3 }
+  flt-micro: { enabled: true, replicas: 3 }
+
+  tts-core: { enabled: true, replicas: 3 }
+  bot-voice: { enabled: true, replicas: 2 }
+
+  # 봇이 막히면 사람에게 넘긴다. 넘길 곳이 없는 봇은 고객을 가둔다.
+  ui-agent: { enabled: true, replicas: 2 }
+  ta-assist: { enabled: true, replicas: 2 }
+  rag-kb: { enabled: true }
+  rag-srch: { enabled: true, replicas: 2 }
+  llm-gw: { enabled: true }
+  llm-sum: { enabled: true }
+  scn-studio: { enabled: true }
+
+  spk-dia: { enabled: false }
+  ui-meet: { enabled: false }

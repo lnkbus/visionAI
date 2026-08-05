@@ -1,0 +1,27 @@
+id: BOT-VOICE
+name: 음성봇 대화 엔진
+tier: experience
+version: 0.1.0
+description: >
+  시나리오를 진행하며 고객 발화(filter.clean)를 받아 다음 마디를 정하고 TTS에 넘긴다.
+  시나리오는 코드가 아니라 데이터라 고객사가 저작 도구로 문구를 바꾼다. 대화 상태는
+  세션 저장소에 두어 봇 프로세스가 죽어도 통화가 이어진다. 재질문 상한과 사람 연결
+  경로를 강제한다 — 빠져나갈 곳 없는 봇은 고객을 가두고, 그것 하나로 브랜드가 상한다.
+depends_on:
+  - CORE-BUS
+  - TTS-CORE
+recommends:
+  - FLT-MICRO
+adapters: []
+infra:
+  - redis
+contracts:
+  consumes:
+    - filter.clean
+  produces:
+    - tts.request
+    - bot.turn
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 4.0
+  included_in_package: false

@@ -34,6 +34,12 @@ class VadSettings(BaseSettings):
     adapter_config: str = "{}"
     """어댑터 초기화 JSON. 예: ``{"threshold": 0.6, "model_path": "/models/silero.jit"}``"""
 
+    barge_in: bool = False
+    """발화 시작 시 ``tts.cancel``을 낸다. **음성봇 구성에서만 켠다.**
+
+    사람 상담원 구성에서 켜면 취소 이벤트가 통화 내내 흐르는데, 취소할 턴이
+    없어 무해하긴 하지만 버스만 시끄러워진다. 봇이 없는 곳에서 켤 이유가 없다."""
+
 
 def create_app() -> FastAPI:
     common = get_settings()
@@ -44,7 +50,13 @@ def create_app() -> FastAPI:
         bus = build_bus(common.redis_url)
         vad = create_vad(vad_cfg.adapter)
         await vad.initialize(json.loads(vad_cfg.adapter_config))
-        worker = VadWorker(bus, vad, group=common.consumer_group, consumer=common.consumer_name)
+        worker = VadWorker(
+            bus,
+            vad,
+            group=common.consumer_group,
+            consumer=common.consumer_name,
+            barge_in=vad_cfg.barge_in,
+        )
         application.state.worker = worker
         log.info("VAD 어댑터 로드", extra={"adapter": vad.name})
 

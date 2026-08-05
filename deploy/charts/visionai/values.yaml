@@ -138,6 +138,22 @@ blocks:
     enabled: true
     port: 8084
     replicas: 2
+  tts-core:
+    enabled: true
+    port: 8098
+    replicas: 2
+    # 합성은 GPU를 오래 붙잡는다. STT와 같은 노드에 몰리면 서로를 밀어낸다.
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    nodeSelector:
+      visionai.io/gpu: "true"
+    env:
+      VAI_TTS_ADAPTER: fake
+  bot-voice:
+    enabled: true
+    port: 8099
+    replicas: 2
   llm-gw:
     enabled: true
     port: 8085

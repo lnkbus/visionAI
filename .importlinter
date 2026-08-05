@@ -20,6 +20,8 @@ root_packages =
     vai_core_adm
     vai_aud_vad
     vai_stt_core
+    vai_tts_core
+    vai_bot_voice
     vai_flt_micro
     vai_llm_gw
     vai_rag_kb
@@ -45,6 +47,8 @@ modules =
     vai_core_adm
     vai_aud_vad
     vai_stt_core
+    vai_tts_core
+    vai_bot_voice
     vai_flt_micro
     vai_llm_gw
     vai_rag_kb
@@ -61,7 +65,7 @@ modules =
 name = 계층 방향: 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
 type = layers
 layers =
-    vai_core_bus | vai_core_gw | vai_core_lic | vai_core_sec | vai_core_adm | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | vai_ui_agent | vai_aud_rtp | vai_spk_dia | vai_ui_meet | blockctl | licgen
+    vai_core_bus | vai_core_gw | vai_core_lic | vai_core_sec | vai_core_adm | vai_aud_vad | vai_stt_core | vai_tts_core | vai_bot_voice | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | vai_ui_agent | vai_aud_rtp | vai_spk_dia | vai_ui_meet | blockctl | licgen
     vai_retrieval
     vai_common
     vai_contracts
@@ -81,6 +85,8 @@ source_modules =
     vai_aud_vad.main
     vai_stt_core.worker
     vai_stt_core.main
+    vai_tts_core.app
+    vai_tts_core.synth
     vai_rag_kb.app
     vai_rag_srch.app
     vai_llm_gw.app
@@ -90,6 +96,8 @@ forbidden_modules =
     vai_aud_vad.adapters.energy
     vai_stt_core.adapters.faster_whisper
     vai_stt_core.adapters.fake
+    vai_tts_core.adapters.fake
+    vai_tts_core.adapters.neural
     vai_rag_kb.parsers.hwp
     vai_rag_kb.parsers.xmlzip
     vai_rag_kb.parsers.simple
@@ -114,6 +122,8 @@ source_modules =
     vai_aud_vad
     vai_spk_dia
     vai_stt_core
+    vai_tts_core
+    vai_bot_voice
     vai_flt_micro
     vai_ta_assist
     vai_llm_sum

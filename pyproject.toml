@@ -31,6 +31,10 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
 ignore = ["B008"]  # FastAPI Depends() in defaults
 
+# 전각 문장부호는 이 레포에서 오타가 아니라 **처리 대상 데이터**다.
+# 한국어 문서·발화에 실제로 등장하므로 정규식과 표에 그대로 들어간다.
+allowed-confusables = ["％", "？", "！", "。", "、", "－", "／"]
+
 [tool.ruff.lint.isort]
 # 워크스페이스 패키지를 서드파티로 분류하면 블록 경계가 import 블록에서 안 보인다.
 known-first-party = [
@@ -38,6 +42,7 @@ known-first-party = [
     "licgen",
     "tests",
     "vai_aud_rtp",
+    "vai_bot_voice",
     "vai_aud_vad",
     "vai_common",
     "vai_contracts",
@@ -55,6 +60,7 @@ known-first-party = [
     "vai_scn_studio",
     "vai_spk_dia",
     "vai_stt_core",
+    "vai_tts_core",
     "vai_ta_assist",
     "vai_ui_agent",
     "vai_ui_meet",

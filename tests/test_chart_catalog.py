@@ -17,7 +17,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHART_DIR = REPO_ROOT / "deploy" / "charts" / "visionai"
-PACKAGE_VALUES = ("values-aicc.yaml", "values-meeting.yaml")
+PACKAGE_VALUES = ("values-aicc.yaml", "values-meeting.yaml", "values-voicebot.yaml")
 
 
 def _catalog_dirs() -> set[str]:

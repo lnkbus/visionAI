@@ -1,0 +1,13 @@
+[project]
+name = "vai-tts-core"
+version = "0.1.0"
+description = "TTS-CORE — 실시간 음성 합성 (문장 단위 스트리밍, 끼어들기)"
+requires-python = ">=3.11"
+dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30", "numpy>=1.26"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vai_tts_core"]

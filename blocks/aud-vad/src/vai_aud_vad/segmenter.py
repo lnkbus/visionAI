@@ -108,6 +108,15 @@ class SpeechSegmenter:
 
         return segments
 
+    def is_speaking(self, key: str) -> bool:
+        """지금 발화 중인가.
+
+        끼어들기 감지가 이 값을 본다. 구간이 **확정되기를 기다리지 않고**
+        말이 시작된 그 순간을 알아야 하므로, 내부 상태를 그대로 노출한다.
+        """
+        stream = self._streams.get(key)
+        return bool(stream and stream.in_speech)
+
     def _consume_frame(self, stream: _Stream, frame: bytes) -> list[Segment]:
         cfg = self.config
         out: list[Segment] = []

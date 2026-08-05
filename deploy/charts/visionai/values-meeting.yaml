@@ -34,6 +34,8 @@ blocks:
   scn-studio: { enabled: false }
   ui-agent: { enabled: false }
   aud-rtp: { enabled: false }
+  tts-core: { enabled: false }
+  bot-voice: { enabled: false }
 
 infra:
   # 검색 블록이 없으므로 qdrant도 필요 없다.

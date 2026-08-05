@@ -1,0 +1,31 @@
+id: TTS-CORE
+name: 음성 합성
+tier: speech
+version: 0.1.0
+description: >
+  실시간 음성 합성. 문장 단위 스트리밍으로 첫 소리까지의 지연(TTFB)을 500ms 예산에
+  맞추고, 끼어들기(barge-in)를 턴 단위 취소로 처리한다. 한국어 전처리(고유어/한자어
+  수사 구분, 금액·날짜·전화번호)를 엔진 바깥에 두어 엔진을 바꿔도 읽는 방식이
+  유지된다. 이 전처리가 없으면 "50,000원"이 "오영영영영원"으로 나가고 그 통화는
+  실패한 통화가 된다.
+depends_on:
+  - CORE-BUS
+recommends:
+  # 합성만 있고 흘려보낼 곳이 없으면 소리가 어디로도 가지 않는다.
+  - AUD-RTP
+adapters:
+  - fake
+  - cosyvoice
+  - kokoro
+infra:
+  - redis
+contracts:
+  consumes:
+    - tts.request
+    - tts.cancel
+  produces:
+    - tts.audio
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 2.5
+  included_in_package: false

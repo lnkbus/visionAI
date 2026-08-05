@@ -426,6 +426,49 @@ services:
     ports:
       - "8094:8094"
 
+  tts-core:
+    # 음성봇 애드온. `docker compose --profile voicebot up` 으로만 뜬다 —
+    # 기본 구성(사람 상담원)에서 켜면 봇이 먼저 응답한다.
+    profiles: ["voicebot"]
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: tts-core
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: TTS-CORE
+      VAI_CONSUMER_GROUP: tts
+      VAI_CONSUMER_NAME: tts-1
+      # 운영에서는 신경망 엔진으로 바꾼다:
+      #   VAI_TTS_ADAPTER: cosyvoice
+      #   VAI_TTS_MODEL_PATH: /models/cosyvoice
+      VAI_TTS_ADAPTER: fake
+    ports:
+      - "8098:8098"
+
+  bot-voice:
+    profiles: ["voicebot"]
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: bot-voice
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: BOT-VOICE
+      VAI_CONSUMER_GROUP: bot
+      VAI_CONSUMER_NAME: bot-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      tts-core:
+        condition: service_started
+    ports:
+      - "8099:8099"
+
 volumes:
   redis-data:
   audit-data:
