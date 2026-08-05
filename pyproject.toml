@@ -77,7 +77,9 @@ addopts = "--import-mode=importlib"
 pythonpath = ["."]
 
 [tool.mypy]
-python_version = "3.11"
+# python_version을 고정하지 않는다. 고정하면 mypy가 "설치된 스텁은 3.12용인데
+# 문법은 3.11로 읽는" 상태에 빠져 남의 스텁에서 구문 오류를 낸다(실제로 CI를
+# 세웠다). 대신 CI가 지원 범위의 양 끝(3.11·3.12)에서 각각 돌린다.
 strict = true
 ignore_missing_imports = true
 # 테스트는 픽스처 제너레이터와 JSON 응답 dict를 많이 다뤄 strict 모드와 마찰이 크고,

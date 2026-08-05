@@ -11,8 +11,18 @@ concurrency:
 
 jobs:
   quality:
-    name: 정적 검사 · 테스트
+    # 지원 범위의 양 끝에서 돈다. 한쪽에서만 돌리면 나머지 한쪽은
+    # "지원한다"고 적혀만 있고 아무도 확인하지 않은 상태가 된다 —
+    # 실제로 하한(3.11)에서만 돌던 동안 납품 이미지(3.12)는 한 번도
+    # 타입 검사를 받지 않았다.
+    name: 정적 검사 · 테스트 (py${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 하한 = requires-python, 상한 = 배포 이미지(deploy/docker/Dockerfile).
+        # tests/test_toolchain_pin.py가 이 목록과 두 선언의 일치를 검사한다.
+        python: ["3.11", "3.12"]
     services:
       # 스택 스모크 테스트용. 없으면 해당 테스트만 건너뛰므로 CI가 깨지지는 않지만,
       # Redis 컨슈머 그룹 배선은 인메모리 버스가 대신 검증해 주지 못한다.
@@ -32,7 +42,7 @@ jobs:
           enable-cache: true
 
       - name: 의존성 설치
-        run: uv sync --all-packages
+        run: uv sync --all-packages --python ${{ matrix.python }}
 
       - name: 린트 · 포맷
         run: |
