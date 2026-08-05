@@ -71,8 +71,8 @@ def test_CORE_LIC은_라이선스에_없어도_담는다(catalog: list) -> None:
 
 def test_카탈로그에_없는_블록은_거부한다(catalog: list) -> None:
     """라이선스 오타이거나 미출시 블록이다. 번들을 만들고 나서 알면 늦다."""
-    with pytest.raises(CatalogError, match="AVA-COUNSEL"):
-        plan(catalog, ["AVA-COUNSEL"])
+    with pytest.raises(CatalogError, match="NOT-A-BLOCK"):
+        plan(catalog, ["NOT-A-BLOCK"])
 
 
 def test_중복_요청은_한_번만_담는다(catalog: list) -> None:

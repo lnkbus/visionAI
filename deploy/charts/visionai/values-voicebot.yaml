@@ -38,3 +38,4 @@ blocks:
 
   spk-dia: { enabled: false }
   ui-meet: { enabled: false }
+  ava-counsel: { enabled: false }

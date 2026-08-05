@@ -25,6 +25,7 @@ members = [
     "licgen",
     "vai-aud-rtp",
     "vai-aud-vad",
+    "vai-ava-counsel",
     "vai-bot-voice",
     "vai-common",
     "vai-contracts",
@@ -3958,6 +3959,25 @@ requires-dist = [
     { name = "vai-contracts", editable = "libs/contracts" },
 ]
 provides-extras = ["silero"]
+
+[[package]]
+name = "vai-ava-counsel"
+version = "0.1.0"
+source = { editable = "blocks/ava-counsel" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "vai-common" },
+    { name = "vai-contracts" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "vai-common", editable = "libs/common" },
+    { name = "vai-contracts", editable = "libs/contracts" },
+]
 
 [[package]]
 name = "vai-bot-voice"

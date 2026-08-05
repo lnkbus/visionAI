@@ -41,6 +41,7 @@ known-first-party = [
     "blockctl",
     "licgen",
     "tests",
+    "vai_ava_counsel",
     "vai_aud_rtp",
     "vai_bot_voice",
     "vai_aud_vad",

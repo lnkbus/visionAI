@@ -1,0 +1,25 @@
+id: AVA-COUNSEL
+name: 아바타 가상상담원
+tier: experience
+version: 0.1.0
+description: >
+  음성 합성 결과에 입 모양(viseme) 타임라인을 붙여 아바타 클라이언트로 보낸다.
+  영상을 서버에서 만들지 않는다 — 세션마다 렌더링하면 GPU가 통화 수만큼 필요하고
+  인코딩·전송 지연이 음성 위에 더해진다. 타임라인은 TTS 조각의 실측 길이에 맞춰
+  계산하므로 소리와 입 모양이 누적 오차로 벌어지지 않는다. 말하지 않을 때의
+  상태(듣는 중·생각 중)도 함께 보낸다 — 멈춘 아바타는 통화가 끊긴 것처럼 보인다.
+depends_on:
+  - CORE-BUS
+  - TTS-CORE
+adapters: []
+infra:
+  - redis
+contracts:
+  consumes:
+    - tts.audio
+  produces:
+    - avatar.track
+billing:
+  capacity_unit: avatar_sessions
+  dev_effort_mm: 5.0
+  included_in_package: false

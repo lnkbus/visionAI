@@ -469,6 +469,25 @@ services:
     ports:
       - "8099:8099"
 
+  ava-counsel:
+    profiles: ["avatar"]
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: ava-counsel
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: AVA-COUNSEL
+      VAI_CONSUMER_GROUP: ava
+      VAI_CONSUMER_NAME: ava-1
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8100:8100"
+
 volumes:
   redis-data:
   audit-data:

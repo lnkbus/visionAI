@@ -47,3 +47,4 @@ blocks:
   # 회의록 전용 블록은 끈다. 켜 두면 쓰지도 않는 GPU·메모리를 먹는다.
   spk-dia: { enabled: false }
   ui-meet: { enabled: false }
+  ava-counsel: { enabled: false }

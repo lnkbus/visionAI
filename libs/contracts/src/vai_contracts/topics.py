@@ -70,6 +70,12 @@ class Topic(StrEnum):
 
     봇이 무슨 말을 했는지 남지 않으면 분쟁이 생겼을 때 아무것도 증명할 수 없다."""
 
+    AVATAR_TRACK = "avatar.track"
+    """AVA-COUNSEL → 아바타 클라이언트. 오디오 조각에 대응하는 입 모양 타임라인.
+
+    영상이 아니라 타임라인만 보낸다 — 세션마다 렌더링하면 GPU가 통화 수만큼
+    필요하고, 인코딩·전송 지연이 음성 위에 더해진다."""
+
     AUDIT_LOG = "audit.log"
     """모든 블록 → CORE-SEC. 감사 기록.
 

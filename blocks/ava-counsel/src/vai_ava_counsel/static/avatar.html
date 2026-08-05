@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI 아바타 상담원</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af;
+          --line:#272b33; --accent:#60a5fa; --ok:#4ade80; --card:#161a21; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size:18px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .stage { background:var(--card); border:1px solid var(--line); border-radius:14px;
+           padding:24px; display:flex; gap:24px; align-items:center; flex-wrap:wrap; }
+  .row { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:12px; }
+  input { flex:1; min-width:160px; font:inherit; padding:7px 9px; border:1px solid var(--line);
+          border-radius:7px; background:var(--bg); color:var(--fg); }
+  button { background:var(--accent); color:#0f1115; border:none; border-radius:7px;
+           padding:8px 16px; font:inherit; font-weight:600; cursor:pointer; }
+  .tag { display:inline-block; font-size:11px; padding:2px 9px; border-radius:99px;
+         border:1px solid var(--line); color:var(--muted); }
+  .tag.speaking { color:var(--ok); border-color:var(--ok); }
+  .caption { margin-top:14px; font-size:15px; min-height:24px; }
+  .meta { color:var(--muted); font-size:12px; margin-top:8px;
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .note { color:var(--muted); font-size:12px; margin-top:18px; line-height:1.7; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VisionAI 아바타 상담원</h1>
+  <p class="sub">서버는 <b>입 모양 타임라인만</b> 보낸다. 그리는 것은 이 화면이 한다.</p>
+
+  <div class="row">
+    <input id="session" placeholder="session_id" />
+    <button id="connect">연결</button>
+    <span class="tag" id="state">대기</span>
+  </div>
+
+  <div class="stage">
+    <svg id="face" width="200" height="240" viewBox="0 0 200 240" aria-label="아바타">
+      <ellipse cx="100" cy="110" rx="72" ry="88" fill="#2a3140" />
+      <ellipse id="eyeL" cx="74" cy="92" rx="9" ry="11" fill="#e5e7eb" />
+      <ellipse id="eyeR" cx="126" cy="92" rx="9" ry="11" fill="#e5e7eb" />
+      <!-- 입: rx(가로)·ry(세로)만 바꿔 12가지 모양을 만든다.
+           실제 제품은 3D 모델의 블렌드셰이프에 같은 값을 먹인다. -->
+      <ellipse id="mouth" cx="100" cy="150" rx="18" ry="3" fill="#111318" />
+    </svg>
+    <div style="flex:1; min-width:220px">
+      <div class="caption" id="caption">—</div>
+      <div class="meta" id="meta">프레임 0 · 지연 —</div>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>동기가 전부다.</b> 소리와 입 모양이 어긋나면 사람은 즉시 알아채고,
+    어긋난 아바타는 없느니만 못하다. 그래서 타임라인은 TTS가 합성한
+    <b>실측 길이</b>에 맞춰 계산된다 — 글자 수로 추정하면 문장 끝에서 눈에 띄게 벌어진다.
+    <br />
+    말하지 않을 때도 멈추지 않는다. 정지한 아바타는 화면이 얼어붙은 것처럼 보이고,
+    고객은 통화가 끊겼다고 여긴다.
+  </p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// 입 모양 12종 → (가로, 세로) 반지름. 실제 제품에서는 블렌드셰이프 가중치가 된다.
+const SHAPES = {
+  sil: [18, 3],   pp: [16, 2],    ff: [17, 5],
+  th:  [16, 8],   dd: [17, 9],    kk: [19, 11],
+  ch:  [15, 5],   aa: [22, 26],   e:  [21, 14],
+  ih:  [26, 7],   oh: [16, 20],   ou: [11, 13],
+};
+
+let socket = null;
+let audioCtx = null;
+let playAt = 0;
+let frameCount = 0;
+
+function setMouth(name) {
+  const [rx, ry] = SHAPES[name] || SHAPES.sil;
+  const mouth = $("mouth");
+  // CSS 전환으로 프레임 사이를 보간한다. 단계적으로 끊어 그리면
+  // 입이 딸깍거리는 것처럼 보인다.
+  mouth.style.transition = "rx 60ms linear, ry 60ms linear";
+  mouth.setAttribute("rx", rx);
+  mouth.setAttribute("ry", ry);
+}
+
+function blink() {
+  for (const id of ["eyeL", "eyeR"]) {
+    const eye = $(id);
+    eye.setAttribute("ry", 1);
+    setTimeout(() => eye.setAttribute("ry", 11), 110);
+  }
+  // 눈 깜빡임이 없으면 아바타가 죽은 것처럼 보인다. 간격을 무작위로 둔다 —
+  // 일정한 주기는 기계처럼 느껴진다.
+  setTimeout(blink, 2200 + Math.random() * 3200);
+}
+setTimeout(blink, 1500);
+
+function playPcm(base64, sampleRate) {
+  if (!audioCtx) audioCtx = new AudioContext();
+  const raw = atob(base64);
+  const view = new DataView(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) view.setUint8(i, raw.charCodeAt(i));
+
+  const samples = raw.length / 2;
+  const buffer = audioCtx.createBuffer(1, samples, sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768;
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioCtx.destination);
+  // 조각을 이어 붙여 재생한다. 도착할 때마다 바로 틀면 조각 사이가 벌어져
+  // 말이 끊겨 들린다.
+  playAt = Math.max(playAt, audioCtx.currentTime);
+  source.start(playAt);
+  playAt += buffer.duration;
+}
+
+function scheduleTrack(track) {
+  const lead = audioCtx ? Math.max(0, (playAt - track.duration_ms / 1000) - audioCtx.currentTime) : 0;
+  for (const frame of track.frames) {
+    setTimeout(() => setMouth(frame.viseme), lead * 1000 + frame.at_ms);
+  }
+  frameCount += track.frames.length;
+  if (track.text) $("caption").textContent = track.text;
+  $("meta").textContent = `프레임 ${frameCount} · 조각 ${track.duration_ms}ms`;
+}
+
+$("connect").addEventListener("click", () => {
+  const id = $("session").value.trim();
+  if (!id) return;
+  if (socket) socket.close();
+
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  socket = new WebSocket(`${scheme}://${location.host}/v1/avatar/stream?session_id=${encodeURIComponent(id)}`);
+  socket.addEventListener("open", () => {
+    $("state").textContent = "연결됨";
+    playAt = 0; frameCount = 0;
+  });
+  socket.addEventListener("close", () => { $("state").textContent = "끊김"; $("state").className = "tag"; });
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.kind === "audio" && message.pcm) {
+      playPcm(message.pcm, message.sample_rate);
+    } else if (message.kind === "track") {
+      $("state").textContent = message.state;
+      $("state").className = `tag ${message.state}`;
+      if (message.frames?.length) scheduleTrack(message);
+      else setMouth("sil");
+    }
+  });
+});
+</script>
+</body>
+</html>

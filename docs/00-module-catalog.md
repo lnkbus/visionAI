@@ -236,7 +236,7 @@ Wave 4 (제품화 A):   LLM-SUM + ADM-KB/SCN-STUDIO + UI-AGENT + AUD-RTP   ← A
 Wave 5 (제품화 B):   SPK-DIA + UI-MEET                     ← 회의록 패키지 완성
 Wave 5.5 (품질 운영): LRN-STUDIO + MLO-MODEL               ← 고객사 자립 운영 체계
 Wave 6 (패키징):     CORE-LIC ✅ + CORE-SEC ✅ + CORE-ADM ✅ + 번들 ✅ + Helm ✅ + 릴리스 ✅
-Wave 7 (확장):       TTS-CORE ✅ → BOT-VOICE ✅ → AVA-COUNSEL
+Wave 7 (확장):       TTS-CORE ✅ → BOT-VOICE ✅ → AVA-COUNSEL ✅
 ```
 
 블록 매니페스트(`blocks/*/block.yaml`)가 이 카탈로그의 기계 판독 형태다.

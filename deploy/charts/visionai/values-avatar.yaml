@@ -1,0 +1,42 @@
+# 패키지 D — AI 아바타 상담원 (키오스크·웹 상담)
+#
+#   helm install visionai . -f values-avatar.yaml --set-file license.content=customer.lic
+#
+# 음성봇에 얼굴이 붙는다. 전화(RTP) 대신 브라우저·키오스크가 클라이언트라
+# AUD-RTP를 끄고 CORE-GW의 WebSocket으로 받는다.
+#
+# 아바타 렌더링은 **클라이언트가 한다.** 서버가 영상을 만들면 세션마다 GPU가
+# 필요해 통화 100개에 GPU 100장이 든다.
+
+blocks:
+  core-bus: { enabled: true }
+  core-gw: { enabled: true }
+  core-lic: { enabled: true }
+  core-sec: { enabled: true }
+  core-adm: { enabled: true }
+
+  aud-vad:
+    enabled: true
+    replicas: 3
+    env:
+      VAI_VAD_BARGE_IN: "true"
+  stt-core: { enabled: true, replicas: 3 }
+  flt-micro: { enabled: true, replicas: 3 }
+
+  tts-core: { enabled: true, replicas: 3 }
+  bot-voice: { enabled: true, replicas: 2 }
+  ava-counsel: { enabled: true, replicas: 2 }
+
+  # 봇이 막히면 사람에게 넘긴다.
+  ui-agent: { enabled: true, replicas: 2 }
+  ta-assist: { enabled: true, replicas: 2 }
+  rag-kb: { enabled: true }
+  rag-srch: { enabled: true, replicas: 2 }
+  llm-gw: { enabled: true }
+  llm-sum: { enabled: true }
+  scn-studio: { enabled: true }
+
+  # 전화가 아니라 화면이 클라이언트다.
+  aud-rtp: { enabled: false }
+  spk-dia: { enabled: false }
+  ui-meet: { enabled: false }

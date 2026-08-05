@@ -154,6 +154,10 @@ blocks:
     enabled: true
     port: 8099
     replicas: 2
+  ava-counsel:
+    enabled: true
+    port: 8100
+    replicas: 2
   llm-gw:
     enabled: true
     port: 8085
