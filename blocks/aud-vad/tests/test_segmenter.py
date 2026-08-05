@@ -110,3 +110,121 @@ def test_energy_vad_adapts_to_background_noise() -> None:
 
     loud = tone(60, amplitude=15000)
     assert adapter.is_speech(loud[:frame_bytes], RATE)
+
+
+# ── 잡음 필터 (기본 설정에서 실제로 동작하는가) ─────────────────────────────
+
+
+def test_cough_is_dropped_with_default_settings() -> None:
+    """기본 설정에서 걸러지지 않으면 그 필터는 없는 것과 같다.
+
+    구간 길이로 재면 패딩(200ms)+행오버(400ms) 때문에 50ms 기침도 660ms가
+    되어 통과한다. 그러면 기침 하나가 STT·필터·검색 파이프라인 전체를 태운다.
+    """
+    segmenter = make()  # 기본값 그대로
+
+    segmenter.push(KEY, silence(300))
+    segmenter.push(KEY, tone(50))
+    finals = [s for s in segmenter.push(KEY, silence(800)) if s.is_final]
+
+    assert finals, "구간 자체는 만들어진다"
+    assert not any(segmenter.is_meaningful(s) for s in finals)
+
+
+def test_short_backchannel_survives() -> None:
+    """ "네"는 250ms쯤이다. 잡음을 거르려다 맞장구를 잃으면 음성봇이 답을 못 받는다."""
+    segmenter = make()
+
+    segmenter.push(KEY, silence(300))
+    segmenter.push(KEY, tone(250))
+    finals = [s for s in segmenter.push(KEY, silence(800)) if s.is_final]
+
+    assert any(segmenter.is_meaningful(s) for s in finals)
+
+
+def test_speech_ms_excludes_padding_and_hangover() -> None:
+    segmenter = make()
+
+    segmenter.push(KEY, silence(400))
+    segmenter.push(KEY, tone(600))
+    final = next(s for s in segmenter.push(KEY, silence(800)) if s.is_final)
+
+    assert final.duration_ms > final.speech_ms, "구간에는 패딩·행오버가 붙는다"
+    assert 550 <= final.speech_ms <= 700, f"음성 길이가 실제와 어긋난다: {final.speech_ms}"
+
+
+def test_interim_also_carries_speech_length() -> None:
+    """중간 구간에도 실려야 워커가 같은 기준으로 거를 수 있다."""
+    segmenter = make(interim_interval_ms=300, hangover_ms=400)
+
+    interims = [s for s in segmenter.push(KEY, tone(1200)) if not s.is_final]
+
+    assert interims
+    assert all(s.speech_ms > 0 for s in interims)
+
+
+# ── 경계 동작 ────────────────────────────────────────────────────────────────
+
+
+def test_pause_inside_a_sentence_does_not_split_it() -> None:
+    """문장 중간의 쉼에서 끊기면 STT가 조각난 문장을 받는다."""
+    segmenter = make(hangover_ms=500, interim_interval_ms=10_000)
+
+    segments = segmenter.push(KEY, tone(400) + silence(200) + tone(400))
+
+    assert not [s for s in segments if s.is_final], "행오버 안의 쉼은 발화를 끊지 않는다"
+
+
+def test_speech_continues_after_a_forced_cut() -> None:
+    """상한으로 끊은 뒤에도 말은 이어진다. 그 뒤 오디오를 잃으면 문장이 사라진다."""
+    segmenter = make(max_segment_ms=400, interim_interval_ms=10_000, hangover_ms=300)
+
+    segments = segmenter.push(KEY, tone(1500))
+    finals = [s for s in segments if s.is_final]
+
+    assert len(finals) >= 2, "이어지는 발화가 새 구간으로 계속 잡혀야 한다"
+    assert all(s.speech_ms > 0 for s in finals)
+
+
+def test_state_resets_between_utterances() -> None:
+    """앞 발화의 음성 길이가 다음 발화에 누적되면 잡음 필터가 무력해진다."""
+    segmenter = make(hangover_ms=300, interim_interval_ms=10_000)
+
+    segmenter.push(KEY, tone(800))
+    first = next(s for s in segmenter.push(KEY, silence(500)) if s.is_final)
+    segmenter.push(KEY, tone(50))
+    second = next(s for s in segmenter.push(KEY, silence(500)) if s.is_final)
+
+    assert first.speech_ms > 700
+    assert second.speech_ms < 200, "이전 발화 길이가 새어 들어왔다"
+
+
+def test_flushed_segment_reports_speech_length() -> None:
+    segmenter = make(hangover_ms=1000, interim_interval_ms=10_000)
+    segmenter.push(KEY, tone(500))
+
+    leftover = segmenter.flush(KEY)
+
+    assert leftover is not None
+    assert leftover.speech_ms >= 400
+
+
+def test_is_speaking_tracks_the_live_state() -> None:
+    """끼어들기는 구간 확정을 기다리지 않는다 — 말이 시작된 그 순간을 봐야 한다."""
+    segmenter = make(hangover_ms=300, interim_interval_ms=10_000)
+
+    assert not segmenter.is_speaking(KEY)
+    segmenter.push(KEY, tone(300))
+    assert segmenter.is_speaking(KEY)
+    segmenter.push(KEY, silence(600))
+    assert not segmenter.is_speaking(KEY)
+
+
+def test_dropped_stream_starts_clean() -> None:
+    segmenter = make(hangover_ms=300, interim_interval_ms=10_000)
+    segmenter.push(KEY, tone(400))
+
+    segmenter.drop(KEY)
+
+    assert not segmenter.is_speaking(KEY)
+    assert segmenter.push(KEY, silence(600)) == []

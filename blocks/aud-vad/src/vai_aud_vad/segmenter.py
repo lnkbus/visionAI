@@ -29,7 +29,18 @@ class Segment:
     pcm: bytes
     start_ms: int
     duration_ms: int
+    """구간의 실제 길이(패딩·행오버 포함). 타임라인 정렬은 이 값을 쓴다."""
+
     is_final: bool
+
+    speech_ms: int = 0
+    """이 구간에서 **음성으로 판정된 프레임만** 합친 길이.
+
+    ``duration_ms``와 분리한 이유가 이 블록에서 가장 중요한 구분이다.
+    앞뒤로 패딩(200ms)과 행오버(400ms)가 붙으므로 구간 길이는 실제 발화가
+    50ms여도 660ms가 된다 — 그 값으로 "너무 짧은 잡음"을 거르면 **아무것도
+    걸러지지 않는다.** 기침 하나가 STT·필터·검색 파이프라인 전체를 태운다.
+    """
 
 
 @dataclass
@@ -42,7 +53,12 @@ class SegmenterConfig:
     interim_interval_ms: int = 700
     max_segment_ms: int = 15_000
     min_segment_ms: int = 200
-    """이보다 짧은 발화는 기침·클릭음으로 보고 버린다."""
+    """이보다 짧은 **음성**은 기침·클릭음으로 보고 버린다(구간 길이가 아니라
+    :attr:`Segment.speech_ms` 기준).
+
+    올릴 때는 조심한다. "네", "응" 같은 맞장구가 200~300ms다 — 이 값을 400으로
+    올리면 잡음은 확실히 걸러지지만 음성봇에서 고객의 "네"도 함께 사라진다.
+    """
 
 
 @dataclass
@@ -62,6 +78,9 @@ class _Stream:
     speech_start_ms: float = 0.0
     emitted_ms: float = 0.0
     """이번 발화에서 마지막 interim을 내보낸 시점."""
+
+    speech_ms: float = 0.0
+    """이번 발화에서 음성으로 판정된 프레임의 누적 길이."""
 
     clock_ms: float = 0.0
     """스트림 시작 이후 누적 시간."""
@@ -133,6 +152,7 @@ class SpeechSegmenter:
                 stream.prefix.clear()
             stream.active.extend(frame)
             stream.silence_ms = 0.0
+            stream.speech_ms += stream.frame_ms
 
             elapsed = stream.clock_ms - stream.speech_start_ms
             if elapsed >= cfg.max_segment_ms:
@@ -145,6 +165,7 @@ class SpeechSegmenter:
                         start_ms=int(stream.speech_start_ms),
                         duration_ms=int(elapsed),
                         is_final=False,
+                        speech_ms=int(stream.speech_ms),
                     )
                 )
             return out
@@ -166,10 +187,12 @@ class SpeechSegmenter:
             start_ms=int(stream.speech_start_ms),
             duration_ms=duration_ms,
             is_final=True,
+            speech_ms=int(stream.speech_ms),
         )
         stream.in_speech = False
         stream.active = bytearray()
         stream.silence_ms = 0.0
+        stream.speech_ms = 0.0
         stream.prefix.clear()
         return segment
 
@@ -184,5 +207,10 @@ class SpeechSegmenter:
         self._streams.pop(key, None)
 
     def is_meaningful(self, segment: Segment) -> bool:
-        """너무 짧은 구간을 STT에 보내지 않기 위한 필터."""
-        return segment.duration_ms >= self.config.min_segment_ms
+        """너무 짧은 발화를 STT에 보내지 않기 위한 필터.
+
+        **구간 길이가 아니라 음성 길이로 판정한다.** 구간 길이에는 패딩과
+        행오버가 포함돼 있어, 그 값으로 재면 기본 설정에서 이 필터는 한 건도
+        거르지 못한다(50ms 기침 → 660ms 구간).
+        """
+        return segment.speech_ms >= self.config.min_segment_ms

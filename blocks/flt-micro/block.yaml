@@ -1,7 +1,7 @@
 id: FLT-MICRO
 name: Micro-Filter & 컴플라이언스 엔진
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   sLLM을 거치지 않는 Fast-Path. 정규식과 로컬 NER로 10ms 이내에 개인정보를
   마스킹하고 금융 필수 고지 문구 발화 여부를 검증한다. 이 블록을 지나기 전의
