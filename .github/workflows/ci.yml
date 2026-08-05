@@ -98,15 +98,27 @@ jobs:
         with:
           version: v3.16.3
 
+      - name: kubeconform 설치
+        run: |
+          curl -sSL -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xzf /tmp/kubeconform.tar.gz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/
+
       - name: 차트 검증
+        # helm lint는 "렌더링이 되는가"까지만 본다. 필드 이름을 오타 내도
+        # (livenessProbe → livenessProb) 통과하고, 그 오타는 클러스터가
+        # 매니페스트를 거절할 때에야 드러난다 — 배포 당일이다.
+        # kubeconform이 쿠버네티스 스키마로 그 자리를 막는다.
         run: |
           cd deploy/charts/visionai
           helm lint .
-          # 기본값과 두 패키지 오버레이가 모두 렌더링되는지 확인한다.
-          # 오버레이 하나가 깨지면 그 패키지는 배포 당일에 막힌다.
-          helm template visionai . > /dev/null
-          helm template visionai . -f values-aicc.yaml > /dev/null
-          helm template visionai . -f values-meeting.yaml > /dev/null
+          for overlay in "" "-f values-aicc.yaml" "-f values-meeting.yaml" \
+                         "-f values-voicebot.yaml" "-f values-avatar.yaml"; do
+            echo "▸ ${overlay:-기본값}"
+            helm template visionai . $overlay \
+              | kubeconform -strict -summary -kubernetes-version 1.29.0
+          done
 
 
   images:

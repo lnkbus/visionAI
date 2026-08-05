@@ -1,4 +1,4 @@
-.PHONY: help install lint fmt type test check blocks eval eval-gate freeze freeze-write up down logs demo
+.PHONY: help install lint fmt type test check blocks eval eval-gate chart freeze freeze-write up down logs demo
 
 help:  ## 사용 가능한 타깃
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}'
@@ -32,6 +32,12 @@ eval:  ## 골든셋 평가 (검색·PII·TTS) — 실패 사례까지
 
 eval-gate:  ## 기준선 대비 품질 회귀 판정 (회귀 시 exit 1)
 	uv run evalctl compare --root . -v
+
+chart:  ## Helm 차트 렌더링 + 쿠버네티스 스키마 검증 (kubeconform 필요)
+	@cd deploy/charts/visionai && helm lint . && \
+	for o in "" "-f values-aicc.yaml" "-f values-meeting.yaml" "-f values-voicebot.yaml" "-f values-avatar.yaml"; do \
+		echo "▸ $${o:-기본값}"; helm template visionai . $$o | kubeconform -strict -summary -kubernetes-version 1.29.0; \
+	done
 
 freeze:  ## 패키지 형상 대조 (GS인증·납품 검수). PKG=meeting 지정 가능
 	@for p in $(or $(PKG),meeting aicc voicebot avatar); do uv run blockctl freeze $$p --root .; done
