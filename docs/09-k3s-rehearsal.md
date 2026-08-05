@@ -38,6 +38,22 @@ Apple Silicon은 arm64다. `linux/amd64` 이미지만 있으면 QEMU 에뮬레�
 deploy/airgap/build_bundle.sh --block UI-MEET --arch arm64 --out dist/
 ```
 
+### 검증된 것
+
+arm64 빌드는 **실제로 돌려 확인했다**(QEMU 에뮬레이션, `docker buildx`):
+
+| 블록 | 무엇을 대표하나 | 결과 |
+|---|---|---|
+| `core-bus` | 최소 의존 + 기동 | ✓ 빌드 · **컨테이너 기동 · `/readyz` 응답**(aarch64, Python 3.12.13) |
+| `core-sec` | `cryptography` (Rust 확장) | ✓ 빌드 |
+| `stt-core` | `numpy` | ✓ 빌드 |
+| `rag-srch` | `numpy` + `vai-retrieval` | ✓ 빌드 |
+| `core-adm` | `pyjwt` · `httpx` | ✓ 빌드 |
+
+의존성 해석도 별도로 확인했다 — 필수(`cryptography`·`numpy`·`pydantic-core`·
+`pyyaml`)와 선택(`faster-whisper`·`kiwipiepy`·`qdrant-client`·
+`sentence-transformers`) 모두 aarch64 휠이 있다.
+
 번들에 `ARCH` 파일이 함께 들어가고, `install.sh`가 서버 아키텍처와 대조한다.
 어긋난 번들을 적재하면 컨테이너가 `exec format error`로 죽는데, 그 문구만으로는
 원인을 짚기 어렵고 그때는 이미 이미지를 다 푼 뒤다.
