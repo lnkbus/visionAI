@@ -1,0 +1,37 @@
+# 변경 통제 대상 경로 — 여기 걸리는 변경은 PR을 거쳐야 한다.
+#
+# 나머지는 main 직접 커밋으로 간다. 모든 변경에 PR을 요구하면 규칙이 형식이
+# 되고, 형식이 된 규칙은 정작 중요한 변경에서도 지켜지지 않는다. 그래서
+# 목록을 좁게 유지한다 — 여기 한 줄을 더하는 것은 "이 경로는 diff가 리뷰에
+# 남아야 한다"는 판단이다.
+#
+# 판단 기준 셋:
+#   1) 인증 심사가 변경 통제 근거를 요구하는 것 (형상·구성)
+#   2) 틀리면 되돌리기가 비싼 것 (라이선스·암호·감사)
+#   3) 게이트 자신 (검사를 우회하는 변경이 검사 없이 들어가면 안 된다)
+#
+# 형식: 한 줄에 하나, 깃 pathspec. 빈 줄과 # 주석은 무시된다.
+# tests/test_change_control.py가 이 목록의 유령 항목과 CI 연동을 검사한다.
+
+# ── 1. 형상 (GS인증 §변경 통제) ──────────────────────────────────────────
+deploy/release/packages/
+deploy/release/history.yaml
+blocks/*/block.yaml
+deploy/charts/visionai/templates/
+deploy/charts/visionai/values.yaml
+deploy/charts/visionai/values-*.yaml
+
+# ── 2. 되돌리기가 비싼 것 ────────────────────────────────────────────────
+libs/common/src/vai_common/license.py
+libs/common/src/vai_common/crypto.py
+libs/common/src/vai_common/audit.py
+libs/common/src/vai_common/fingerprint.py
+libs/common/src/vai_common/auth.py
+tools/licgen/
+deploy/release/build_release.sh
+
+# ── 3. 게이트 자신 ───────────────────────────────────────────────────────
+.github/workflows/
+.github/change-control-paths.txt
+pyproject.toml
+.python-version

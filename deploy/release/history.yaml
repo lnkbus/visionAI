@@ -1,0 +1,35 @@
+# 릴리스 시점 이력 — append-only. 지난 항목은 고치지 않는다.
+# 새 시점은 `blockctl snapshot <버전> --write`로 추가하고, 같은 커밋에
+# `git tag v<버전>`을 붙인다. 태그가 없으면 커밋 해시만이 좌표다.
+releases:
+- version: 0.1.0
+  released_at: '2026-08-05'
+  commit: 4e72e95fae21d446fd6c73b9dcf3d50bac52a26b
+  packages:
+    aicc: 946b7043eb70dca439399aba2f9ee06754e1b81b2076841f1e1391ea3f359017
+    avatar: cc25c27796d876d2e9defa44938e69f0d19290e97508f6b6c96058a4b12c8ad9
+    meeting: e8a10974b1b179684ebd3453ddb9cf3c2a356f86484d2587584d1dc94b3c3800
+    voicebot: 1784fa3182db9b54958bdca8a14612e457a28ed472a82474d37302b8e27a07aa
+  blocks:
+    AUD-RTP: 0.2.0
+    AUD-VAD: 0.2.0
+    AVA-COUNSEL: 0.1.0
+    BOT-VOICE: 0.1.0
+    CORE-ADM: 0.1.0
+    CORE-BUS: 0.2.0
+    CORE-GW: 0.2.0
+    CORE-LIC: 0.1.0
+    CORE-SEC: 0.1.0
+    FLT-MICRO: 0.2.0
+    LLM-GW: 0.2.0
+    LLM-SUM: 0.2.0
+    RAG-KB: 0.3.0
+    RAG-SRCH: 0.3.0
+    SCN-STUDIO: 0.2.0
+    SPK-DIA: 0.2.0
+    STT-CORE: 0.2.0
+    TA-ASSIST: 0.2.0
+    TTS-CORE: 0.1.0
+    UI-AGENT: 0.1.0
+    UI-MEET: 0.2.0
+  note: 리뷰 단위 9건 병합 완료 · 파이썬 3.12 단일화 · 전체 게이트 통과
