@@ -8,6 +8,9 @@ dependencies = [
     "pydantic-settings>=2.4",
     "redis>=5.0",
     "fastapi>=0.115",
+    # 오프라인 DRM 서명 검증(RSA-4096/PSS). 모든 블록이 기동 시 .lic을 직접
+    # 검증하므로 공통 라이브러리에 둔다 — 라이선스 서버는 폐쇄망의 단일 장애점이다.
+    "cryptography>=43.0",
 ]
 
 [build-system]

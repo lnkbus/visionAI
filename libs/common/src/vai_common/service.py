@@ -14,7 +14,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from vai_common.license import LicenseGate
+from vai_common.license import LicenseError, LicenseGate, resolve_public_key
 from vai_common.logging import configure_logging
 from vai_common.settings import CommonSettings, get_settings
 
@@ -29,16 +29,35 @@ def create_block_app(
     title: str,
     settings: CommonSettings | None = None,
     lifespan: Lifespan | None = None,
+    license_optional: bool = False,
 ) -> FastAPI:
     """블록용 FastAPI 앱을 만든다.
 
     ``lifespan``으로 블록 고유의 기동/종료 처리를 넘기면 공통 절차 뒤에 실행된다.
+
+    ``license_optional``은 **CORE-LIC 전용**이다. 라이선스를 설치하는 블록이
+    라이선스 없이는 못 뜬다면 신규 구축에서 설치 자체가 불가능하고, 만료·지문
+    불일치로 멈춘 현장에서는 교체 라이선스를 넣을 창구가 사라진다.
+    다른 블록에 붙이면 그 블록은 게이팅에서 빠진다 — 붙이지 않는다.
     """
     cfg = settings or get_settings()
     configure_logging(block_id, cfg.log_level, as_json=cfg.log_json)
 
-    gate = LicenseGate.load(cfg.license_path)
-    gate.require(block_id)  # 미허가면 여기서 기동이 중단된다
+    try:
+        gate = LicenseGate.load(
+            cfg.license_path,
+            public_key_pem=resolve_public_key(cfg.license_public_key_path),
+            verify_fingerprint=cfg.license_verify_fingerprint,
+        )
+        gate.require(block_id)  # 미허가면 여기서 기동이 중단된다
+    except LicenseError:
+        if not license_optional:
+            raise
+        # 설치 창구는 살려 둔다. 이 블록이 할 수 있는 일은 라이선스 설치뿐이므로
+        # 열어 두어도 다른 기능이 게이팅을 우회하지는 않는다.
+        log.warning("유효한 라이선스 없이 기동 — 설치 창구", extra={"block": block_id})
+        gate = LicenseGate({}, None, dev_mode=True)
+
     if gate.dev_mode:
         log.info("개발 모드 기동", extra={"block": block_id})
 
@@ -63,11 +82,17 @@ def create_block_app(
 
     @app.get("/readyz", tags=["ops"])
     async def readyz() -> dict[str, object]:
-        """트래픽 수용 준비 확인 (K8s readiness)."""
+        """트래픽 수용 준비 확인 (K8s readiness).
+
+        만료 잔여일을 함께 실어 CORE-ADM이 블록별로 긁어 갈 수 있게 한다.
+        라이선스 만료는 예고 없이 오면 사고지만, 미리 보이면 그냥 갱신 업무다.
+        """
         return {
             "status": "degraded" if gate.is_expired() else "ready",
             "block": block_id,
             "license_expired": gate.is_expired(),
+            "license_in_grace": gate.in_grace_period(),
+            "license_days_remaining": gate.days_remaining(),
         }
 
     return app

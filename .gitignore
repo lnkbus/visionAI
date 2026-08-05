@@ -10,3 +10,9 @@ build/
 node_modules/
 .env
 *.lic
+
+# 라이선스 발급 자산 — 개인키가 레포에 들어가면 누구나 무제한 라이선스를 만든다.
+# 공개키도 커밋하지 않는다: 릴리스 빌드가 심는 산출물이지 소스가 아니다.
+*.pem
+*.req
+libs/common/src/vai_common/keys/

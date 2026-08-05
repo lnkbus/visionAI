@@ -16,11 +16,18 @@ x-block: &block
   depends_on:
     redis:
       condition: service_healthy
+  # 라이선스는 CORE-LIC이 쓰고 나머지는 읽기만 한다. 읽기 전용으로 붙여
+  # 어떤 블록도 자기 라이선스를 고쳐 쓸 수 없게 한다.
+  volumes:
+    - license-data:/licenses:ro
   environment: &block-env
     VAI_REDIS_URL: redis://redis:6379/0
     VAI_CORE_BUS_URL: http://core-bus:8081
     VAI_LOG_LEVEL: INFO
     VAI_ENVIRONMENT: compose
+    VAI_LICENSE_PATH: /licenses/customer.lic
+    # 공개키가 없으므로 이 구성은 서명 검증을 하지 않는다(개발 경로).
+    # 운영 이미지는 릴리스 빌드가 공개키를 내장한 채로 나간다.
 
 services:
   redis:
@@ -45,6 +52,23 @@ services:
       retries: 20
     volumes:
       - qdrant-data:/qdrant/storage
+
+  core-lic:
+    # 라이선스 설치 창구. 라이선스가 없어도 떠야 하는 유일한 블록이다 —
+    # 설치기가 라이선스를 요구하면 최초 구축에서 아무도 설치할 수 없다.
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: core-lic
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: CORE-LIC
+    volumes:
+      - license-data:/licenses
+    ports:
+      - "8095:8095"
 
   core-bus:
     <<: *block
@@ -133,6 +157,8 @@ services:
       VAI_FLT_RULES_PATH: /etc/visionai/compliance-rules.json
     volumes:
       - ./compliance-rules.json:/etc/visionai/compliance-rules.json:ro
+      # 앵커의 volumes는 덮어써지므로 라이선스 볼륨을 다시 붙인다.
+      - license-data:/licenses:ro
 
   llm-gw:
     <<: *block
@@ -353,3 +379,4 @@ services:
 volumes:
   redis-data:
   qdrant-data:
+  license-data:

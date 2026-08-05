@@ -15,6 +15,7 @@ root_packages =
     vai_retrieval
     vai_core_bus
     vai_core_gw
+    vai_core_lic
     vai_aud_vad
     vai_stt_core
     vai_flt_micro
@@ -29,6 +30,7 @@ root_packages =
     vai_spk_dia
     vai_ui_meet
     blockctl
+    licgen
 
 [importlinter:contract:block-independence]
 name = 블록은 서로를 import 하지 않는다 (공유는 계약/공통 라이브러리로만)
@@ -36,6 +38,7 @@ type = independence
 modules =
     vai_core_bus
     vai_core_gw
+    vai_core_lic
     vai_aud_vad
     vai_stt_core
     vai_flt_micro
@@ -54,7 +57,7 @@ modules =
 name = 계층 방향: 블록 → 검색인프라 → 공통 → 계약 (역방향 금지)
 type = layers
 layers =
-    vai_core_bus | vai_core_gw | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | vai_ui_agent | vai_aud_rtp | vai_spk_dia | vai_ui_meet | blockctl
+    vai_core_bus | vai_core_gw | vai_core_lic | vai_aud_vad | vai_stt_core | vai_flt_micro | vai_llm_gw | vai_rag_kb | vai_rag_srch | vai_ta_assist | vai_llm_sum | vai_scn_studio | vai_ui_agent | vai_aud_rtp | vai_spk_dia | vai_ui_meet | blockctl | licgen
     vai_retrieval
     vai_common
     vai_contracts

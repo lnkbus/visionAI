@@ -35,12 +35,14 @@ ignore = ["B008"]  # FastAPI Depends() in defaults
 # 워크스페이스 패키지를 서드파티로 분류하면 블록 경계가 import 블록에서 안 보인다.
 known-first-party = [
     "blockctl",
+    "licgen",
     "tests",
     "vai_aud_rtp",
     "vai_aud_vad",
     "vai_common",
     "vai_contracts",
     "vai_core_bus",
+    "vai_core_lic",
     "vai_core_gw",
     "vai_flt_micro",
     "vai_llm_gw",

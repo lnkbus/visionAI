@@ -168,24 +168,61 @@ SaaS는 동일 카탈로그를 **요금제 모듈 토글**로 재사용: 패키�
 
 ### 4.4 `.lic` 파일과 카탈로그의 연결
 
+구현된 형식(`licgen`이 발급하고 모든 블록이 검증한다):
+
 ```json
 {
-  "customer_id": "cust_hyundai_001",
-  "hw_fingerprint": "sha256:...",
-  "expires": "2027-12-31",
-  "blocks": {
-    "STT-CORE":  { "channels": 100 },
-    "TA-ASSIST": { "channels": 100 },
-    "FLT-MICRO": { "enabled": true },
-    "LLM-SUM":   { "hours_per_month": 1000 },
-    "UI-AGENT":  { "seats": 100 },
-    "AVA-COUNSEL": { "enabled": false }
-  }
+  "payload": {
+    "format": 1,
+    "customer_id": "cust_hyundai_001",
+    "site": "본사",
+    "issued_on": "2026-08-05",
+    "expires": "2027-12-31",
+    "key_id": "default",
+    "algorithm": "RSA-4096/PSS-SHA256",
+    "fingerprint": {
+      "combined": "9ed402af...",
+      "components": { "gpu": "sha256...", "cpu": "sha256...", "machine": "sha256...", "mac": "sha256..." }
+    },
+    "blocks": {
+      "STT-CORE":    { "enabled": true, "concurrent_channels": 100 },
+      "TA-ASSIST":   { "enabled": true, "concurrent_channels": 100 },
+      "FLT-MICRO":   { "enabled": true },
+      "LLM-SUM":     { "enabled": true, "audio_hours_monthly": 1000 },
+      "UI-AGENT":    { "enabled": true, "seats": 100 },
+      "AVA-COUNSEL": { "enabled": false }
+    }
+  },
+  "signature": "<base64 RSA-4096/PSS-SHA256>",
+  "key_id": "default"
 }
 ```
 
 - 라이선스 = 카탈로그 블록 ID의 부분집합 + 용량. **업셀 = `.lic` 재발급**만으로 완결(재설치 불필요)
-- RSA-4096 서명, 기동 시 메모리 내 복호화, H/W Fingerprint 불일치 시 기동 거부 (상세: [03 문서](03-deployment-onprem-saas.md))
+- `payload`만 서명 대상이다. 정규화 규칙(`sort_keys`, 공백 제거, `ensure_ascii=False`)을
+  발급기와 검증기가 **같은 함수**로 공유한다 — 갈라지면 이미 나간 라이선스가 전부 깨진다
+- **블록별 용량은 `blockctl list`의 청구 단위와 같은 이름을 쓴다.** 견적서 라인 아이템이
+  그대로 라이선스 필드가 되므로 계약과 실행이 어긋나지 않는다
+
+#### 폐쇄망 발급 절차 (구현됨)
+
+```
+① 설치 서버   CORE-LIC  POST /internal/v1/license/request  → acme.req (H/W 지문 해시)
+② USB 반출    acme.req  →  공급사 발급 서버
+③ 발급 서버   licgen issue acme.req --key license_key.pem --expires ... --block ... → acme.lic
+④ USB 반입    acme.lic  →  설치 서버
+⑤ 설치 서버   CORE-LIC  POST /internal/v1/license  → 검증 후 원자적 설치
+```
+
+- **call-home 없음.** 망분리 환경에서 외부 통신 시도 자체가 보안 심사 감점이고 애초에 나가지도 못한다
+- **라이선스 서버 없음.** 모든 블록이 같은 `.lic`을 읽어 각자 검증한다 — 중앙 검증 서버는
+  폐쇄망에서 가장 피해야 할 단일 장애점이다
+- **지문은 N-of-M.** 부품(GPU/CPU/machine-id/MAC)별 해시를 남겨 2개 이상 일치하면 통과한다.
+  NIC 교체 한 번에 서비스가 멈추는 것을 막으면서 다른 서버로의 복제는 거부한다
+- **개인키는 제품에 들어가지 않는다.** 공개키만 릴리스 빌드가 내장하고, 개인키는 발급 서버에만 둔다
+- 만료는 30일 유예 후 차단, **지문 불일치는 유예 없이 즉시 거부**(복제 방지가 DRM의 존재 이유)
+- CORE-LIC만 라이선스 없이 기동한다. 설치기가 라이선스를 요구하면 최초 구축에서
+  아무도 설치할 수 없고, 만료로 멈춘 현장에는 교체 라이선스를 넣을 창구가 사라진다
 
 ## 5. 블록 개발 순서와 의존 관계
 
@@ -198,7 +235,7 @@ Wave 4 (제품화 A):   LLM-SUM + ADM-KB/SCN-STUDIO + UI-AGENT + AUD-RTP   ← A
                       직접 넣어 봐야 도입 판단이 가능하다. 데모용 하드코딩으로는 계약이 안 된다)
 Wave 5 (제품화 B):   SPK-DIA + UI-MEET                     ← 회의록 패키지 완성
 Wave 5.5 (품질 운영): LRN-STUDIO + MLO-MODEL               ← 고객사 자립 운영 체계
-Wave 6 (패키징):     CORE-LIC(정식 DRM) + CORE-SEC + CORE-ADM + 에어갭 번들
+Wave 6 (패키징):     CORE-LIC(정식 DRM) ✅ + CORE-SEC + CORE-ADM + 에어갭 번들
 Wave 7 (확장):       TTS-CORE → BOT-VOICE → AVA-COUNSEL
 ```
 

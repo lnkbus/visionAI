@@ -1,0 +1,18 @@
+id: CORE-LIC
+name: 오프라인 DRM 라이선스
+tier: foundation
+version: 0.1.0
+description: >
+  폐쇄망 라이선스의 발급·설치 창구. 설치 서버의 H/W 지문(GPU UUID·CPU·machine-id·MAC)을
+  수집해 발급요청서를 만들고, 반입한 RSA-4096 서명 .lic을 검증해 설치한다.
+  런타임 게이팅은 이 블록이 하지 않는다 — 각 블록이 같은 .lic을 직접 검증한다.
+  라이선스 서버를 두면 그 서버가 폐쇄망 전체의 단일 장애점이 되기 때문이다.
+depends_on: []
+adapters: []
+contracts:
+  consumes: []
+  produces: []
+billing:
+  capacity_unit: none
+  dev_effort_mm: 1.5
+  included_in_package: true

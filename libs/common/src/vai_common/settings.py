@@ -29,6 +29,16 @@ class CommonSettings(BaseSettings):
     license_path: str | None = None
     """``.lic`` 경로. 미지정 시 개발 모드로 모든 블록을 허용한다."""
 
+    license_public_key_path: str | None = None
+    """서명 검증용 공개키(PEM) 경로. 미지정 시 패키지에 내장된 릴리스 공개키를
+    쓰고, 그것도 없으면 서명 검증 없이 읽는다(개발 경로).
+
+    개인키는 **절대** 이미지에 들어가면 안 된다 — 들어가는 순간 고객사가
+    무제한 라이선스를 스스로 발급할 수 있다."""
+
+    license_verify_fingerprint: bool = True
+    """H/W 지문 검증 여부. 컨테이너 이미지 빌드·CI에서만 끈다."""
+
     core_bus_url: str = "http://localhost:8081"
     """CORE-BUS 내부 API. 블록은 세션 정보를 여기서만 조회한다."""
 
