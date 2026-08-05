@@ -19,13 +19,14 @@ import statistics
 from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, PlainTextResponse
+from pydantic import BaseModel, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common import audit
@@ -46,8 +47,23 @@ from vai_contracts.authoring import (
     RuleTestRequest,
     RuleTestResult,
 )
+from vai_contracts.dialog import Scenario, ScenarioRevision, ScenarioStage
 from vai_contracts.retrieval import SearchRequest, SearchResponse
 from vai_scn_studio.feedback import FeedbackStore, InMemoryFeedbackStore, RedisFeedbackStore
+from vai_scn_studio.lifecycle import (
+    InMemoryScenarioStore,
+    RedisScenarioStore,
+    ScenarioStore,
+    StageError,
+    blank_scenario,
+    check_promotion,
+    clone_flow,
+    export_bundle,
+    import_bundle,
+    intents_from_csv,
+    intents_to_csv,
+    touch_draft,
+)
 from vai_scn_studio.store import (
     AuthoringStore,
     InMemoryAuthoringStore,
@@ -92,6 +108,7 @@ def create_app(
     search_client: httpx.AsyncClient | None = None,
     filter_client: httpx.AsyncClient | None = None,
     configs: ConfigStore | None = None,
+    scenarios: ScenarioStore | None = None,
 ) -> FastAPI:
     common = get_settings()
     cfg = StudioSettings()
@@ -103,6 +120,7 @@ def create_app(
             application.state.store = store
             application.state.feedback = feedback or InMemoryFeedbackStore()
             application.state.configs = configs or InMemoryConfigStore()
+            application.state.scenarios = scenarios or InMemoryScenarioStore()
             application.state.bus = None
         else:
             bus = build_bus(common.redis_url)
@@ -111,10 +129,12 @@ def create_app(
                 application.state.store = RedisAuthoringStore(bus.redis)
                 application.state.feedback = RedisFeedbackStore(bus.redis)
                 application.state.configs = RedisConfigStore(bus.redis)
+                application.state.scenarios = RedisScenarioStore(bus.redis)
             else:
                 application.state.store = InMemoryAuthoringStore()
                 application.state.feedback = InMemoryFeedbackStore()
                 application.state.configs = InMemoryConfigStore()
+                application.state.scenarios = InMemoryScenarioStore()
 
         application.state.search = search_client or httpx.AsyncClient(
             base_url=cfg.search_url.rstrip("/"), timeout=10.0
@@ -314,6 +334,27 @@ def create_app(
             ) from exc
         return response.json()
 
+    async def _put_relay(request: Request, which: str, path: str, payload: Any) -> Any:
+        """배포처럼 **덮어쓰는** 중계. 실패 사유를 그대로 올려 준다 —
+        "배포 실패"만 보이면 저작자가 할 수 있는 일이 없다."""
+        client_: httpx.AsyncClient = getattr(request.app.state, which)
+        try:
+            response = await client_.put(path, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail: Any
+            try:
+                detail = exc.response.json().get("detail", exc.response.text[:200])
+            except ValueError:
+                detail = exc.response.text[:200]
+            raise HTTPException(exc.response.status_code, detail=detail) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{path} 에 연결할 수 없다: {exc}",
+            ) from exc
+        return response.json()
+
     @app.post("/internal/v1/simulate", tags=["authoring"])
     async def simulate(payload: dict[str, Any], request: Request) -> Any:
         """대화 시뮬레이터 — 배포 없이 시나리오 흐름을 확인한다.
@@ -331,6 +372,200 @@ def create_app(
         사전을 고칠 때마다 전체 합성을 돌려야 한다.
         """
         return await _relay(request, "tts", "/internal/v1/tts/preview", payload)
+
+    # ── 시나리오 생애주기 · 반출입 · 학습 도구 ────────────────────────────────
+    #
+    # "고객사가 자체적으로 시나리오를 늘려 간다"를 떠받치는 부분이다. 안내 문구
+    # 한 줄에도 공급사가 나가야 하면 출동 원가가 라이선스 수익을 잠식한다.
+    #
+    # **단계는 한 칸씩만 올라가고, 편집하면 DRAFT로 내려간다.** 지름길을 열면
+    # 결국 모두가 그 길로 다니고, 그러면 검증과 시연은 형식이 된다.
+
+    def _scenarios(request: Request) -> ScenarioStore:
+        store_: ScenarioStore = request.app.state.scenarios
+        return store_
+
+    async def _revision(request: Request, tenant_id: str) -> ScenarioRevision:
+        found = await _scenarios(request).get(tenant_id)
+        if found is None:
+            # 빈 시나리오로 시작한다. 404를 주면 저작 화면이 첫 진입에서
+            # 오류만 보여 주고, 사용자는 무엇을 해야 할지 모른다.
+            return ScenarioRevision(scenario=blank_scenario(tenant_id))
+        return found
+
+    @app.get(
+        "/internal/v1/scenarios/{tenant_id}", response_model=ScenarioRevision, tags=["scenario"]
+    )
+    async def get_scenario(tenant_id: str, request: Request) -> ScenarioRevision:
+        return await _revision(request, tenant_id)
+
+    @app.put(
+        "/internal/v1/scenarios/{tenant_id}", response_model=ScenarioRevision, tags=["scenario"]
+    )
+    async def save_scenario(
+        tenant_id: str, payload: Scenario, request: Request, note: str = "", by: str = ""
+    ) -> ScenarioRevision:
+        """초안 저장. 저장하는 순간 단계는 DRAFT로 돌아간다."""
+        payload.tenant_id = tenant_id
+        payload.published = False
+        revision = await _revision(request, tenant_id)
+        revision.scenario = payload
+        touch_draft(revision, note=note, by=by)
+        await _scenarios(request).put(tenant_id, revision)
+        return revision
+
+    @app.post(
+        "/internal/v1/scenarios/{tenant_id}/promote",
+        response_model=ScenarioRevision,
+        tags=["scenario"],
+    )
+    async def promote_scenario(
+        tenant_id: str, request: Request, stage: ScenarioStage
+    ) -> ScenarioRevision:
+        """다음 단계로 올린다.
+
+        * → BUILT: BOT-VOICE의 **실제 검증기**로 확인한다. 저작 콘솔이 자체
+          검증을 따로 두면 "여기선 통과인데 배포에서 거부"가 생긴다.
+        * → LIVE: BOT-VOICE에 실제로 배포한다. 단계 표시만 바꾸고 배포하지
+          않으면 화면과 현실이 갈라진다 — 그게 이 기능의 가장 나쁜 실패다.
+        """
+        revision = await _revision(request, tenant_id)
+        try:
+            check_promotion(revision.stage, stage)
+        except StageError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+        if stage is ScenarioStage.BUILT:
+            result = await _relay(
+                request,
+                "bot",
+                "/internal/v1/scenarios/validate",
+                revision.scenario.model_dump(mode="json"),
+            )
+            problems = list(result.get("problems", []))
+            revision.problems = problems
+            if problems:
+                await _scenarios(request).put(tenant_id, revision)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail={"message": "검증을 통과하지 못했다", "problems": problems},
+                )
+
+        if stage is ScenarioStage.LIVE:
+            published = await _put_relay(
+                request,
+                "bot",
+                f"/internal/v1/scenarios/{tenant_id}",
+                revision.scenario.model_dump(mode="json"),
+            )
+            revision.scenario = Scenario.model_validate(published)
+            # 배포한 판을 이력에 남긴다. 되돌릴 곳이 없으면 롤백은 말뿐이다.
+            await _scenarios(request).push_history(tenant_id, revision.model_copy(deep=True))
+
+        revision.stage = stage
+        revision.updated_at = datetime.now(UTC)
+        await _scenarios(request).put(tenant_id, revision)
+        return revision
+
+    @app.get(
+        "/internal/v1/scenarios/{tenant_id}/history",
+        response_model=list[ScenarioRevision],
+        tags=["scenario"],
+    )
+    async def scenario_history(tenant_id: str, request: Request) -> list[ScenarioRevision]:
+        return await _scenarios(request).history(tenant_id)
+
+    @app.post(
+        "/internal/v1/scenarios/{tenant_id}/restore",
+        response_model=ScenarioRevision,
+        tags=["scenario"],
+    )
+    async def restore_scenario(tenant_id: str, request: Request, version: int) -> ScenarioRevision:
+        """과거 배포본을 **초안으로** 되살린다.
+
+        곧바로 운영에 올리지 않는다. 되돌리기도 배포이므로 같은 검증을 거쳐야
+        하고, 그 사이에 바뀐 다른 것과 맞는지 확인할 기회가 필요하다.
+        """
+        for item in await _scenarios(request).history(tenant_id):
+            if item.scenario.version == version:
+                revision = await _revision(request, tenant_id)
+                revision.scenario = item.scenario.model_copy(deep=True)
+                touch_draft(revision, note=f"v{version} 복구")
+                await _scenarios(request).put(tenant_id, revision)
+                return revision
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"v{version} 이력이 없다")
+
+    @app.get("/internal/v1/scenarios/{tenant_id}/export", tags=["scenario"])
+    async def export_scenario(tenant_id: str, request: Request) -> dict[str, Any]:
+        """반출. 단계는 싣지 않는다 — 반입본은 언제나 초안에서 시작한다."""
+        return export_bundle(await _revision(request, tenant_id))
+
+    @app.post(
+        "/internal/v1/scenarios/{tenant_id}/import",
+        response_model=ScenarioRevision,
+        tags=["scenario"],
+    )
+    async def import_scenario(
+        tenant_id: str, payload: dict[str, Any], request: Request
+    ) -> ScenarioRevision:
+        try:
+            scenario = import_bundle(payload, tenant_id=tenant_id)
+        except (ValueError, ValidationError) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        revision = await _revision(request, tenant_id)
+        revision.scenario = scenario
+        touch_draft(revision, note="반입")
+        await _scenarios(request).put(tenant_id, revision)
+        return revision
+
+    @app.post(
+        "/internal/v1/scenarios/{tenant_id}/clone-flow",
+        response_model=ScenarioRevision,
+        tags=["scenario"],
+    )
+    async def clone_scenario_flow(
+        tenant_id: str, request: Request, node_ids: list[str], suffix: str = "-copy"
+    ) -> ScenarioRevision:
+        """흐름 복제 — 비슷한 안내를 처음부터 다시 쓰지 않게 한다."""
+        revision = await _revision(request, tenant_id)
+        try:
+            revision.scenario = clone_flow(revision.scenario, node_ids, suffix=suffix)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        touch_draft(revision, note=f"{', '.join(node_ids)} 복제")
+        await _scenarios(request).put(tenant_id, revision)
+        return revision
+
+    @app.get("/internal/v1/scenarios/{tenant_id}/intents.csv", tags=["scenario"])
+    async def export_intents(tenant_id: str, request: Request) -> PlainTextResponse:
+        """학습 도구 — 인텐트를 표로 내린다. 엑셀이 그대로 연다."""
+        revision = await _revision(request, tenant_id)
+        return PlainTextResponse(
+            intents_to_csv(revision.scenario),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "content-disposition": f'attachment; filename="intents-{tenant_id}.csv"',
+            },
+        )
+
+    @app.post(
+        "/internal/v1/scenarios/{tenant_id}/intents.csv",
+        response_model=ScenarioRevision,
+        tags=["scenario"],
+    )
+    async def import_intents(
+        tenant_id: str, payload: dict[str, str], request: Request
+    ) -> ScenarioRevision:
+        """표에서 인텐트를 되받는다. **노드는 새로 만들지 않는다** —
+        오타 하나로 아무 데도 연결되지 않은 노드가 생기는 것을 막는다."""
+        revision = await _revision(request, tenant_id)
+        try:
+            revision.scenario = intents_from_csv(payload.get("csv", ""), scenario=revision.scenario)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        touch_draft(revision, note="인텐트 일괄 반입")
+        await _scenarios(request).put(tenant_id, revision)
+        return revision
 
     @app.post("/internal/v1/feedback", status_code=status.HTTP_202_ACCEPTED, tags=["feedback"])
     async def record_feedback(payload: PopupFeedback, request: Request) -> dict[str, str]:

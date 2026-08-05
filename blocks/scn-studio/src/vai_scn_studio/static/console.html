@@ -75,6 +75,7 @@
     <button data-tab="tuning" aria-selected="false">검색 튜닝</button>
     <button data-tab="eval" aria-selected="false">평가셋</button>
     <button data-tab="feedback" aria-selected="false">팝업 채택률</button>
+    <button data-tab="scenario" aria-selected="false">시나리오</button>
     <button data-tab="sim" aria-selected="false">대화 시뮬레이터</button>
     <button data-tab="tts" aria-selected="false">읽기 미리듣기</button>
   </nav>
@@ -186,6 +187,82 @@
       <div class="row"><button class="act" id="fb-load">새로고침</button></div>
       <div class="msg" id="fb-msg"></div>
       <div id="fb-out"></div>
+    </div>
+  </section>
+
+  <section id="tab-scenario" hidden>
+    <div class="panel">
+      <h2>생애주기 — 초안 → 검증 → 시연 → 운영</h2>
+      <p class="hint">
+        <b>한 칸씩만 올라간다.</b> 편집 직후 운영으로 가는 지름길을 열면 결국 그 길로만 다니게 되고,
+        그러면 검증과 시연은 형식이 된다. 그리고 <b>편집하면 초안으로 내려간다</b> —
+        검증을 통과한 뒤 한 글자만 고쳐도 그것은 더 이상 검증된 물건이 아니다.
+      </p>
+      <div class="row">
+        <div id="scStages" class="hint">—</div>
+        <button class="act" id="scLoad">불러오기</button>
+        <button class="act" id="scPromote">다음 단계로</button>
+      </div>
+      <div class="msg" id="scMsg"></div>
+      <div id="scProblems"></div>
+    </div>
+
+    <div class="panel">
+      <h2>시나리오 (JSON)</h2>
+      <textarea id="scJson" rows="16" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="act" id="scSave">초안 저장</button>
+        <button class="act ghost" id="scExport">반출 (JSON 내려받기)</button>
+        <button class="act ghost" id="scImport">반입</button>
+        <input id="scImportFile" type="file" accept=".json" hidden />
+      </div>
+      <p class="hint">
+        반출본에는 <b>단계가 실리지 않는다</b>. 다른 환경에 들여온 시나리오가 “운영”으로 표시되면
+        검증 없이 배포로 이어진다 — 반입본은 언제나 초안에서 시작한다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>흐름 복제</h2>
+      <div class="row">
+        <div><label for="scCloneNodes">복제할 노드 — 쉼표로 구분</label>
+          <input id="scCloneNodes" placeholder="start, card" /></div>
+        <div style="max-width:160px"><label for="scCloneSuffix">접미사</label>
+          <input id="scCloneSuffix" value="-copy" /></div>
+        <button class="act ghost" id="scClone">복제</button>
+      </div>
+      <p class="hint">
+        복제한 노드들 <b>안쪽으로 향하는 연결만</b> 새 이름으로 바뀐다. 바깥으로 나가는 연결은
+        그대로 두어 복제본이 기존 종료·연결 지점을 공유한다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>학습 도구 — 인텐트 일괄 편집</h2>
+      <div class="row">
+        <button class="act ghost" id="scIntentsDown">표 내려받기 (CSV)</button>
+        <button class="act ghost" id="scIntentsUp">표 올리기</button>
+        <input id="scIntentsFile" type="file" accept=".csv,text/csv" hidden />
+      </div>
+      <p class="hint">
+        엑셀이 그대로 여는 CSV다. <code>.xlsx</code>를 쓰려면 라이브러리가 하나 더 필요하고
+        폐쇄망 반입 목록이 그만큼 길어지는데, 얻는 것은 셀 서식뿐이다.
+        <b>표 편집으로 노드가 새로 생기지는 않는다</b> — 오타 하나로 아무 데도 연결되지 않은
+        노드가 만들어지는 것을 막는다.
+      </p>
+      <p class="hint">
+        운영 콘솔의 <b>재학습 후보</b>에서 내려받은 폴백 발화를 여기 <code>examples</code> 열에
+        <code>|</code> 로 이어 붙이면 그대로 반영된다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>배포 이력</h2>
+      <div id="scHistory"><p class="hint">불러오기를 누르면 표시된다.</p></div>
+      <p class="hint">
+        되돌리기는 <b>초안으로</b> 복구한다. 되돌리는 것도 배포이므로 같은 검증을 거쳐야 하고,
+        그 사이에 바뀐 다른 것과 맞는지 확인할 기회가 필요하다.
+      </p>
     </div>
   </section>
 
@@ -585,6 +662,162 @@ $("ttsRun")?.addEventListener("click", async () => {
   } catch (error) {
     out.innerHTML = `<p class="bad">✗ ${escapeHtml(error.message)}</p>`;
   }
+});
+
+// ── 시나리오 생애주기 · 반출입 · 학습 도구 ───────────────────────────────────
+const STAGES = [
+  ["draft", "초안"], ["built", "검증 통과"], ["staging", "시연 확인"], ["live", "운영"],
+];
+let REVISION = null;
+
+function renderStage() {
+  const current = REVISION?.stage ?? "draft";
+  const index = STAGES.findIndex(([key]) => key === current);
+  $("scStages").innerHTML = STAGES.map(([key, label], i) => {
+    const done = i <= index;
+    return `<span class="tag" style="${done ? "border-color:var(--accent);color:var(--accent)" : ""}">${
+      i + 1}. ${label}</span>`;
+  }).join(" → ");
+  $("scPromote").disabled = current === "live";
+  $("scPromote").textContent = current === "live"
+    ? "운영 중" : `${STAGES[index + 1][1]}(으)로`;
+
+  const problems = REVISION?.problems ?? [];
+  $("scProblems").innerHTML = problems.length
+    ? `<ul class="bad">${problems.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>`
+    : "";
+}
+
+function showRevision(revision) {
+  REVISION = revision;
+  $("scJson").value = JSON.stringify(revision.scenario, null, 2);
+  renderStage();
+}
+
+async function loadScenario() {
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}`));
+    await loadScenarioHistory();
+    say($("scMsg"), `단계 ${REVISION.stage}${REVISION.note ? ` · ${REVISION.note}` : ""}`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+}
+
+async function loadScenarioHistory() {
+  const rows = await api(`/internal/v1/scenarios/${tenant()}/history`);
+  $("scHistory").innerHTML = rows.length ? `
+    <table><thead><tr><th>버전</th><th>시각</th><th>메모</th><th></th></tr></thead><tbody>
+    ${rows.map((r) => `<tr>
+      <td class="mono">v${r.scenario.version}</td>
+      <td class="mono">${new Date(r.updated_at).toLocaleString("ko-KR")}</td>
+      <td>${escapeHtml(r.note || "—")}</td>
+      <td><button class="ghost" data-restore="${r.scenario.version}">되돌리기</button></td>
+    </tr>`).join("")}</tbody></table>`
+    : `<p class="hint">아직 배포한 적이 없다.</p>`;
+  for (const button of $("scHistory").querySelectorAll("[data-restore]")) {
+    button.onclick = () => restoreScenario(button.dataset.restore);
+  }
+}
+
+async function restoreScenario(version) {
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/restore?version=${encodeURIComponent(version)}`,
+      { method: "POST" }));
+    say($("scMsg"), `v${version} 을 초안으로 복구했다 — 검증부터 다시 거친다`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+}
+
+function parseScenario() {
+  try { return JSON.parse($("scJson").value); }
+  catch (error) { throw new Error(`JSON 형식 오류: ${error.message}`); }
+}
+
+$("scLoad").addEventListener("click", loadScenario);
+
+$("scSave").addEventListener("click", async () => {
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}`, {
+      method: "PUT", body: JSON.stringify(parseScenario()),
+    }));
+    say($("scMsg"), "초안 저장됨 — 단계가 초안으로 돌아갔다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scPromote").addEventListener("click", async () => {
+  const index = STAGES.findIndex(([key]) => key === (REVISION?.stage ?? "draft"));
+  const next = STAGES[index + 1]?.[0];
+  if (!next) return;
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/promote?stage=${next}`, { method: "POST" }));
+    await loadScenarioHistory();
+    say($("scMsg"), next === "live" ? "운영에 배포했다" : `${next} 단계로 올렸다`, "ok");
+  } catch (error) {
+    // 검증 실패는 문제 목록까지 보여 줘야 한다 — "실패"만 보이면 할 수 있는 일이 없다.
+    try { showRevision(await api(`/internal/v1/scenarios/${tenant()}`)); } catch { /* 조회 실패는 무시 */ }
+    say($("scMsg"), typeof error.message === "string" ? error.message : "승격 실패", "bad");
+  }
+});
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+$("scExport").addEventListener("click", async () => {
+  try {
+    const bundle = await api(`/internal/v1/scenarios/${tenant()}/export`);
+    download(`scenario-${tenant()}.json`, JSON.stringify(bundle, null, 2), "application/json");
+    say($("scMsg"), "반출했다 — 단계는 실리지 않는다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scImport").addEventListener("click", () => $("scImportFile").click());
+$("scImportFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}/import`, {
+      method: "POST", body: await file.text(),
+    }));
+    say($("scMsg"), "반입했다 — 초안에서 시작한다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+  event.target.value = "";
+});
+
+$("scClone").addEventListener("click", async () => {
+  const nodes = $("scCloneNodes").value.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!nodes.length) { say($("scMsg"), "복제할 노드를 적는다", "bad"); return; }
+  const suffix = encodeURIComponent($("scCloneSuffix").value.trim());
+  try {
+    showRevision(await api(
+      `/internal/v1/scenarios/${tenant()}/clone-flow?suffix=${suffix}`,
+      { method: "POST", body: JSON.stringify(nodes) }));
+    say($("scMsg"), `${nodes.join(", ")} 복제됨`, "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+});
+
+$("scIntentsDown").addEventListener("click", async () => {
+  const response = await fetch(`/internal/v1/scenarios/${tenant()}/intents.csv`);
+  if (!response.ok) { say($("scMsg"), `HTTP ${response.status}`, "bad"); return; }
+  download(`intents-${tenant()}.csv`, await response.text(), "text/csv;charset=utf-8");
+});
+
+$("scIntentsUp").addEventListener("click", () => $("scIntentsFile").click());
+$("scIntentsFile").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showRevision(await api(`/internal/v1/scenarios/${tenant()}/intents.csv`, {
+      method: "POST", body: JSON.stringify({ csv: await file.text() }),
+    }));
+    say($("scMsg"), "인텐트를 반영했다 — 단계는 초안으로 돌아갔다", "ok");
+  } catch (error) { say($("scMsg"), error.message, "bad"); }
+  event.target.value = "";
 });
 
 </script>

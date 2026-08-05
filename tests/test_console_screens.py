@@ -83,6 +83,34 @@ def test_운영_콘솔이_부르는_경로가_전부_존재한다(monkeypatch: p
         assert normalized in matches, f"서버에 없는 경로: {path}"
 
 
+def test_저작_콘솔이_부르는_경로가_전부_존재한다() -> None:
+    from vai_scn_studio.app import create_app
+
+    app = create_app()
+    routes = {re.sub(r"\{[^}]+\}", "{p}", r.path) for r in app.routes if hasattr(r, "path")}
+    html = CONSOLES["SCN-STUDIO"].read_text("utf-8")
+
+    called = set()
+    for raw in re.findall(r'["`](/internal/v1[^"`\s?]*)', html):
+        called.add(re.sub(r"\$\{[^}]+\}", "{p}", raw))
+
+    assert called, "저작 콘솔이 어떤 API도 부르지 않는다 — 정규식이 낡았다"
+    for path in called:
+        assert re.sub(r"\{[^}]+\}", "{p}", path) in routes, f"서버에 없는 경로: {path}"
+
+
+def test_생애주기_단계_이름이_계약과_같다() -> None:
+    """화면이 제 이름을 쓰면 승격 요청이 조용히 422로 떨어진다."""
+    from vai_contracts.dialog import STAGE_ORDER
+
+    html = CONSOLES["SCN-STUDIO"].read_text("utf-8")
+    rendered = re.search(r"const STAGES = \[(.*?)\];", html, re.S)
+
+    assert rendered is not None, "STAGES 정의를 못 찾았다"
+    keys = re.findall(r'\["(\w+)"', rendered.group(1))
+    assert keys == [stage.value for stage in STAGE_ORDER]
+
+
 def test_통계_화면이_평균의_평균을_쓰지_않는다() -> None:
     """일별 평균 칸은 그 날의 합계와 건수로 직접 낸다.
 

@@ -36,6 +36,7 @@
 | [10. 스마트 회의록 데모](docs/10-meeting-demo.md) | 노트북에서 실제 음성으로 — 모델 반입, 기동, 확인, 한계 |
 | [11. 경쟁 제안서 대비 격차](docs/11-competitive-gap.md) | 없는 것을 없다고 적는다 — 제안 대응 리스크 |
 | [12. 엔진 선택과 규모 산정](docs/12-engines-and-scale.md) | STT·화자분리·sLLM 교체, 상담석 → GPU 계산 |
+| [13. 운영 포털과 시나리오 저작](docs/13-portal-and-authoring.md) | 화면 지도, 통계가 세는 것, 시나리오 생애주기 |
 | [04. AI 가상상담원 확장 설계](docs/04-ai-avatar-counselor.md) | 아바타 파이프라인, WebRTC, 단계별 구현 |
 | [05. 데이터·보안·컴플라이언스](docs/05-data-security-compliance.md) | 망분리·KCMVP·개인정보·AI 리스크 통제 |
 | [06. 기술 스택 & MVP 개발 계획](docs/06-tech-stack-mvp.md) | 블록 모노레포 구조, Wave별 개발 계획 — **코딩 착수용** |
