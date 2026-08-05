@@ -66,10 +66,25 @@ class BlockManifest(BaseModel):
     version: str
     description: str = ""
     depends_on: list[str] = Field(default_factory=list)
-    """의존 블록 ID. 순환 의존은 blockctl이 거부한다."""
+    """**기동 의존** 블록 ID. 이것이 없으면 블록이 제 역할을 못 한다.
+    순환 의존은 blockctl이 거부한다."""
+
+    recommends: list[str] = Field(default_factory=list)
+    """**기능 의존** 블록 ID. 없어도 기동하지만 기능 하나가 죽는다.
+
+    UI-AGENT는 TA-ASSIST 없이도 뜬다 — 자막과 컴플라이언스 경고는 나온다.
+    다만 지식 팝업 패널이 영원히 비어 있다. 기동 의존으로 적으면 compose가
+    기동 순서를 잘못 묶고, 안 적으면 번들에서 조용히 빠져 "패널이 죽은 채로"
+    납품된다. 그래서 별도 항목으로 둔다 — 에어갭 번들은 이것까지 담는다."""
 
     adapters: list[str] = Field(default_factory=list)
     """교체 가능한 엔진 어댑터 이름(핫스왑 대상)."""
+
+    infra: list[str] = Field(default_factory=list)
+    """이 블록이 필요로 하는 외부 인프라 이미지(``redis``, ``qdrant`` 등).
+
+    에어갭 번들에 무엇을 함께 반입할지 계산하는 근거다. 손으로 목록을 만들면
+    반드시 하나가 빠지고, 그 사실은 반입 승인이 끝난 고객사 현장에서야 드러난다."""
 
     contracts: Contracts = Field(default_factory=Contracts)
     billing: Billing

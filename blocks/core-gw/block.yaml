@@ -9,6 +9,8 @@ description: >
 depends_on:
   - CORE-BUS
 adapters: []
+infra:
+  - redis
 contracts:
   # UI로의 팬아웃은 스트림 토픽이 아니라 세션별 Pub/Sub 채널로 받는다.
   # 화면이 없으면 버려도 되는 데이터라 내구성이 필요 없고 지연이 더 낮다.

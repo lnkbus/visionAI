@@ -11,6 +11,8 @@ depends_on:
 adapters:
   - energy
   - silero
+infra:
+  - redis
 contracts:
   consumes:
     - audio.in

@@ -12,6 +12,8 @@ depends_on:
   - FLT-MICRO
   - RAG-SRCH
 adapters: []
+infra:
+  - redis
 contracts:
   consumes: []
   produces:

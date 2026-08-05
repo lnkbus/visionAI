@@ -11,6 +11,9 @@ depends_on:
 adapters:
   - hashing
   - sentence_transformers
+infra:
+  - redis
+  - qdrant
 contracts:
   consumes: []
   produces:

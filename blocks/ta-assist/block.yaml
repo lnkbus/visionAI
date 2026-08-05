@@ -12,6 +12,8 @@ depends_on:
   - RAG-SRCH
   - LLM-GW
 adapters: []
+infra:
+  - redis
 contracts:
   consumes:
     - filter.clean

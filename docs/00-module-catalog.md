@@ -235,7 +235,7 @@ Wave 4 (제품화 A):   LLM-SUM + ADM-KB/SCN-STUDIO + UI-AGENT + AUD-RTP   ← A
                       직접 넣어 봐야 도입 판단이 가능하다. 데모용 하드코딩으로는 계약이 안 된다)
 Wave 5 (제품화 B):   SPK-DIA + UI-MEET                     ← 회의록 패키지 완성
 Wave 5.5 (품질 운영): LRN-STUDIO + MLO-MODEL               ← 고객사 자립 운영 체계
-Wave 6 (패키징):     CORE-LIC(정식 DRM) ✅ + CORE-SEC ✅ + CORE-ADM ✅ + 에어갭 번들
+Wave 6 (패키징):     CORE-LIC(정식 DRM) ✅ + CORE-SEC ✅ + CORE-ADM ✅ + 에어갭 번들 ✅
 Wave 7 (확장):       TTS-CORE → BOT-VOICE → AVA-COUNSEL
 ```
 

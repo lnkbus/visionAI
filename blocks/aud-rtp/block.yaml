@@ -10,6 +10,8 @@ description: >
 depends_on:
   - CORE-BUS
 adapters: []
+infra:
+  - redis
 contracts:
   consumes: []
   produces:

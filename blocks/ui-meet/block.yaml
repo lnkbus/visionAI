@@ -11,6 +11,8 @@ depends_on:
   - SPK-DIA
   - LLM-SUM
 adapters: []
+infra:
+  - redis
 contracts:
   consumes:
     - speaker.label

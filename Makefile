@@ -42,3 +42,11 @@ demo:  ## 화면 주소 안내 (up 이후)
 	@echo "상담원 워크스페이스     : http://localhost:8091/workspace"
 	@echo "저작·학습 콘솔          : http://localhost:8090/console"
 	@echo "스마트 회의록           : http://localhost:8094/minutes"
+
+bundle:  ## 에어갭 반입 번들 생성 (LICENSE=customer.lic 또는 BLOCKS="A B")
+	@deploy/airgap/build_bundle.sh $(if $(LICENSE),--license $(LICENSE),) \
+		$(foreach b,$(BLOCKS),--block $(b)) --out dist/
+
+bundle-plan:  ## 반입 계획만 계산 (docker 없이 확인)
+	uv run blockctl bundle-plan $(if $(LICENSE),--license $(LICENSE),) \
+		$(foreach b,$(BLOCKS),--block $(b))

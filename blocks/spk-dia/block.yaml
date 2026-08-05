@@ -13,6 +13,8 @@ depends_on:
 adapters:
   - spectral
   - speechbrain
+infra:
+  - redis
 contracts:
   consumes:
     - audio.segment

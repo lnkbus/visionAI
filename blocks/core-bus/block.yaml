@@ -7,6 +7,8 @@ description: >
   Dual-Profile(AICC/MEETING) 컨텍스트가 여기서 결정되어 파이프라인 전체로 전파된다.
 depends_on: []
 adapters: []
+infra:
+  - redis
 contracts:
   consumes: []
   produces:

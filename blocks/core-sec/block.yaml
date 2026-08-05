@@ -13,6 +13,8 @@ depends_on:
 adapters:
   - aes-gcm
   - kcmvp
+infra:
+  - redis
 contracts:
   consumes:
     - audit.log

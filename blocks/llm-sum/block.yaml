@@ -11,6 +11,8 @@ depends_on:
   - FLT-MICRO
   - LLM-GW
 adapters: []
+infra:
+  - redis
 contracts:
   consumes:
     - filter.clean

@@ -12,6 +12,8 @@ depends_on:
 adapters:
   - fake
   - faster_whisper
+infra:
+  - redis
 contracts:
   consumes:
     - audio.segment

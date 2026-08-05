@@ -11,6 +11,8 @@ depends_on:
   - STT-CORE
 adapters:
   - regex
+infra:
+  - redis
 contracts:
   consumes:
     - stt.delta
