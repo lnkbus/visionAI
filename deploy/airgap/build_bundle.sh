@@ -77,6 +77,8 @@ docker save "${IMAGES[@]}" -o "$STAGE/images.tar"
 
 echo "▸ 설치 자산 복사"
 cp "$REPO_ROOT/deploy/airgap/install.sh" "$REPO_ROOT/deploy/airgap/selftest.sh" "$STAGE/"
+# 설치 마법사. 표준 라이브러리만 쓰므로 반입 대상이 늘지 않는다.
+cp -r "$REPO_ROOT/deploy/airgap/installer" "$STAGE/"
 cp "$REPO_ROOT/deploy/compose/docker-compose.yml" "$STAGE/"
 cp "$REPO_ROOT/deploy/compose/compliance-rules.json" "$STAGE/" 2>/dev/null || true
 chmod +x "$STAGE/install.sh" "$STAGE/selftest.sh"
@@ -95,5 +97,6 @@ sha256sum "$OUT_DIR/visionai-$TAG.tar.gz" > "$OUT_DIR/visionai-$TAG.tar.gz.sha25
 echo
 echo "✓ 번들: $OUT_DIR/visionai-$TAG.tar.gz ($(du -h "$OUT_DIR/visionai-$TAG.tar.gz" | cut -f1))"
 echo "  블록 ${#PLAN_BLOCKS[@]}개 / 이미지 ${#IMAGES[@]}개"
+echo "  설치: sudo ./install.sh  또는  ./install.sh --gui (브라우저 마법사)"
 echo "  반출 시 .sha256 파일을 **별도 경로**로 전달한다 — 같은 매체에 두면"
 echo "  매체가 바꿔치기될 때 체크섬도 함께 바뀐다."

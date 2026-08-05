@@ -5,28 +5,55 @@
 # 그래서 순서를 고정한다: 사전 점검 → 무결성 대조 → 적재 → 기동 → 자가진단.
 # 앞 단계가 실패하면 뒤 단계를 시작하지 않는다.
 #
-#   sudo ./install.sh                # 설치
+#   sudo ./install.sh                # 설치 (전체)
+#   ./install.sh --gui               # 브라우저 설치 마법사
 #   ./install.sh --dry-run           # 반입 전 점검만 (docker 조작 없음)
+#   sudo ./install.sh --blocks "STT-CORE TA-ASSIST"   # 일부만 기동
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=0
 DATA_DIR="/var/lib/visionai"
+BLOCKS=""
+GUI=0
+GUI_PORT=8099
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
-    -h|--help) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --blocks) BLOCKS="$2"; shift 2 ;;
+    --gui) GUI=1; shift ;;
+    --gui-port) GUI_PORT="$2"; shift 2 ;;
+    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "알 수 없는 옵션: $1" >&2; exit 1 ;;
   esac
 done
 
-fail() { echo "  ✗ $*" >&2; FAILED=1; }
-ok()   { echo "  ✓ $*"; }
+# ── 설치 마법사 ─────────────────────────────────────────────────────────────
+# 화면은 이 스크립트를 대체하지 않고 **몰아준다**. 설치 단계를 두 번 구현하면
+# 둘이 갈라지고, 갈라진 사실은 현장에서 한쪽만 실패할 때 드러난다.
+if [[ "$GUI" -eq 1 ]]; then
+  PY="$(command -v python3 || true)"
+  if [[ -z "$PY" ]]; then
+    echo "✗ python3 가 없다 — 화면 없이 설치한다: sudo ./install.sh" >&2
+    exit 1
+  fi
+  exec "$PY" "$HERE/installer/server.py" --bundle "$HERE" --port "$GUI_PORT"
+fi
+
+# 진행 상황을 기계가 읽을 수 있게 함께 내보낸다. VAI_PROGRESS=1 일 때만 나오므로
+# 사람이 보는 출력은 그대로다. 화면이 산문을 파싱하게 두면 문구를 고칠 때마다
+# 화면이 조용히 깨진다.
+mark() { [[ "${VAI_PROGRESS:-0}" == "1" ]] && echo "@@$1|$2" || true; }
+
+fail() { echo "  ✗ $*" >&2; mark FAIL "$*"; FAILED=1; }
+ok()   { echo "  ✓ $*"; mark OK "$*"; }
+step() { echo; echo "── $1/5 $2"; mark STEP "$1|5|$2"; }
+
 FAILED=0
 
-echo "── 1/5 사전 점검"
+step 1 "사전 점검"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   command -v docker >/dev/null 2>&1 && ok "docker $(docker --version | awk '{print $3}' | tr -d ,)" \
@@ -79,8 +106,7 @@ for name in plan.json docker-compose.yml selftest.sh SHA256SUMS; do
   [[ -f "$HERE/$name" ]] && ok "$name" || fail "$name 이 없다"
 done
 
-echo
-echo "── 2/5 무결성 대조"
+step 2 "무결성 대조"
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 대조 없이 적재하면 반쯤 깨진
 # 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
 if [[ -f "$HERE/SHA256SUMS" ]]; then
@@ -94,28 +120,37 @@ fi
 if [[ "$FAILED" -ne 0 ]]; then
   echo
   echo "✗ 사전 점검 실패 — 설치를 진행하지 않는다." >&2
+  mark ABORT "사전 점검 실패"
   exit 1
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo
   echo "✓ 점검 통과 (dry-run — 적재·기동은 하지 않았다)"
+  mark DONE "점검 통과"
   exit 0
 fi
 
-echo
-echo "── 3/5 이미지 적재"
+step 3 "이미지 적재"
 docker load -i "$HERE/images.tar"
 
-echo
-echo "── 4/5 기동"
+step 4 "기동"
 mkdir -p "$DATA_DIR/audit" "$DATA_DIR/licenses"
 chmod 700 "$DATA_DIR/audit"
-(cd "$HERE" && docker compose -f docker-compose.yml up -d)
+if [[ -n "$BLOCKS" ]]; then
+  # 블록 ID(STT-CORE)와 compose 서비스 이름(stt-core)은 대소문자만 다르다.
+  # 인프라(redis·qdrant)와 의존 블록은 compose의 depends_on이 함께 올린다.
+  SERVICES=()
+  for b in $BLOCKS; do SERVICES+=("$(echo "$b" | tr '[:upper:]' '[:lower:]')"); done
+  ok "선택 기동: ${SERVICES[*]}"
+  (cd "$HERE" && docker compose -f docker-compose.yml up -d "${SERVICES[@]}")
+else
+  (cd "$HERE" && docker compose -f docker-compose.yml up -d)
+fi
 
-echo
-echo "── 5/5 자가진단"
+step 5 "자가진단"
 "$HERE/selftest.sh"
+mark DONE "설치 완료"
 
 cat <<'NEXT'
 

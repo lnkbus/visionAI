@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisionAI 설치</title>
+<style>
+  :root {
+    --bg:#0f1216; --panel:#171b21; --line:#262c35; --fg:#e6e9ee; --dim:#98a2b3;
+    --ok:#3fb950; --bad:#f85149; --warn:#d29922; --accent:#4c8dff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --panel:#fff; --line:#e2e5ea; --fg:#1c2128; --dim:#5b6472; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system,
+         "Segoe UI", "Noto Sans KR", sans-serif; }
+  .wrap { max-width:880px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:24px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:20px; margin-bottom:16px; }
+  .panel h2 { font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+  .num { display:inline-flex; width:22px; height:22px; border-radius:50%; background:var(--line);
+         color:var(--dim); font-size:12px; align-items:center; justify-content:center; }
+  .panel.active .num { background:var(--accent); color:#fff; }
+  .panel.done .num { background:var(--ok); color:#fff; }
+  .blocks { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px; }
+  label.b { display:flex; gap:9px; align-items:flex-start; padding:9px 11px; border:1px solid var(--line);
+            border-radius:7px; cursor:pointer; }
+  label.b:hover { border-color:var(--accent); }
+  label.b.req { opacity:.75; cursor:not-allowed; }
+  label.b .id { font-family:ui-monospace,monospace; font-size:12px; color:var(--dim); }
+  label.b .nm { font-size:13.5px; }
+  .tag { font-size:10.5px; color:var(--warn); border:1px solid var(--warn); border-radius:4px;
+         padding:0 4px; margin-left:6px; white-space:nowrap; }
+  button { font:inherit; padding:9px 18px; border-radius:7px; border:1px solid var(--accent);
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+  .bar { height:7px; background:var(--line); border-radius:4px; overflow:hidden; margin:6px 0 14px; }
+  .bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .35s; }
+  .steps { display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+  .st { display:flex; gap:9px; align-items:center; font-size:13.5px; color:var(--dim); }
+  .st.now { color:var(--fg); font-weight:600; }
+  .st.done { color:var(--ok); }
+  .st.bad { color:var(--bad); }
+  .items { font-size:12.5px; margin:0 0 10px 28px; color:var(--dim); }
+  .items .bad { color:var(--bad); }
+  .items .ok { color:var(--ok); }
+  pre.log { background:#0b0e12; color:#c9d1d9; border:1px solid var(--line); border-radius:7px;
+            padding:12px; font:12px/1.55 ui-monospace,monospace; max-height:320px; overflow:auto;
+            white-space:pre-wrap; word-break:break-all; margin:0; }
+  .cmd { font-family:ui-monospace,monospace; font-size:12px; color:var(--dim);
+         background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 10px;
+         margin-bottom:12px; overflow-x:auto; white-space:nowrap; }
+  .hide { display:none; }
+  .note { font-size:12.5px; color:var(--dim); margin-top:10px; }
+  .err { color:var(--bad); }
+  .next { font-size:13.5px; }
+  .next code { background:var(--bg); border:1px solid var(--line); border-radius:4px;
+               padding:1px 5px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>VisionAI 설치</h1>
+  <div class="sub" id="sub">번들을 읽는 중…</div>
+
+  <!-- 1. 무엇이 들어 있나 -->
+  <div class="panel active" id="p1">
+    <h2><span class="num">1</span> 반입 번들</h2>
+    <div id="bundle">읽는 중…</div>
+  </div>
+
+  <!-- 2. 무엇을 기동할까 -->
+  <div class="panel" id="p2">
+    <h2><span class="num">2</span> 기동할 블록</h2>
+    <p class="note" style="margin-top:0">
+      번들에 담긴 블록만 고를 수 있다. 의존으로 끌려온 블록은 끄면 켠 블록이 못 돌아 잠겨 있다.
+      단계적 도입이라면 지금 안 쓰는 블록을 꺼 두고 나중에 다시 설치하면 된다.
+    </p>
+    <div class="blocks" id="blocks"></div>
+    <div class="row">
+      <button class="ghost" id="all">전부 선택</button>
+      <button class="ghost" id="none">선택 해제</button>
+      <span class="note" id="count"></span>
+    </div>
+  </div>
+
+  <!-- 3. 점검하고 설치 -->
+  <div class="panel" id="p3">
+    <h2><span class="num">3</span> 점검 · 설치</h2>
+    <div class="row" style="margin-top:0">
+      <button class="ghost" id="check">사전 점검만 (docker 조작 없음)</button>
+      <button id="go">설치</button>
+    </div>
+    <p class="note">
+      사전 점검은 디스크 여유 · 포트 충돌 · 번들 무결성을 본다. 점검이 실패하면 설치는 시작하지 않는다.
+    </p>
+  </div>
+
+  <!-- 4. 진행 -->
+  <div class="panel hide" id="p4">
+    <h2><span class="num">4</span> 진행</h2>
+    <div class="cmd" id="cmd"></div>
+    <div class="bar"><i id="fill"></i></div>
+    <div class="steps" id="steps"></div>
+    <pre class="log" id="log"></pre>
+  </div>
+
+  <!-- 5. 다음 -->
+  <div class="panel hide" id="p5">
+    <h2><span class="num">5</span> 다음 단계</h2>
+    <div class="next" id="next"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STEPS = ["사전 점검", "무결성 대조", "이미지 적재", "기동", "자가진단"];
+let BUNDLE = null;
+let running = false;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// ── 1·2. 번들 읽기 ────────────────────────────────────────────────────────
+async function loadBundle() {
+  let data;
+  try {
+    const res = await fetch("/api/bundle");
+    data = await res.json();
+    if (data.error) throw new Error(data.error);
+  } catch (e) {
+    $("sub").innerHTML = '<span class="err">번들을 읽을 수 없다: ' + esc(e.message) + "</span>";
+    $("bundle").innerHTML = '<span class="err">plan.json 이 없거나 손상됐다. 번들이 온전하지 않다.</span>';
+    return;
+  }
+  BUNDLE = data;
+  $("sub").textContent = "버전 " + data.version + " · 폐쇄망 반입 번들";
+
+  const warn = (data.warnings || []).length
+    ? '<p class="note" style="color:var(--warn)">⚠ ' + data.warnings.map(esc).join("<br>⚠ ") + "</p>"
+    : "";
+  $("bundle").innerHTML =
+    '<div class="note" style="margin-top:0">버전 <b style="color:var(--fg)">' + esc(data.version) + "</b>" +
+    " · 블록 <b style=\"color:var(--fg)\">" + data.blocks.length + "개</b>" +
+    " · 이미지 <b style=\"color:var(--fg)\">" + data.image_count + "개</b>" +
+    (data.images_mb ? " (" + data.images_mb + " MB)" : "") +
+    (data.infra.length ? " · 인프라 " + data.infra.map(esc).join(", ") : "") +
+    "</div>" + warn;
+  $("p1").classList.add("done");
+
+  $("blocks").innerHTML = data.blocks.map((b) =>
+    '<label class="b' + (b.required ? " req" : "") + '">' +
+      '<input type="checkbox" value="' + esc(b.id) + '" checked' + (b.required ? " disabled" : "") + ">" +
+      "<span><span class=\"nm\">" + esc(b.name) + "</span>" +
+        (b.required ? '<span class="tag">의존</span>' : "") +
+        '<br><span class="id">' + esc(b.id) + "</span></span>" +
+    "</label>"
+  ).join("");
+  $("blocks").addEventListener("change", updateCount);
+  updateCount();
+}
+
+function selected() {
+  return [...document.querySelectorAll('#blocks input[type=checkbox]')]
+    .filter((c) => c.checked || c.disabled).map((c) => c.value);
+}
+
+function updateCount() {
+  const n = selected().length;
+  $("count").textContent = n + " / " + (BUNDLE ? BUNDLE.blocks.length : 0) + "개 기동";
+  $("go").disabled = n === 0 || running;
+  $("p2").classList.toggle("done", n > 0);
+}
+
+$("all").onclick = () => {
+  document.querySelectorAll("#blocks input").forEach((c) => { if (!c.disabled) c.checked = true; });
+  updateCount();
+};
+$("none").onclick = () => {
+  document.querySelectorAll("#blocks input").forEach((c) => { if (!c.disabled) c.checked = false; });
+  updateCount();
+};
+
+// ── 3·4. 실행 ─────────────────────────────────────────────────────────────
+// skipFrom 이후 단계는 "돌지 않았다"고 말한다. 돌지 않은 단계를 ✓로 칠하면
+// dry-run 결과가 설치 완료처럼 보인다 — 화면이 거짓말을 하는 쪽이 더 위험하다.
+function renderSteps(current, failedAt, skipFrom) {
+  $("steps").innerHTML = STEPS.map((name, i) => {
+    const n = i + 1;
+    const skipped = skipFrom && n >= skipFrom;
+    let cls = "st", icon = "·", suffix = "";
+    if (failedAt === n) { cls += " bad"; icon = "✗"; }
+    else if (skipped) { icon = "—"; suffix = ' <span style="opacity:.7">건너뜀 — 점검만 했다</span>'; }
+    else if (current > n) { cls += " done"; icon = "✓"; }
+    else if (current === n) { cls += " now"; icon = "▸"; }
+    return '<div class="' + cls + '"><span>' + icon + "</span><span>" + n + "/5 " + name + suffix +
+           "</span></div><div class=\"items\" id=\"items-" + n + '"></div>';
+  }).join("");
+}
+
+function run(dryRun) {
+  if (running) return;
+  running = true;
+  $("go").disabled = $("check").disabled = true;
+  $("p3").classList.add("done");
+  $("p4").classList.remove("hide");
+  $("p5").classList.add("hide");
+  $("log").textContent = "";
+  $("fill").style.width = "0";
+  renderSteps(0, 0, 0);
+  $("p4").scrollIntoView({ behavior: "smooth", block: "start" });
+
+  let step = 0;
+  let aborted = false;
+  let stopped = 0;   // 실제로 어디까지 돌았나 — DONE 표시가 알려 준다
+
+  fetch("/api/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ dry_run: dryRun, blocks: selected() }),
+  }).then((res) => {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    function pump() {
+      return reader.read().then(({ done, value }) => {
+        if (done) return finish();
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop();
+        for (const part of parts) {
+          const line = part.replace(/^data: /, "");
+          if (!line) continue;
+          let ev;
+          try { ev = JSON.parse(line); } catch { continue; }
+          handle(ev);
+        }
+        return pump();
+      });
+    }
+    function handle(ev) {
+      if (ev.kind === "CMD") { $("cmd").textContent = "$ " + ev.message; return; }
+      if (ev.kind === "STEP") {
+        step = ev.index;
+        renderStepsKeepItems(step, 0);
+        $("fill").style.width = Math.round(((step - 1) / ev.total) * 100) + "%";
+        return;
+      }
+      if (ev.kind === "OK" || ev.kind === "FAIL") {
+        const box = $("items-" + (step || 1));
+        if (box) {
+          const cls = ev.kind === "FAIL" ? "bad" : "ok";
+          const icon = ev.kind === "FAIL" ? "✗" : "✓";
+          box.insertAdjacentHTML("beforeend",
+            '<div class="' + cls + '">' + icon + " " + esc(ev.message) + "</div>");
+        }
+        if (ev.kind === "FAIL") renderStepsKeepItems(step, step);
+        return;
+      }
+      if (ev.kind === "DONE") { stopped = step; return; }
+      if (ev.kind === "ABORT") {
+        aborted = true;
+        renderStepsKeepItems(step, step || 1);
+        appendLog("\n✗ " + ev.message);
+        return;
+      }
+      if (ev.kind === "LOG") { appendLog(ev.message); return; }
+      if (ev.kind === "EOF") { finish(); }
+    }
+    function finish() {
+      running = false;
+      $("go").disabled = $("check").disabled = false;
+      updateCount();
+      if (aborted) return;
+      // 마지막으로 들어간 단계까지만 완료로 친다. dry-run은 2단계에서 멈춘다.
+      const reached = stopped || step;
+      const skipFrom = reached < STEPS.length ? reached + 1 : 0;
+      $("fill").style.width = Math.round((reached / STEPS.length) * 100) + "%";
+      renderStepsKeepItems(reached + 1, 0, skipFrom);
+      $("p4").classList.add("done");
+      showNext(dryRun);
+    }
+    return pump();
+  }).catch((e) => {
+    running = false;
+    $("go").disabled = $("check").disabled = false;
+    appendLog("\n✗ 설치 요청이 끊겼다: " + e.message);
+  });
+}
+
+// 단계 표시를 다시 그리되 이미 쌓인 항목은 살린다.
+function renderStepsKeepItems(current, failedAt, skipFrom) {
+  const kept = {};
+  document.querySelectorAll('[id^="items-"]').forEach((el) => { kept[el.id] = el.innerHTML; });
+  renderSteps(current, failedAt, skipFrom);
+  Object.entries(kept).forEach(([id, html]) => { const el = $(id); if (el) el.innerHTML = html; });
+}
+
+function appendLog(line) {
+  const el = $("log");
+  el.textContent += (el.textContent ? "\n" : "") + line;
+  el.scrollTop = el.scrollHeight;
+}
+
+function showNext(dryRun) {
+  $("p5").classList.remove("hide");
+  if (dryRun) {
+    $("next").innerHTML =
+      "점검을 통과했다. 적재·기동은 하지 않았다.<br><br>" +
+      "위에서 <b>설치</b>를 눌러 진행한다.";
+    return;
+  }
+  $("next").innerHTML =
+    "설치가 끝났다. <b>라이선스는 아직 설치되지 않았다</b> — 아래 순서로 진행한다.<br><br>" +
+    "1) 이 서버의 발급요청서 생성<br>" +
+    "<code>curl -sS -X POST localhost:8095/internal/v1/license/request " +
+    "-H 'content-type: application/json' " +
+    "-d '{\"customer_id\":\"&lt;고객사&gt;\",\"site\":\"&lt;사이트&gt;\"}' -o license.req</code><br><br>" +
+    "2) <code>license.req</code> 를 반출해 공급사에 전달<br><br>" +
+    "3) 받은 <code>.lic</code> 을 반입해 설치<br><br>" +
+    "4) 운영 콘솔에서 확인 — <code>http://&lt;서버&gt;:8097/console</code>";
+  $("p5").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+$("check").onclick = () => run(true);
+$("go").onclick = () => run(false);
+loadBundle();
+</script>
+</body>
+</html>
