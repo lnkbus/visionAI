@@ -345,5 +345,58 @@ def history_cmd(root: Path = typer.Option(None, help="레포 루트")) -> None:
     typer.secho(f"✓ 시점 {len(entries)}건 무결성 통과", fg=typer.colors.GREEN)
 
 
+@app.command()
+def capacity(
+    seats: int = typer.Argument(..., help="상담석 수"),
+    concurrency: float = typer.Option(0.75, help="동시 통화율(피크 기준)"),
+    stt: str = typer.Option("stt-small-gpu", help="STT 프로파일"),
+    tts: bool = typer.Option(False, "--tts", help="음성봇(TTS)을 포함해 계산"),
+    no_diarization: bool = typer.Option(False, "--no-diarization", help="화자분리 제외"),
+    json_out: bool = typer.Option(False, "--json", help="JSON 출력"),
+) -> None:
+    """상담석 수에서 동시 채널과 GPU를 계산한다 (견적·라이선스).
+
+    **상담석 하나가 채널 하나가 아니다.** 상담사와 고객이 동시에 말하므로
+    2채널이 필요하다. 1,000석 = 2,000채널이며, 1,000으로 잡으면 도입 직후
+    절반이 인식되지 않는다.
+    """
+    from blockctl.capacity import CHANNELS_PER_SEAT, PROFILES, plan_capacity
+
+    try:
+        result = plan_capacity(
+            seats,
+            concurrency=concurrency,
+            stt_profile=stt,
+            with_tts=tts,
+            with_diarization=not no_diarization,
+        )
+    except ValueError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    if json_out:
+        typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return
+
+    typer.secho(f"\n상담석 {result.seats:,}석", bold=True)
+    typer.echo(
+        f"  x {CHANNELS_PER_SEAT}채널(상담사+고객) x 동시 {result.concurrency:.0%} "
+        f"= **동시 {result.channels:,}채널**"
+    )
+    typer.echo()
+    width = max(len(r.engine) for r in result.requirements)
+    for requirement in result.requirements:
+        typer.echo(
+            f"  {requirement.engine:<{width}}  {requirement.channels:>6,}채널  "
+            f"GPU {requirement.gpus:>3}장   {requirement.note}"
+        )
+    typer.echo()
+    typer.echo(f"  라이선스 동시 채널: {result.channels:,}")
+    for warning in result.warnings:
+        typer.secho(f"  ⚠ {warning}", fg=typer.colors.YELLOW)
+    typer.echo()
+    typer.echo(f"  프로파일: {', '.join(sorted(PROFILES))}")
+
+
 if __name__ == "__main__":
     app()

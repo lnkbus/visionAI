@@ -406,9 +406,21 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: spk-dia
+        # 신경망 임베더(ECAPA-TDNN). 비우면 spectral 만 쓸 수 있고, 그건
+        # **음역이 뚜렷이 다른 화자만** 가른다 — 회의록에서는 그게 흔한 상황이
+        # 아니다. torch 가 딸려 와 이미지가 커지므로 끄고 싶으면 VAI_SPK_EXTRAS= .
+        EXTRAS: ${VAI_SPK_EXTRAS-neural}
+    volumes:
+      - license-data:/licenses:ro
+      # 임베더 가중치. `fetch_models.sh --spk` 로 먼저 받는다.
+      - ${VAI_MODEL_DIR:-../../models}:/models:ro
     environment:
       <<: *block-env
       VAI_BLOCK_ID: SPK-DIA
+      # 기본값이 신경망 임베더다. spectral 로 내리려면 명시한다.
+      VAI_SPK_EMBEDDER: ${VAI_SPK_EMBEDDER:-speechbrain}
+      VAI_SPK_EMBEDDER_MODEL: ${VAI_SPK_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
+      VAI_SPK_EMBEDDER_CONFIG: '{"device":"cpu"}'
       VAI_CONSUMER_GROUP: dia
       VAI_CONSUMER_NAME: dia-1
       # 운영에서는 신경망 임베더로 바꾼다. spectral은 음역이 뚜렷이 다른
