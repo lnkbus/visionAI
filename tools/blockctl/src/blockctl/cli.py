@@ -9,6 +9,7 @@ import typer
 
 from blockctl.bundle import licensed_blocks, plan
 from blockctl.catalog import CatalogError, load_catalog, validate
+from blockctl.release import Severity, blocking, embed_public_key, verify_release
 
 app = typer.Typer(help="VisionAI 블록 카탈로그 도구", no_args_is_help=True)
 
@@ -112,6 +113,44 @@ def bundle_plan(
         typer.echo(f"  {image}")
     for warning in result.warnings:
         typer.secho(f"  ! {warning}", fg=typer.colors.YELLOW)
+
+
+@app.command("embed-key")
+def embed_key(
+    public_key: Path = typer.Option(..., "--public-key", help="발급 키쌍의 **공개**키 PEM"),
+    root: Path = typer.Option(None, help="릴리스 트리 (기본: 현재 디렉토리)"),
+) -> None:
+    """공개키를 릴리스 트리에 심는다 — 이 단계를 거쳐야 서명 검증이 켜진다.
+
+    개발 체크아웃과 릴리스 빌드의 차이는 딱 이것 하나다. 빠지면 서명 검증이
+    꺼진 채로 나가고, 그 상태는 겉으로 완전히 정상으로 보인다.
+    """
+    base = root or Path.cwd()
+    try:
+        target = embed_public_key(base, public_key)
+    except (OSError, ValueError) as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    typer.secho(f"✓ 공개키 내장: {target.relative_to(base)}", fg=typer.colors.GREEN)
+
+
+@app.command("release-check")
+def release_check(root: Path = typer.Option(None, help="검사할 릴리스 트리")) -> None:
+    """납품 직전 검사 — 서명 검증 활성화·개인키 유출·발급기 혼입 (CI/릴리스 게이트).
+
+    사람이 눈으로 확인할 수 없는 것들만 모았다. 공개키가 빠진 빌드는 정상으로
+    보이고, 개인키가 새면 되돌릴 수 없다.
+    """
+    findings = verify_release(root or Path.cwd())
+    for finding in findings:
+        color = typer.colors.RED if finding.severity is Severity.BLOCK else typer.colors.YELLOW
+        typer.secho(str(finding), fg=color, err=finding.severity is Severity.BLOCK)
+
+    fatal = blocking(findings)
+    if fatal:
+        typer.secho(f"\n✗ 납품 불가 — 차단 항목 {len(fatal)}건", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    typer.secho("✓ 릴리스 검사 통과", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":

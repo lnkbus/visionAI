@@ -53,6 +53,26 @@ jobs:
         # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
         run: uv run pytest -q
 
+  secrets-hygiene:
+    name: 비밀 자산 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: 개인키가 커밋되지 않았는지
+        # 릴리스 검사 전체는 공개키 내장을 요구하므로 레포에서는 통과할 수 없다.
+        # 여기서는 되돌릴 수 없는 항목 하나 — 개인키 유출만 본다.
+        run: |
+          uv run --package blockctl python -c "
+          from pathlib import Path
+          from blockctl.release import _check_no_private_keys, _iter_files
+          root = Path('.')
+          found = _check_no_private_keys(root, _iter_files(root))
+          for f in found:
+              print(f)
+          raise SystemExit(1 if found else 0)
+          "
+
   chart:
     name: Helm 차트
     runs-on: ubuntu-latest

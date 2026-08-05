@@ -57,3 +57,11 @@ chart:  ## Helm 차트 검증 (lint + 기본값·패키지 오버레이 렌더�
 		helm template visionai . -f values-aicc.yaml > /dev/null && \
 		helm template visionai . -f values-meeting.yaml > /dev/null && \
 		echo "✓ 차트 검증 통과"
+
+release:  ## 온프렘 릴리스 빌드 (PUBLIC_KEY=... 필수, OBFUSCATE=1 로 난독화)
+	@test -n "$(PUBLIC_KEY)" || (echo "PUBLIC_KEY=경로 가 필요하다"; exit 1)
+	deploy/release/build_release.sh --public-key $(PUBLIC_KEY) \
+		--out $(or $(OUT),dist/release) $(if $(OBFUSCATE),--obfuscate,)
+
+release-check:  ## 릴리스 트리 납품 전 검사
+	uv run blockctl release-check $(if $(ROOT),--root $(ROOT),)
