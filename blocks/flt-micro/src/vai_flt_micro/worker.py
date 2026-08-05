@@ -54,6 +54,8 @@ class FilterWorker(BlockWorker[SttDelta]):
             matched_rules=outcome.matched_rules,
             is_final=event.is_final,
             speaker_id=event.speaker_id,
+            start_ms=event.start_ms,
+            duration_ms=event.duration_ms,
         )
         await self.bus.publish(Topic.FILTER_CLEAN, result)
 

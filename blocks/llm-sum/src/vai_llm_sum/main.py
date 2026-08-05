@@ -18,7 +18,13 @@ from vai_common.settings import get_settings
 from vai_contracts.retrieval import CompletionRequest, CompletionResponse
 from vai_contracts.summary import Summary
 from vai_llm_sum.store import InMemorySummaryStore, RedisSummaryStore
-from vai_llm_sum.worker import BLOCK_ID, SummaryWorker, TranscriptBuffer, TranscriptCollector
+from vai_llm_sum.worker import (
+    BLOCK_ID,
+    SpeakerLabelCollector,
+    SummaryWorker,
+    TranscriptBuffer,
+    TranscriptCollector,
+)
 
 log = logging.getLogger(__name__)
 
@@ -82,14 +88,21 @@ def create_app() -> FastAPI:
             consumer=common.consumer_name,
         )
         application.state.store = store
+        # 회의 프로파일에서 화자 라벨을 녹취록에 붙인다. 라벨이 없어도
+        # (AICC이거나 SPK-DIA 미배포) 요약은 채널 이름으로 만들어진다.
+        labels = SpeakerLabelCollector(
+            bus, buffer, group=f"{common.consumer_group}:labels", consumer=common.consumer_name
+        )
         tasks = [
             asyncio.create_task(collector.run(), name="sum-collector"),
+            asyncio.create_task(labels.run(), name="sum-labels"),
             asyncio.create_task(summarizer.run(), name="sum-worker"),
         ]
         try:
             yield
         finally:
             collector.stop()
+            labels.stop()
             summarizer.stop()
             for task in tasks:
                 task.cancel()

@@ -41,3 +41,4 @@ demo:  ## 화면 주소 안내 (up 이후)
 	@echo "고객 데모(마이크→자막) : http://localhost:8080/demo"
 	@echo "상담원 워크스페이스     : http://localhost:8091/workspace"
 	@echo "저작·학습 콘솔          : http://localhost:8090/console"
+	@echo "스마트 회의록           : http://localhost:8094/minutes"

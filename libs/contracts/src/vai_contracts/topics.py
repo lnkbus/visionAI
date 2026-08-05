@@ -31,6 +31,13 @@ class Topic(StrEnum):
     STT_DELTA = "stt.delta"
     """STT-CORE → FLT-MICRO. 스트리밍 인식 결과(부분/최종)."""
 
+    SPEAKER_LABEL = "speaker.label"
+    """SPK-DIA → LLM-SUM / UI-MEET. 발화 구간의 화자 식별 결과.
+
+    자막 경로와 **분리**한 이유: 화자분리는 인식보다 느리고 정확도도 낮다.
+    자막이 화자 라벨을 기다리면 회의 자막이 통째로 늦어진다. 라벨은 뒤따라
+    붙는다 — 회의록(요약)은 어차피 종료 후 만들어지므로 그때까지만 모이면 된다."""
+
     FILTER_CLEAN = "filter.clean"
     """FLT-MICRO → TA-ASSIST / LLM-SUM. 마스킹 완료 + 룰 매칭 결과."""
 

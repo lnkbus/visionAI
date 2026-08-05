@@ -12,7 +12,7 @@ from contextlib import suppress
 import pytest
 
 from vai_common.bus import InMemoryEventBus
-from vai_contracts.events import FilterResult, SessionClosed
+from vai_contracts.events import FilterResult, SessionClosed, SpeakerLabel
 from vai_contracts.session import ChannelRole, SessionProfile
 from vai_contracts.summary import SummaryStatus
 from vai_contracts.topics import Topic
@@ -262,3 +262,57 @@ async def test_transcript_is_masked_text_only(bus: InMemoryEventBus) -> None:
 
     assert "[RRN_MASKED]" in captured["prompt"]
     assert "900101" not in captured["prompt"]
+
+
+# ── 화자 라벨 결합 ───────────────────────────────────────────────────────────
+
+
+def labeled(start_ms: int, speaker_id: str) -> SpeakerLabel:
+    return SpeakerLabel(
+        session_id=SESSION,
+        tenant_id=TENANT,
+        channel=ChannelRole.PARTICIPANT,
+        speaker_id=speaker_id,
+        start_ms=start_ms,
+        duration_ms=1500,
+    )
+
+
+def meeting_line(text: str, start_ms: int) -> FilterResult:
+    return FilterResult(
+        session_id=SESSION,
+        tenant_id=TENANT,
+        channel=ChannelRole.PARTICIPANT,
+        clean_text=text,
+        start_ms=start_ms,
+    )
+
+
+def test_late_speaker_label_is_applied_to_the_transcript() -> None:
+    """회의록에서 화자분리의 값어치는 여기다 — 라벨이 늦게 와도 붙어야 한다."""
+    buffer = TranscriptBuffer()
+    buffer.add(meeting_line("예산 집행부터 보겠습니다", 1000))
+    buffer.add(meeting_line("이월 승인이 필요합니다", 4000))
+
+    assert buffer.label(labeled(1000, "speaker_1"))
+    assert buffer.label(labeled(4000, "speaker_2"))
+
+    assert buffer.take(SESSION) == (
+        "speaker_1: 예산 집행부터 보겠습니다\nspeaker_2: 이월 승인이 필요합니다"
+    )
+
+
+def test_label_without_a_matching_utterance_is_dropped() -> None:
+    """자막이 없는 구간에 라벨을 붙이면 회의록에 유령 발화가 생긴다."""
+    buffer = TranscriptBuffer()
+    buffer.add(meeting_line("한 마디", 1000))
+
+    assert not buffer.label(labeled(9999, "speaker_3"))
+
+
+def test_unlabeled_utterances_fall_back_to_the_channel() -> None:
+    """SPK-DIA 미배포·AICC 프로파일에서도 요약은 만들어져야 한다."""
+    buffer = TranscriptBuffer()
+    buffer.add(clean("결제일 연기 되나요?"))
+
+    assert buffer.take(SESSION) == "고객: 결제일 연기 되나요?"

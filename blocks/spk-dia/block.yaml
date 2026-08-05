@@ -1,0 +1,24 @@
+id: SPK-DIA
+name: 화자분리
+tier: speech
+version: 0.1.0
+description: >
+  회의 프로파일에서 "누가 말했는가"를 판정한다. 발화 구간의 화자 임베딩을 뽑아
+  온라인 군집화로 참석자를 식별한다. 참석자 수를 미리 모르는 회의 특성상
+  고정 클러스터가 아니라 점진적 군집화를 쓴다.
+  자막 경로와 병렬로 돌아 자막이 화자 판정을 기다리지 않는다.
+depends_on:
+  - CORE-BUS
+  - AUD-VAD
+adapters:
+  - spectral
+  - speechbrain
+contracts:
+  consumes:
+    - audio.segment
+  produces:
+    - speaker.label
+billing:
+  capacity_unit: audio_hours_monthly
+  dev_effort_mm: 1.5
+  included_in_package: false

@@ -41,6 +41,8 @@ class SttResultPayload(BaseModel):
     text: str
     is_final: bool
     confidence: float = 0.0
+    start_ms: int = 0
+    """화자 라벨(SPK-DIA)과 이 자막 줄을 맞추는 키. 회의록 화면이 쓴다."""
 
 
 class CompliancePayload(BaseModel):
@@ -72,6 +74,7 @@ class AgentAssistUpdate(BaseModel):
                 text=delta.text,
                 is_final=delta.is_final,
                 confidence=delta.confidence,
+                start_ms=delta.start_ms,
             ),
         )
 
@@ -83,6 +86,7 @@ class AgentAssistUpdate(BaseModel):
                 speaker=result.speaker_id or result.channel,
                 text=result.clean_text,
                 is_final=result.is_final,
+                start_ms=result.start_ms,
             ),
             compliance=CompliancePayload(
                 pii_masked=result.pii_masked,

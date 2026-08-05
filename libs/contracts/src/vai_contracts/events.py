@@ -73,6 +73,25 @@ class SttDelta(BaseEvent):
     language: str = "ko"
 
 
+class SpeakerLabel(BaseEvent):
+    """``speaker.label`` — 발화 구간의 화자 식별 결과.
+
+    ``(session_id, channel, start_ms)``로 :class:`SttDelta`와 맞춘다. STT가
+    구간의 ``start_ms``를 그대로 옮기므로 이 조합이 결합 키가 된다.
+    """
+
+    channel: ChannelRole
+    speaker_id: str
+    """세션 내 화자 식별자. ``speaker_1`` 형태이며, 실명 매핑은 UI에서 한다."""
+
+    start_ms: int
+    duration_ms: int
+    confidence: float = 0.0
+    """군집 중심과의 유사도. 낮으면 화자가 섞였을 수 있다는 신호다."""
+
+    is_new_speaker: bool = False
+
+
 class MatchedRule(BaseModel):
     """컴플라이언스 룰 매칭 1건."""
 
@@ -93,6 +112,11 @@ class FilterResult(BaseEvent):
     matched_rules: list[MatchedRule] = Field(default_factory=list)
     is_final: bool = True
     speaker_id: str | None = None
+    start_ms: int = 0
+    """발화 구간 시작 시각. SPK-DIA의 화자 라벨과 맞추는 결합 키다 —
+    여기서 끊기면 회의록 화면이 자막에 화자를 붙일 방법이 없다."""
+
+    duration_ms: int = 0
 
 
 class KnowledgeHit(BaseModel):

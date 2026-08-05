@@ -1,0 +1,16 @@
+[project]
+name = "vai-spk-dia"
+version = "0.1.0"
+description = "SPK-DIA — 화자분리"
+requires-python = ">=3.11"
+dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30", "numpy>=1.26"]
+
+[project.optional-dependencies]
+neural = ["speechbrain>=1.0", "torch>=2.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vai_spk_dia"]

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VisionAI 스마트 회의록</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb;
+          --accent:#2563eb; --ok:#15803d; --card:#f9fafb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af;
+          --line:#272b33; --accent:#60a5fa; --ok:#4ade80; --card:#161a21; } }
+  /* 화자별 색. 12명까지 구분되며, 넘으면 순환한다. */
+  .sp1{--c:#2563eb}.sp2{--c:#15803d}.sp3{--c:#b45309}.sp4{--c:#7c3aed}
+  .sp5{--c:#be123c}.sp6{--c:#0e7490}.sp7{--c:#a16207}.sp8{--c:#4d7c0f}
+  .sp9{--c:#9333ea}.sp10{--c:#0369a1}.sp11{--c:#c2410c}.sp12{--c:#166534}
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:14px/1.65 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif; }
+  main { max-width:1120px; margin:0 auto; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; }
+  .bar { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  input { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:7px;
+          background:var(--bg); color:var(--fg); }
+  button { font:inherit; padding:7px 14px; border-radius:7px; border:1px solid transparent;
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border-color:var(--line); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .status { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  .grid { display:grid; grid-template-columns:1.4fr 1fr; gap:14px; align-items:start; }
+  @media (max-width:900px) { .grid { grid-template-columns:1fr; } }
+  section { border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:var(--card); }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; }
+  #transcript { min-height:340px; max-height:58vh; overflow-y:auto; }
+  .line { padding:5px 0 5px 10px; border-left:3px solid transparent; }
+  .line.labeled { border-left-color:var(--c, var(--line)); }
+  .line.interim { opacity:.5; font-style:italic; }
+  .who { font-size:11px; font-weight:600; color:var(--c, var(--muted)); margin-right:8px; }
+  .who.pending { color:var(--muted); font-weight:400; }
+  .roster { display:flex; flex-direction:column; gap:6px; }
+  .person { display:flex; gap:8px; align-items:center; }
+  .person .swatch { width:10px; height:10px; border-radius:50%; background:var(--c, var(--muted)); flex:0 0 auto; }
+  .person input { flex:1; min-width:0; padding:4px 7px; font-size:13px; }
+  .person .talk { font-size:11px; color:var(--muted); white-space:nowrap; }
+  dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; }
+  dt { color:var(--muted); font-size:12px; }
+  dd { margin:0; }
+  ul { margin:4px 0 0; padding-left:18px; font-size:13px; }
+  .action { margin-bottom:4px; }
+  .action .owner { font-size:11px; color:var(--muted); margin-left:6px; }
+  .empty { color:var(--muted); font-size:13px; }
+  .msg { font-size:12px; margin-top:8px; min-height:16px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>스마트 회의록</h1>
+    <span class="sub">화자 라벨은 자막보다 조금 늦게 붙는다 — 화자분리가 인식보다 느리기 때문이다</span>
+  </header>
+
+  <div class="bar">
+    <div>
+      <label for="session">세션 ID</label>
+      <input id="session" placeholder="sess_20260805_ab12cd34" size="30" />
+    </div>
+    <button id="connect">회의 참관</button>
+    <button id="disconnect" class="ghost" disabled>중지</button>
+    <button id="load" class="ghost">회의록 불러오기</button>
+    <span class="status"><span class="dot" id="dot"></span><span id="state">대기</span></span>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>실시간 자막</h2>
+      <div id="transcript"><p class="empty">세션 ID를 넣고 참관을 시작한다.</p></div>
+    </section>
+
+    <div>
+      <section>
+        <h2>참석자</h2>
+        <div class="roster" id="roster"><p class="empty">발화가 감지되면 화자가 나타난다.</p></div>
+        <div class="msg" id="roster-msg"></div>
+      </section>
+
+      <section style="margin-top:14px">
+        <h2>회의록</h2>
+        <div id="minutes"><p class="empty">회의 종료 후 생성된다.</p></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const els = {
+  session: $("session"), connect: $("connect"), disconnect: $("disconnect"),
+  dot: $("dot"), state: $("state"), transcript: $("transcript"),
+  roster: $("roster"), minutes: $("minutes"), rosterMsg: $("roster-msg"),
+};
+
+let ws = null;
+let interimLine = null;
+// 화자 라벨이 자막보다 늦게 오므로, 자막 줄을 start_ms로 찾아 나중에 갱신한다.
+const linesByStart = new Map();
+const speakers = new Map();   // speaker_id → {index, name, segments, total_ms}
+const pendingLabels = new Map();
+
+const setState = (text, live = false) => {
+  els.state.textContent = text;
+  els.dot.classList.toggle("on", live);
+};
+
+const clearEmpty = (node) => node.querySelector(".empty")?.remove();
+
+function speakerSlot(speakerId) {
+  if (!speakers.has(speakerId)) {
+    speakers.set(speakerId, { index: speakers.size + 1, name: "", segments: 0, total_ms: 0 });
+    renderRoster();
+  }
+  return speakers.get(speakerId);
+}
+
+function labelFor(speakerId) {
+  const slot = speakerSlot(speakerId);
+  return slot.name || `화자 ${slot.index}`;
+}
+
+// ── 자막 ─────────────────────────────────────────────────────────────────────
+function renderCaption(stt, startMs) {
+  clearEmpty(els.transcript);
+  const line = (!stt.is_final && interimLine) ? interimLine : document.createElement("div");
+  line.className = "line" + (stt.is_final ? "" : " interim");
+  line.replaceChildren();
+
+  const who = document.createElement("span");
+  who.className = "who pending";
+  who.textContent = "…";
+  const text = document.createElement("span");
+  text.textContent = stt.text;
+  line.append(who, text);
+  line.dataset.startMs = String(startMs ?? "");
+
+  if (!line.isConnected) els.transcript.append(line);
+  if (stt.is_final && startMs != null) {
+    linesByStart.set(startMs, line);
+    // 라벨이 자막보다 먼저 온 경우 — 여기서 바로 적용한다.
+    if (pendingLabels.has(startMs)) {
+      applyLabel(line, pendingLabels.get(startMs));
+      pendingLabels.delete(startMs);
+    }
+  }
+  interimLine = stt.is_final ? null : line;
+  els.transcript.scrollTop = els.transcript.scrollHeight;
+}
+
+function applyLabel(line, speakerId) {
+  const slot = speakerSlot(speakerId);
+  line.classList.add("labeled", `sp${((slot.index - 1) % 12) + 1}`);
+  const who = line.querySelector(".who");
+  who.className = "who";
+  who.textContent = labelFor(speakerId);
+  line.dataset.speakerId = speakerId;
+}
+
+function onSpeakerLabel(message) {
+  const slot = speakerSlot(message.speaker_id);
+  slot.segments += 1;
+  slot.total_ms += message.duration_ms ?? 0;
+  renderRoster();
+
+  const line = linesByStart.get(message.start_ms);
+  if (line) applyLabel(line, message.speaker_id);
+  else pendingLabels.set(message.start_ms, message.speaker_id);
+}
+
+// ── 참석자 ───────────────────────────────────────────────────────────────────
+function renderRoster() {
+  if (!speakers.size) return;
+  clearEmpty(els.roster);
+  els.roster.replaceChildren();
+
+  const ordered = [...speakers.entries()].sort((a, b) => b[1].total_ms - a[1].total_ms);
+  for (const [speakerId, slot] of ordered) {
+    const row = document.createElement("div");
+    row.className = `person sp${((slot.index - 1) % 12) + 1}`;
+
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+
+    const input = document.createElement("input");
+    input.placeholder = `화자 ${slot.index} — 실명 입력`;
+    input.value = slot.name;
+    input.addEventListener("change", () => {
+      slot.name = input.value.trim();
+      // 이미 그려진 자막 줄의 이름도 함께 바꾼다.
+      for (const line of els.transcript.querySelectorAll(`[data-speaker-id="${speakerId}"]`)) {
+        line.querySelector(".who").textContent = labelFor(speakerId);
+      }
+      saveNames();
+    });
+
+    const talk = document.createElement("span");
+    talk.className = "talk";
+    talk.textContent = `${Math.round(slot.total_ms / 1000)}초 · ${slot.segments}회`;
+
+    row.append(swatch, input, talk);
+    els.roster.append(row);
+  }
+}
+
+async function saveNames() {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) return;
+  const names = [...speakers.entries()]
+    .filter(([, slot]) => slot.name)
+    .map(([speaker_id, slot]) => ({ speaker_id, display_name: slot.name }));
+  try {
+    await fetch(`/v1/meet/speakers/${encodeURIComponent(sessionId)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, names }),
+    });
+    els.rosterMsg.textContent = "이름 저장됨";
+  } catch {
+    els.rosterMsg.textContent = "이름 저장 실패 — 화면에는 반영된다";
+  }
+}
+
+// ── 회의록 ───────────────────────────────────────────────────────────────────
+function renderMinutes(summary) {
+  const box = els.minutes;
+  box.replaceChildren();
+
+  if (summary.status !== "ready") {
+    const note = document.createElement("p");
+    note.className = "empty";
+    note.textContent = summary.status === "failed"
+      ? `회의록 생성 실패: ${summary.error ?? "원인 미상"}`
+      : "회의록 생성 중…";
+    box.append(note);
+    return;
+  }
+
+  const meeting = summary.meeting ?? {};
+  if (meeting.title) {
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.textContent = meeting.title;
+    box.append(title);
+  }
+
+  for (const [label, items] of [["안건", meeting.agenda], ["결정사항", meeting.decisions]]) {
+    if (!items?.length) continue;
+    const dt = document.createElement("div");
+    dt.className = "sub";
+    dt.style.marginTop = "8px";
+    dt.textContent = label;
+    const ul = document.createElement("ul");
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.textContent = item;
+      ul.append(li);
+    }
+    box.append(dt, ul);
+  }
+
+  if (meeting.action_items?.length) {
+    const dt = document.createElement("div");
+    dt.className = "sub";
+    dt.style.marginTop = "8px";
+    dt.textContent = "실행항목";
+    box.append(dt);
+    for (const item of meeting.action_items) {
+      const row = document.createElement("div");
+      row.className = "action";
+      row.textContent = `☐ ${item.text}`;
+      if (item.owner || item.due) {
+        const meta = document.createElement("span");
+        meta.className = "owner";
+        meta.textContent = [item.owner, item.due].filter(Boolean).join(" · ");
+        row.append(meta);
+      }
+      box.append(row);
+    }
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "sub";
+  meta.style.marginTop = "10px";
+  meta.textContent = `모델 ${summary.model || "—"} · 프롬프트 ${summary.prompt_version}`;
+  box.append(meta);
+}
+
+// ── 연결 ─────────────────────────────────────────────────────────────────────
+els.connect.addEventListener("click", () => {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) { setState("세션 ID가 필요하다"); return; }
+
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${scheme}://${location.host}/v1/meet/stream?session_id=${encodeURIComponent(sessionId)}`);
+
+  ws.addEventListener("open", () => {
+    setState(`참관 중 · ${sessionId}`, true);
+    els.connect.disabled = true;
+    els.disconnect.disabled = false;
+  });
+  ws.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.event === "agent_assist_update" && message.stt_result) {
+      renderCaption(message.stt_result, message.stt_result.start_ms);
+    } else if (message.event === "speaker_label") {
+      onSpeakerLabel(message);
+    } else if (message.session_id && message.profile) {
+      renderMinutes(message);
+    }
+  });
+  ws.addEventListener("close", () => { setState("연결 종료"); reset(); });
+  ws.addEventListener("error", () => setState("연결 오류"));
+});
+
+function reset() {
+  els.connect.disabled = false;
+  els.disconnect.disabled = true;
+  interimLine = null;
+}
+
+els.disconnect.addEventListener("click", () => { ws?.close(); reset(); setState("대기"); });
+
+$("load").addEventListener("click", async () => {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) return;
+  const response = await fetch(`/v1/meet/summary/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) {
+    els.minutes.innerHTML = `<p class="empty">회의록이 아직 없다.</p>`;
+    return;
+  }
+  renderMinutes(await response.json());
+});
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@ from vai_contracts.events import (
     KnowledgeHit,
     MatchedRule,
     SessionClosed,
+    SpeakerLabel,
     SttDelta,
 )
 from vai_contracts.session import (
@@ -59,6 +60,7 @@ __all__ = [
     "SessionCreate",
     "SessionProfile",
     "SessionState",
+    "SpeakerLabel",
     "SttDelta",
     "SttResultPayload",
     "Topic",

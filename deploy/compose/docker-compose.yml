@@ -308,6 +308,48 @@ services:
       # RTP는 UDP다. 고객사 미디어 게이트웨이가 이 대역으로 보낸다.
       - "40000-40100:40000-40100/udp"
 
+  spk-dia:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: spk-dia
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: SPK-DIA
+      VAI_CONSUMER_GROUP: dia
+      VAI_CONSUMER_NAME: dia-1
+      # 운영에서는 신경망 임베더로 바꾼다. spectral은 음역이 뚜렷이 다른
+      # 화자만 가른다:
+      #   VAI_DIA_EMBEDDER: speechbrain
+      #   VAI_DIA_EMBEDDER_MODEL: /models/ecapa-tdnn
+      VAI_DIA_EMBEDDER: spectral
+    ports:
+      - "8093:8093"
+
+  ui-meet:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: ui-meet
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: UI-MEET
+      VAI_MEETUI_SUMMARY_URL: http://llm-sum:8089
+      VAI_MEETUI_DIARIZATION_URL: http://spk-dia:8093
+    depends_on:
+      redis:
+        condition: service_healthy
+      llm-sum:
+        condition: service_started
+      spk-dia:
+        condition: service_started
+    ports:
+      - "8094:8094"
+
 volumes:
   redis-data:
   qdrant-data:

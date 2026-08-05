@@ -49,9 +49,11 @@ known-first-party = [
     "vai_rag_srch",
     "vai_retrieval",
     "vai_scn_studio",
+    "vai_spk_dia",
     "vai_stt_core",
     "vai_ta_assist",
     "vai_ui_agent",
+    "vai_ui_meet",
 ]
 
 [tool.pytest.ini_options]

@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 
 from vai_common.bus import EventBus
 from vai_common.worker import BlockWorker
-from vai_contracts.events import FilterResult, SessionClosed
+from vai_contracts.events import FilterResult, SessionClosed, SpeakerLabel
 from vai_contracts.session import ChannelRole, SessionProfile
 from vai_contracts.summary import Summary, SummaryStatus
 from vai_contracts.topics import Topic
@@ -29,16 +30,28 @@ BLOCK_ID = "LLM-SUM"
 _LABELS = {ChannelRole.CUSTOMER: "고객", ChannelRole.AGENT: "상담원"}
 
 
+@dataclass
+class _Utterance:
+    start_ms: int
+    speaker: str
+    text: str
+
+
 class TranscriptBuffer:
     """세션별 마스킹 발화 누적.
 
     ``filter.clean``을 지나가며 모아 둔다. 종료 시점에 다시 조회하는 대신
     스트림에서 모으는 이유: 상담 이력 DB(Wave 6)가 아직 없고, 있더라도
     요약을 위해 전체를 다시 읽는 것은 낭비다.
+
+    회의 프로파일에서는 화자 라벨(SPK-DIA)이 자막보다 **늦게** 도착한다.
+    발화를 ``start_ms``로 색인해 두고, 라벨이 오면 그 자리의 화자를 바꾼다.
+    회의록은 종료 후 만들어지므로 그때까지만 맞으면 된다.
     """
 
     def __init__(self, max_utterances: int = 2000) -> None:
-        self._lines: dict[str, list[str]] = defaultdict(list)
+        self._lines: dict[str, list[_Utterance]] = defaultdict(list)
+        self._by_start: dict[str, dict[int, _Utterance]] = defaultdict(dict)
         self._max = max_utterances
 
     def add(self, event: FilterResult) -> None:
@@ -48,14 +61,50 @@ class TranscriptBuffer:
         if len(lines) >= self._max:
             # 폭주하는 세션이 메모리를 잠식하지 않게 한다.
             return
-        speaker = event.speaker_id or _LABELS.get(event.channel, "참여자")
-        lines.append(f"{speaker}: {event.clean_text.strip()}")
+        utterance = _Utterance(
+            start_ms=event.start_ms,
+            speaker=event.speaker_id or _LABELS.get(event.channel, "참여자"),
+            text=event.clean_text.strip(),
+        )
+        lines.append(utterance)
+        # 같은 start_ms가 겹치면 나중 것이 이긴다 — 재처리된 구간의 최신 인식이다.
+        self._by_start[event.session_id][event.start_ms] = utterance
+
+    def label(self, event: SpeakerLabel) -> bool:
+        """뒤늦게 도착한 화자 라벨을 해당 발화에 붙인다."""
+        utterance = self._by_start[event.session_id].get(event.start_ms)
+        if utterance is None:
+            # 자막이 아직 안 왔거나 필터에서 걸러진 구간. 회의록에 실릴 발화가
+            # 없다는 뜻이므로 라벨도 버린다.
+            return False
+        utterance.speaker = event.speaker_id
+        return True
 
     def take(self, session_id: str) -> str:
-        return "\n".join(self._lines.pop(session_id, []))
+        lines = self._lines.pop(session_id, [])
+        self._by_start.pop(session_id, None)
+        return "\n".join(f"{line.speaker}: {line.text}" for line in lines)
 
     def drop(self, session_id: str) -> None:
         self._lines.pop(session_id, None)
+        self._by_start.pop(session_id, None)
+
+
+class SpeakerLabelCollector(BlockWorker[SpeakerLabel]):
+    """``speaker.label``을 구독해 녹취록의 화자를 채운다."""
+
+    block_id = BLOCK_ID
+    source_topic = Topic.SPEAKER_LABEL
+    source_model = SpeakerLabel
+
+    def __init__(
+        self, bus: EventBus, buffer: TranscriptBuffer, *, group: str, consumer: str
+    ) -> None:
+        super().__init__(bus, group=group, consumer=consumer)
+        self._buffer = buffer
+
+    async def handle(self, event: SpeakerLabel) -> None:
+        self._buffer.label(event)
 
 
 class TranscriptCollector(BlockWorker[FilterResult]):
