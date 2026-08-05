@@ -59,7 +59,8 @@ diff가 "형상이 실제로 바뀌었는가"를 말해 주지 못한다.
 | 형상 식별·변경 통제 | `blockctl freeze` + CI 대조 | ✅ |
 | 구성요소 정합성(의존·토픽·청구 단위) | `blockctl check` | ✅ |
 | 모듈 경계·계층 | `import-linter` 4개 계약 | ✅ |
-| 기능 시험 | `pytest` 728건 | ✅ |
+| 기능 시험 | `pytest` 745건 | ✅ |
+| 상태 영속성·자원 회수 | `tests/test_state_durability.py`·`test_session_cleanup.py` | ✅ |
 | 품질 회귀(정확도) | `evalctl compare` 골든셋 5종 | ✅ |
 | 배포 형상 렌더링 | `helm lint` + 오버레이 5종 템플릿 | ✅ |
 | 배포 매니페스트 **스키마 적합성** | `kubeconform`(k8s 1.29 strict) | ✅ |
