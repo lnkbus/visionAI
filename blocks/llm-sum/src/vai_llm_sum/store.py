@@ -1,7 +1,9 @@
-"""요약 저장소 구현.
+"""Redis 요약 저장소 — **중간 산출물로 쓸 때만.**
 
-Wave 4는 Redis 기반이다. 요약은 상담 이력 시스템으로 넘어가는 중간 산출물이라
-영속 DB(Wave 6 PostgreSQL)가 붙기 전까지는 TTL 있는 저장으로 충분하다.
+요약을 상담 이력 시스템으로 곧바로 넘기는 구성이라면 여기 오래 둘 이유가 없고,
+TTL이 청소를 대신한다. 다만 **회의록 패키지에는 쓰지 않는다** — 회의록은 그
+자체가 산출물이고, 두 달 전 회의록을 찾는 것이 정상적인 사용이다. 기본
+저장소가 :mod:`vai_llm_sum.filestore`인 이유다.
 """
 
 from __future__ import annotations
@@ -13,7 +15,10 @@ from vai_contracts.summary import Summary
 KEY_PREFIX = "vai:summary:"
 INDEX_PREFIX = "vai:summary-index:"
 TTL_SECONDS = 60 * 60 * 24 * 7
-"""7일. 상담 이력 시스템으로 넘어갈 시간은 충분하고, 영속 보관은 그쪽 책임이다."""
+"""7일. 이력 시스템으로 넘어갈 시간이지 보관 기간이 아니다.
+
+이 값을 늘려 영속 저장을 흉내 내지 않는다 — Redis가 메모리를 넘기면 조용히
+평가(eviction)되고, 그 사실은 요약을 찾을 때에야 드러난다."""
 
 
 class RedisSummaryStore:
@@ -46,6 +51,14 @@ class RedisSummaryStore:
                 summaries.append(found)
         return summaries
 
+    async def delete(self, session_id: str) -> bool:
+        summary = await self.get(session_id)
+        if summary is None:
+            return False
+        await self._redis.delete(KEY_PREFIX + session_id)
+        await self._redis.lrem(INDEX_PREFIX + summary.tenant_id, 0, session_id)
+        return True
+
 
 class InMemorySummaryStore:
     """테스트·단일 프로세스용."""
@@ -62,3 +75,6 @@ class InMemorySummaryStore:
     async def list_for(self, tenant_id: str, limit: int = 50) -> list[Summary]:
         matched = [s for s in self._data.values() if s.tenant_id == tenant_id]
         return sorted(matched, key=lambda s: s.created_at, reverse=True)[:limit]
+
+    async def delete(self, session_id: str) -> bool:
+        return self._data.pop(session_id, None) is not None

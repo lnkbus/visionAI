@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 813ae262c9d7f0adc4a9e0cf2b6d279303fedbe610a759428ab6aad99addf31d
+configuration_hash: c54e9af3ae6910fe3b5b05a586d4b16697417aec723dfbd608eab4adb42d2113
 component_count: 23
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: ad75549cd4b5a58c
+  source_hash: 1238f42d37b6a144
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -50,7 +50,7 @@ components:
   name: 세션 오케스트레이터 & 이벤트 버스
   version: 0.1.0
   kind: block
-  source_hash: a7722c0b3500fc65
+  source_hash: eb57ed237ce6904f
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
@@ -80,9 +80,9 @@ components:
   - CORE-BUS
 - id: FLT-MICRO
   name: Micro-Filter & 컴플라이언스 엔진
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: f6cd6056f63b6431
+  source_hash: 7348cf093f0d26fb
   license_key: FLT-MICRO
   capacity_unit: concurrent_channels
   depends_on:
@@ -99,9 +99,9 @@ components:
   - CORE-BUS
 - id: LLM-SUM
   name: 요약 & 분석
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 0dce590ae96b1875
+  source_hash: 86223a3c27855719
   license_key: LLM-SUM
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -129,9 +129,9 @@ components:
   - RAG-KB
 - id: SCN-STUDIO
   name: 시나리오·룰 스튜디오
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 98ce7462615840ba
+  source_hash: 8ac5df499b667645
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:
@@ -189,7 +189,7 @@ components:
   name: vai_common
   version: 0.1.0
   kind: library
-  source_hash: 3a4e20397676582b
+  source_hash: 3ee02e1184412da1
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.1.0

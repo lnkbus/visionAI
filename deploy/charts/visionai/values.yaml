@@ -50,6 +50,16 @@ security:
     storageClass: ""
   masterKeySecret: ""   # 저장 암호화 키(Secret 이름). 비면 암호화가 꺼진다.
 
+# 요약·회의록 영속 저장. 회의록은 그 자체가 산출물이라 Redis TTL에 맡기지 않는다.
+summary:
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  # 0이면 자동 파기하지 않는다. 보관기간은 고객사 정책이므로 제품이 정하지 않되,
+  # 정하지 않았다는 사실은 LLM-SUM 기동 로그에 남는다.
+  retentionDays: 0
+
 admin:
   # 운영 콘솔 JWT 비밀키. 기본값으로는 블록이 기동을 거부한다.
   jwtSecretName: ""

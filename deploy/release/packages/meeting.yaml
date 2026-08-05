@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: ea5339e7649685d1ecaeaede0c966387ff875ec5216794e75e4c67e68fc22ad2
+configuration_hash: bdaf8827e34d28a272b38c7e9faaf9ff5e763a63189cfd01f77debcdd1ad4ef1
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: ad75549cd4b5a58c
+  source_hash: 1238f42d37b6a144
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -30,7 +30,7 @@ components:
   name: 세션 오케스트레이터 & 이벤트 버스
   version: 0.1.0
   kind: block
-  source_hash: a7722c0b3500fc65
+  source_hash: eb57ed237ce6904f
   license_key: CORE-BUS
   capacity_unit: none
 - id: CORE-GW
@@ -69,9 +69,9 @@ components:
   - CORE-BUS
 - id: LLM-SUM
   name: 요약 & 분석
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 0dce590ae96b1875
+  source_hash: 86223a3c27855719
   license_key: LLM-SUM
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -118,7 +118,7 @@ components:
   name: vai_common
   version: 0.1.0
   kind: library
-  source_hash: 3a4e20397676582b
+  source_hash: 3ee02e1184412da1
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.1.0

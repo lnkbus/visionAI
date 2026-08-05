@@ -1,7 +1,7 @@
 id: LLM-SUM
 name: 요약 & 분석
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   세션 종료 후 배치로 상담 표준 요약(카테고리 분류 포함)과 회의록(안건·결정사항·
   Action Item)을 생성한다. 마스킹본만 입력으로 쓰며, 모델·프롬프트 버전을 산출물에

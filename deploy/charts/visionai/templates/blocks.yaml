@@ -101,6 +101,12 @@ spec:
             - name: VAI_SEC_MASTER_KEY_PATH
               value: /etc/visionai/keys/master.key
             {{- end }}
+            {{- if eq $name "llm-sum" }}
+            - name: VAI_SUM_STORE
+              value: {{ ternary "file" "redis" $root.Values.summary.persistence.enabled | quote }}
+            - name: VAI_SUM_RETENTION_DAYS
+              value: {{ $root.Values.summary.retentionDays | quote }}
+            {{- end }}
             {{- range $key, $value := ($block.env | default dict) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -126,6 +132,10 @@ spec:
             - name: master-key
               mountPath: /etc/visionai/keys
               readOnly: true
+            {{- end }}
+            {{- if and (eq $name "llm-sum") $root.Values.summary.persistence.enabled }}
+            - name: summary
+              mountPath: /var/lib/visionai/summaries
             {{- end }}
           livenessProbe:
             httpGet:
@@ -154,6 +164,11 @@ spec:
         - name: audit
           persistentVolumeClaim:
             claimName: {{ $fullname }}-audit
+        {{- end }}
+        {{- if and (eq $name "llm-sum") $root.Values.summary.persistence.enabled }}
+        - name: summary
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-summary
         {{- end }}
         {{- if and (eq $name "core-sec") $root.Values.security.masterKeySecret }}
         - name: master-key
