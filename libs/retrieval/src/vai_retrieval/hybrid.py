@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from vai_contracts.retrieval import Chunk, ScoredChunk, SearchRequest, SearchResponse
 from vai_retrieval.bm25 import BM25Index
 from vai_retrieval.embedding import BaseEmbedder
+from vai_retrieval.lexicon import QueryExpander
 from vai_retrieval.rerank import BaseReranker
 from vai_retrieval.store import BaseVectorStore, collection_name
 
@@ -43,11 +44,13 @@ class HybridSearchEngine:
         reranker: BaseReranker,
         *,
         budget: SearchBudget | None = None,
+        expander: QueryExpander | None = None,
     ) -> None:
         self._embedder = embedder
         self._store = store
         self._reranker = reranker
         self._budget = budget or SearchBudget()
+        self._expander = expander or QueryExpander()
         # 테넌트·KB별 BM25 색인. 컬렉션이 다르면 교차 검색이 구조적으로 불가능하다.
         self._sparse: dict[str, BM25Index] = {}
 
@@ -91,8 +94,12 @@ class HybridSearchEngine:
         """RAG-SRCH가 호출하는 질의 경로."""
         started = time.perf_counter()
 
+        # 구어를 약관 용어로 다리 놓는다. 회수 단계에만 쓰고, 리랭킹에는
+        # 원문 질의를 넘긴다 — 크로스 인코더는 자연스러운 문장을 전제로 한다.
+        retrieval_query, expanded_terms = self._expander.expand(request.query)
+
         dense_started = time.perf_counter()
-        query_vector = await self._embedder.embed_query(request.query)
+        query_vector = await self._embedder.embed_query(retrieval_query)
         dense_hits = await self._store.search(
             request.tenant_id, request.kb_id, query_vector, request.candidate_k
         )
@@ -100,20 +107,24 @@ class HybridSearchEngine:
 
         sparse_started = time.perf_counter()
         sparse_hits = self._index(request.tenant_id, request.kb_id).search(
-            request.query, request.candidate_k
+            retrieval_query, request.candidate_k
         )
         sparse_ms = (time.perf_counter() - sparse_started) * 1000
 
-        fused = self._fuse(dense_hits, sparse_hits)
+        fused = await self._fuse(request.tenant_id, request.kb_id, dense_hits, sparse_hits)
         if not fused:
             return SearchResponse(
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 dense_ms=int(dense_ms),
                 sparse_ms=int(sparse_ms),
+                expanded_terms=expanded_terms,
             )
 
         rerank_started = time.perf_counter()
-        ranked = await self._rerank(request.query, fused)
+        # 리랭커가 스스로 밝힌 성향을 따른다. 여기서 한쪽으로 못 박으면
+        # 엔진을 교체할 때마다 이 줄을 다시 고쳐야 한다.
+        rerank_query = retrieval_query if self._reranker.accepts_expanded_query else request.query
+        ranked = await self._rerank(rerank_query, fused)
         rerank_ms = (time.perf_counter() - rerank_started) * 1000
 
         hits = [hit for hit in ranked if hit.score >= request.min_score][: request.top_k]
@@ -126,15 +137,29 @@ class HybridSearchEngine:
             dense_ms=int(dense_ms),
             sparse_ms=int(sparse_ms),
             rerank_ms=int(rerank_ms),
+            expanded_terms=expanded_terms,
         )
 
-    def _fuse(
-        self, dense: list[tuple[Chunk, float]], sparse: list[tuple[str, float]]
+    async def _fuse(
+        self,
+        tenant_id: str,
+        kb_id: str,
+        dense: list[tuple[Chunk, float]],
+        sparse: list[tuple[str, float]],
     ) -> list[ScoredChunk]:
         """RRF로 두 순위를 합친다."""
         by_id: dict[str, Chunk] = {chunk.chunk_id: chunk for chunk, _ in dense}
         dense_scores = {chunk.chunk_id: score for chunk, score in dense}
         sparse_scores = dict(sparse)
+
+        # 희소 상위권에 있지만 밀집 상위권에는 없던 청크의 본문을 가져온다.
+        # 이걸 안 하면 **키워드로만 걸린 문서가 통째로 버려진다** — 그것이야말로
+        # 하이브리드 검색이 존재하는 이유인데도. ("정지"라는 단어가 그 조항에만
+        # 있는데 의미 벡터는 다른 조항을 골라, 정답이 후보에도 못 오르는 식이다.)
+        missing = [chunk_id for chunk_id, _ in sparse if chunk_id not in by_id]
+        if missing:
+            for chunk in await self._store.get_by_ids(tenant_id, kb_id, missing):
+                by_id[chunk.chunk_id] = chunk
 
         fused: dict[str, float] = {}
         for rank, (chunk, _) in enumerate(dense):
@@ -146,9 +171,12 @@ class HybridSearchEngine:
         for chunk_id, score in sorted(fused.items(), key=lambda kv: kv[1], reverse=True):
             found = by_id.get(chunk_id)
             if found is None:
-                # 희소 검색에만 걸린 청크. 벡터 저장소가 본문을 갖고 있으므로
-                # 여기서 못 찾으면 색인 불일치다 — 조용히 버리지 않고 남긴다.
-                log.debug("희소 전용 히트를 본문 없이 건너뜀", extra={"chunk_id": chunk_id})
+                # 저장소에도 없다면 그때는 진짜 색인 불일치다(희소 색인에만 남은
+                # 유령 청크). 조용히 버리지 않고 남긴다.
+                log.warning(
+                    "희소 색인에만 있는 청크 — 벡터 저장소와 불일치",
+                    extra={"chunk_id": chunk_id},
+                )
                 continue
             results.append(
                 ScoredChunk(

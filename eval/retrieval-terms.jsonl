@@ -33,3 +33,11 @@
 {"case_id": "record-retention", "query": "거래 내역은 얼마나 보관하나요", "expected": ["제14조"]}
 {"case_id": "family-card", "query": "가족카드 대금은 누가 내는 거예요", "expected": ["제2조"]}
 {"case_id": "limit-definition", "query": "이용한도가 무슨 뜻이에요", "expected": ["제2조", "제5조"]}
+{"case_id": "suspend-resume", "query": "카드 정지되면 다시 쓸 수 있나요", "expected": ["제8조"]}
+{"case_id": "installment-free-where", "query": "무이자 할부는 아무 데서나 되나요", "expected": ["제12조"]}
+{"case_id": "point-what-for", "query": "포인트로 뭐 살 수 있어요", "expected": ["제11조"]}
+{"case_id": "annual-fee-when", "query": "연회비는 언제 청구되나요", "expected": ["제4조"]}
+{"case_id": "overseas-rate", "query": "해외 결제하면 환율은 어떻게 적용되나요", "expected": ["제10조"]}
+{"case_id": "credit-drop", "query": "신용도가 나빠지면 어떻게 되나요", "expected": ["제5조"]}
+{"case_id": "family-apply", "query": "가족카드는 누가 신청하는 건가요", "expected": ["제2조"]}
+{"case_id": "purpose", "query": "이 약관은 뭘 정하는 건가요", "expected": ["제1조"], "note": "코퍼스 전 조항 커버리지를 채운다"}

@@ -377,8 +377,12 @@ $("tune-run").addEventListener("click", async () => {
         query: $("tune-q").value, top_k: 5, candidate_k: 10,
       }),
     });
+    // 질의 확장을 숨기면 "왜 이 조항이 1위인가"를 설명할 수 없다. 운영자가
+    // 사전을 고칠 근거도 여기서 나온다.
+    const expanded = (result.expanded_terms || []).length
+      ? ` · 질의 확장 +[${result.expanded_terms.join(", ")}]` : "";
     say($("tune-msg"),
-      `총 ${result.latency_ms}ms — Dense ${result.dense_ms}ms · Sparse ${result.sparse_ms}ms · 리랭킹 ${result.rerank_ms}ms`,
+      `총 ${result.latency_ms}ms — Dense ${result.dense_ms}ms · Sparse ${result.sparse_ms}ms · 리랭킹 ${result.rerank_ms}ms${expanded}`,
       result.latency_ms > 180 ? "err" : "ok");
 
     if (!result.hits.length) { $("tune-out").innerHTML = `<p class="empty">검색 결과가 없다.</p>`; return; }

@@ -23,6 +23,7 @@ from vai_flt_micro.filter import MicroComplianceFilter
 from vai_retrieval.chunking import split_text
 from vai_retrieval.embedding import HashingEmbedder
 from vai_retrieval.hybrid import HybridSearchEngine
+from vai_retrieval.lexicon import QueryExpander
 from vai_retrieval.rerank import LexicalOverlapReranker
 from vai_retrieval.store import MemoryVectorStore
 from vai_tts_core.normalize import normalize
@@ -39,7 +40,7 @@ DEFAULT_TOP_K = 3
 CANDIDATE_K = 10
 
 
-async def build_engine(articles: list[Article]) -> HybridSearchEngine:
+async def build_engine(articles: list[Article], *, expand: bool = True) -> HybridSearchEngine:
     """코퍼스를 색인한 검색 엔진을 만든다.
 
     임베더는 :class:`HashingEmbedder`다 — 모델 없이 도는 어휘 임베딩이라
@@ -49,7 +50,12 @@ async def build_engine(articles: list[Article]) -> HybridSearchEngine:
     embedder = HashingEmbedder()
     store = MemoryVectorStore()
     await store.initialize({"multiprocess_warning": False})
-    engine = HybridSearchEngine(embedder, store, LexicalOverlapReranker())
+    engine = HybridSearchEngine(
+        embedder,
+        store,
+        LexicalOverlapReranker(),
+        expander=QueryExpander(enabled=expand),
+    )
 
     chunks: list[Chunk] = []
     for article in articles:
@@ -73,8 +79,10 @@ async def run_retrieval(
     cases: list[RetrievalCase],
     articles: list[Article],
     top_k: int = DEFAULT_TOP_K,
+    *,
+    expand: bool = True,
 ) -> list[CaseOutcome]:
-    engine = await build_engine(articles)
+    engine = await build_engine(articles, expand=expand)
 
     outcomes: list[CaseOutcome] = []
     for case in cases:

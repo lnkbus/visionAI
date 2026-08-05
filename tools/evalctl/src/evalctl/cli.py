@@ -75,10 +75,10 @@ def _check_failures(outcomes: list[CheckOutcome]) -> list[str]:
     return [f"[{o.case_id}] {o.detail}" for o in outcomes if not o.passed]
 
 
-async def _run_retrieval_suite(eval_dir: Path, top_k: int) -> SuiteResult:
+async def _run_retrieval_suite(eval_dir: Path, top_k: int, expand: bool = True) -> SuiteResult:
     cases, corpus_name = load_retrieval(eval_dir / RETRIEVAL_FILE)
     articles = load_corpus(corpus_path(eval_dir, corpus_name))
-    outcomes = await run_retrieval(cases, articles, top_k=top_k)
+    outcomes = await run_retrieval(cases, articles, top_k=top_k, expand=expand)
     metrics = summarize(outcomes, top_k=top_k)
     return SuiteResult(
         name="retrieval",
@@ -107,10 +107,12 @@ def _run_tts_suite(eval_dir: Path) -> SuiteResult:
     )
 
 
-def run_suites(eval_dir: Path, suites: list[str], top_k: int) -> list[SuiteResult]:
+def run_suites(
+    eval_dir: Path, suites: list[str], top_k: int, expand: bool = True
+) -> list[SuiteResult]:
     results: list[SuiteResult] = []
     if "retrieval" in suites:
-        results.append(asyncio.run(_run_retrieval_suite(eval_dir, top_k)))
+        results.append(asyncio.run(_run_retrieval_suite(eval_dir, top_k, expand)))
     if "pii" in suites:
         results.append(_run_pii_suite(eval_dir))
     if "tts" in suites:
@@ -171,10 +173,15 @@ def run(
     top_k: int = typer.Option(DEFAULT_TOP_K, help="검색 상위 K (출하 설정과 같게 둔다)"),
     json_out: Path = typer.Option(None, "--json", help="결과를 JSON으로 저장"),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="실패 사례를 전부 출력"),
+    no_expand: bool = typer.Option(
+        False,
+        "--no-expand",
+        help="질의 확장(구어→약관어)을 끄고 돌린다 — 확장의 이득을 A/B로 확인할 때",
+    ),
 ) -> None:
     """골든셋을 돌려 품질 수치를 낸다 (판정 없음)."""
     try:
-        results = run_suites(_eval_dir(root), _resolve_suites(suite), top_k)
+        results = run_suites(_eval_dir(root), _resolve_suites(suite), top_k, not no_expand)
     except DatasetError as exc:
         typer.secho(f"골든셋 오류: {exc}", fg=typer.colors.RED)
         raise typer.Exit(1) from exc

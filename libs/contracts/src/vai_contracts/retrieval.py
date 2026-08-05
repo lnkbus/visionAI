@@ -98,6 +98,12 @@ class SearchResponse(BaseModel):
     rerank_ms: int = 0
     """단계별 지연 — 사양서 예산(검색 100ms, 리랭킹 80ms) 회귀 감시에 쓴다."""
 
+    expanded_terms: list[str] = Field(default_factory=list)
+    """질의 확장으로 덧붙인 약관 용어("잃어버렸어요" → 분실·신고).
+
+    튜닝 콘솔이 "왜 이 조항이 1위인가"를 설명하려면 확장 여부가 보여야 한다.
+    숨기면 화면이 거짓말을 하고, 사전을 고칠 근거도 사라진다."""
+
 
 class IngestRequest(BaseModel):
     """``POST /internal/v1/kb/{kb_id}/documents``."""
