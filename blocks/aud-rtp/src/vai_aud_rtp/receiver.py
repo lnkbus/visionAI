@@ -56,6 +56,8 @@ class RtpProtocol(asyncio.DatagramProtocol):
                 )
             return
 
+        self._leg.touch()
+
         if self._leg.ssrc is None:
             self._leg.ssrc = packet.ssrc
         elif packet.ssrc != self._leg.ssrc:

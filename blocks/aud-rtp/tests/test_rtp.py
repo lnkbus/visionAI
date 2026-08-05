@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from vai_aud_rtp import codec
-from vai_aud_rtp.calls import CallRegistry, PortPool, PortPoolExhausted
+from vai_aud_rtp.calls import CallLeg, CallRegistry, PortPool, PortPoolExhausted
 from vai_aud_rtp.codec import PayloadType
 from vai_aud_rtp.rtp import (
     SEQ_MODULO,
@@ -335,3 +335,84 @@ def test_call_legs_carry_telephony_sample_rate() -> None:
     legs = registry.open("s1", "t1", SessionProfile.AICC, [ChannelRole.CUSTOMER])
 
     assert legs[0].sample_rate == 8000
+
+
+# ── 끊긴 통화 회수 ───────────────────────────────────────────────────────────
+
+
+def _registry() -> CallRegistry:
+    return CallRegistry(PortPool(41000, 41020))
+
+
+def _open(registry: CallRegistry, session_id: str) -> list[CallLeg]:
+    return registry.open(
+        session_id=session_id,
+        tenant_id="t1",
+        profile=SessionProfile.AICC,
+        channels=[ChannelRole.CUSTOMER, ChannelRole.AGENT],
+    )
+
+
+def test_ports_leak_permanently_without_reaping() -> None:
+    """이 블록이 회수하지 않으면 포트는 명시적 DELETE로만 돌아온다.
+
+    시그널링 연동은 이 저장소 밖에 있다 — BYE를 한 번 놓칠 때마다 포트 두 개가
+    영구히 사라진다. 그 사실을 테스트로 못 박아 둔다.
+    """
+    registry = _registry()
+    free_before = registry.free_ports
+
+    _open(registry, "call-1")
+
+    assert registry.free_ports == free_before - 2
+    # 회수 없이는 영원히 돌아오지 않는다.
+    assert registry.idle_sessions(timeout_s=3600) == []
+
+
+def test_idle_call_is_detected() -> None:
+    registry = _registry()
+    legs = _open(registry, "call-1")
+    for leg in legs:
+        leg.last_packet_at -= 300  # 5분 전 마지막 패킷
+
+    assert registry.idle_sessions(timeout_s=120) == ["call-1"]
+
+
+def test_one_quiet_leg_does_not_end_the_call() -> None:
+    """한쪽이 말을 안 하는 통화는 정상이다. 양쪽이 멈춘 것이 끊긴 통화다."""
+    registry = _registry()
+    legs = _open(registry, "call-1")
+    legs[0].last_packet_at -= 300  # 고객만 조용하다
+
+    assert registry.idle_sessions(timeout_s=120) == []
+
+
+def test_receiving_a_packet_keeps_the_call_alive() -> None:
+    registry = _registry()
+    legs = _open(registry, "call-1")
+    for leg in legs:
+        leg.last_packet_at -= 300
+    legs[1].touch()  # 상담원 쪽에서 패킷이 왔다
+
+    assert registry.idle_sessions(timeout_s=120) == []
+
+
+def test_call_with_no_media_at_all_is_reaped() -> None:
+    """개설만 되고 미디어가 한 번도 안 온 통화도 회수 대상이다."""
+    registry = _registry()
+    legs = _open(registry, "ghost")
+    for leg in legs:
+        leg.last_packet_at -= 300
+
+    assert "ghost" in registry.idle_sessions(timeout_s=120)
+
+
+def test_closing_returns_the_ports() -> None:
+    registry = _registry()
+    free_before = registry.free_ports
+    _open(registry, "call-1")
+
+    registry.close("call-1")
+
+    assert registry.free_ports == free_before
+    assert registry.active_calls == 0

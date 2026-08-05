@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 63f45346c01f4e2ea07433eac4f82a3794664ea767e158c182a3f68906411000
+configuration_hash: dbe40b8cd2286eb5127f56b3f418e6b4aaa6d04dbdd725f1a11bb6442c653e59
 component_count: 21
 components:
 - id: AUD-RTP
   name: SIP/RTP 인입 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: e4b7f74a61da6be5
+  source_hash: 023465e0458c517c
   license_key: AUD-RTP
   capacity_unit: concurrent_channels
   depends_on:

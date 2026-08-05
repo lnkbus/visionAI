@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: beb9fd18a132afbcbcb09ad97ee0fe86c9fce7821cdbff47f37bc66db98091f6
+configuration_hash: 3454b2b087668d619ed856c7892daee6739c497d5fae4627bd399b0e3f683917
 component_count: 23
 components:
 - id: AUD-RTP
   name: SIP/RTP 인입 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: e4b7f74a61da6be5
+  source_hash: 023465e0458c517c
   license_key: AUD-RTP
   capacity_unit: concurrent_channels
   depends_on:

@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -41,6 +43,20 @@ class RtpSettings(BaseSettings):
 
     jitter_depth: int = 3
     """20ms 패킷 기준 60ms 버퍼. AICC는 초저지연이 목표라 얕게 잡는다."""
+
+    idle_timeout_s: float = 120.0
+    """양쪽 미디어가 이만큼 조용하면 통화를 회수한다.
+
+    **이 값이 없으면 포트는 명시적 DELETE로만 회수된다.** 시그널링 연동은
+    고객사마다 다르고(SIPREC/게이트웨이/CTI) 이 저장소 밖에 있다 — BYE를
+    한 번 놓칠 때마다 포트 두 개가 영구히 사라지고, 기본 풀에서는 그런
+    통화 25건이면 신규 인입이 통째로 막힌다.
+
+    RTP는 20ms마다 온다. 2분 침묵은 미디어 경로가 사라졌다는 뜻이지만,
+    보류(hold) 중 무음 억제로 송신을 멈추는 게이트웨이가 있어 짧게 잡으면
+    멀쩡한 통화를 끊는다. 현장 게이트웨이 동작을 확인한 뒤 조정한다."""
+
+    reap_interval_s: float = 15.0
 
 
 class StartCallRequest(BaseModel):
@@ -95,11 +111,21 @@ def create_app(
         )
         log.info(
             "RTP 게이트웨이 기동",
-            extra={"port_range": f"{cfg.port_start}-{cfg.port_end}"},
+            extra={
+                "port_range": f"{cfg.port_start}-{cfg.port_end}",
+                "idle_timeout_s": cfg.idle_timeout_s,
+            },
+        )
+        reaper = asyncio.create_task(
+            _reap_idle_calls(application, cfg.idle_timeout_s, cfg.reap_interval_s),
+            name="rtp-idle-reaper",
         )
         try:
             yield
         finally:
+            reaper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reaper
             await application.state.receiver.close_all()
             if not injected:
                 await application.state.core_bus.aclose()
@@ -229,11 +255,44 @@ async def _create_session(request: Request, payload: StartCallRequest):  # type:
     return Session.model_validate(response.json())
 
 
-async def _close_session(request: Request, session_id: str) -> None:
-    client: httpx.AsyncClient = request.app.state.core_bus
+async def _reap_idle_calls(app: FastAPI, timeout_s: float, interval_s: float) -> None:
+    """미디어가 멈춘 통화를 회수한다.
+
+    끊긴 통화를 아무도 알려 주지 않는 상황은 예외가 아니라 **기본값**이다 —
+    시그널링 연동이 이 저장소 밖에 있기 때문이다. 회수하지 않으면 포트가
+    영구히 새고, 결국 신규 인입이 막힌다.
+
+    세션도 함께 닫는다. 미디어만 접고 세션을 남기면 통화가 영영 '진행 중'으로
+    남아 요약도 나오지 않는다.
+    """
+    while True:
+        await asyncio.sleep(interval_s)
+        registry: CallRegistry = app.state.registry
+        receiver: RtpReceiver = app.state.receiver
+        for session_id in registry.idle_sessions(timeout_s):
+            legs = registry.legs_for_session(session_id)
+            log.warning(
+                "미디어가 멈춘 통화 회수 — 종료 신호를 못 받았다",
+                extra={
+                    "session_id": session_id,
+                    "idle_s": round(max(leg.idle_for() for leg in legs), 1),
+                    "legs": len(legs),
+                },
+            )
+            for leg in legs:
+                await receiver.close_leg(leg)
+            registry.close(session_id)
+            await _close_session_via(app.state.core_bus, session_id)
+
+
+async def _close_session_via(client: httpx.AsyncClient, session_id: str) -> None:
     try:
         await client.post(f"/internal/v1/sessions/{session_id}/close")
     except httpx.HTTPError:
-        # 세션 종료 실패로 통화 종료 API를 실패시키지 않는다. 미디어는 이미
-        # 끊겼고, 세션은 TTL로 정리된다.
         log.warning("세션 종료 실패", extra={"session_id": session_id}, exc_info=True)
+
+
+async def _close_session(request: Request, session_id: str) -> None:
+    # 세션 종료 실패로 통화 종료 API를 실패시키지 않는다. 미디어는 이미
+    # 끊겼고, 세션은 TTL로 정리된다.
+    await _close_session_via(request.app.state.core_bus, session_id)
