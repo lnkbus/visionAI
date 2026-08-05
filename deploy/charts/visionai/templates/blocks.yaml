@@ -1,0 +1,188 @@
+{{/*
+블록 Deployment + Service.
+
+values.blocks 를 순회해 한 템플릿으로 전 블록을 만든다. 블록마다 파일을
+복사하면 보안 컨텍스트 하나 고치는 데 18곳을 고쳐야 하고 반드시 한 곳이 빠진다.
+*/}}
+{{- $root := . -}}
+{{- $fullname := include "visionai.fullname" . -}}
+{{- range $name, $block := .Values.blocks }}
+{{- if $block.enabled }}
+{{- $single := eq (include "visionai.singleWriter" $name) "true" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-{{ $name }}
+  labels:
+    {{- include "visionai.labels" $root | nindent 4 }}
+    visionai.io/block: {{ include "visionai.blockId" $name | quote }}
+spec:
+  {{- if $single }}
+  # 단일 라이터. values의 replicas를 무시한다 — 복제하면 감사 체인이 끊기거나
+  # 라이선스 파일이 깨진다.
+  replicas: 1
+  strategy:
+    # 새 파드가 뜬 뒤 옛 파드가 죽으면 잠깐 둘이 같은 파일에 쓴다.
+    type: Recreate
+  {{- else }}
+  replicas: {{ $block.replicas | default $root.Values.defaults.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+      visionai.io/block: {{ include "visionai.blockId" $name | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "visionai.labels" $root | nindent 8 }}
+        visionai.io/block: {{ include "visionai.blockId" $name | quote }}
+      annotations:
+        # 공통 설정이 바뀌면 파드를 다시 띄운다. 안 하면 설정을 바꿨는데
+        # 반영이 안 되는 상태로 남는다.
+        checksum/config: {{ include (print $root.Template.BasePath "/configmap.yaml") $root | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "visionai.serviceAccountName" $root }}
+      {{- with $root.Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $root.Values.podSecurityContext | nindent 8 }}
+      {{- with ($block.nodeSelector | default $root.Values.defaults.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($block.tolerations | default $root.Values.defaults.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "visionai.image" (dict "root" $root "name" $name) }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $root.Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $block.port }}
+            {{- if and $block.rtp $block.rtp.enabled }}
+            - name: rtp
+              containerPort: {{ $block.rtp.port }}
+              protocol: UDP
+            {{- end }}
+          env:
+            - name: VAI_BLOCK_ID
+              value: {{ include "visionai.blockId" $name | quote }}
+            - name: VAI_PORT
+              value: {{ $block.port | quote }}
+            - name: VAI_CONSUMER_NAME
+              # 파드 이름을 컨슈머 이름으로 쓴다. 고정값이면 복제된 워커들이
+              # 같은 이름으로 붙어 펜딩 메시지 소유권이 뒤엉킨다.
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if $root.Values.license.publicKey }}
+            - name: VAI_LICENSE_PUBLIC_KEY_PATH
+              value: /etc/visionai/license/public.pem
+            {{- end }}
+            {{- if eq $name "core-adm" }}
+            - name: VAI_ADM_REQUIRE_AUTH
+              value: {{ $root.Values.admin.requireAuth | quote }}
+            {{- if $root.Values.admin.jwtSecretName }}
+            - name: VAI_ADM_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.admin.jwtSecretName }}
+                  key: {{ $root.Values.admin.jwtSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- if and (eq $name "core-sec") $root.Values.security.masterKeySecret }}
+            - name: VAI_SEC_MASTER_KEY_PATH
+              value: /etc/visionai/keys/master.key
+            {{- end }}
+            {{- range $key, $value := ($block.env | default dict) }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-common
+          resources:
+            {{- toYaml ($block.resources | default $root.Values.defaults.resources) | nindent 12 }}
+          volumeMounts:
+            # 읽기 전용 루트라 임시 파일 경로를 명시적으로 준다.
+            - name: tmp
+              mountPath: /tmp
+            - name: license
+              mountPath: /etc/visionai/license
+              # CORE-LIC만 쓴다. 나머지는 읽기 전용이라 자기 라이선스를 고칠 수 없다.
+              readOnly: {{ ne $name "core-lic" }}
+            {{- if and (eq $name "core-sec") $root.Values.security.auditPersistence.enabled }}
+            - name: audit
+              mountPath: /var/lib/visionai/audit
+            {{- end }}
+            {{- if and (eq $name "core-sec") $root.Values.security.masterKeySecret }}
+            - name: master-key
+              mountPath: /etc/visionai/keys
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: license
+          {{- if $root.Values.license.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-license
+          {{- else }}
+          secret:
+            secretName: {{ include "visionai.licenseSecretName" $root }}
+          {{- end }}
+        {{- if and (eq $name "core-sec") $root.Values.security.auditPersistence.enabled }}
+        - name: audit
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-audit
+        {{- end }}
+        {{- if and (eq $name "core-sec") $root.Values.security.masterKeySecret }}
+        - name: master-key
+          secret:
+            secretName: {{ $root.Values.security.masterKeySecret }}
+            defaultMode: 0400
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-{{ $name }}
+  labels:
+    {{- include "visionai.labels" $root | nindent 4 }}
+    visionai.io/block: {{ include "visionai.blockId" $name | quote }}
+spec:
+  type: {{ (($block.service).type) | default "ClusterIP" }}
+  selector:
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+    visionai.io/block: {{ include "visionai.blockId" $name | quote }}
+  ports:
+    - name: http
+      port: {{ $block.port }}
+      targetPort: http
+    {{- if and $block.rtp $block.rtp.enabled }}
+    - name: rtp
+      port: {{ $block.rtp.port }}
+      targetPort: rtp
+      protocol: UDP
+    {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,74 @@
+{{- $fullname := include "visionai.fullname" . -}}
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "visionai.serviceAccountName" . }}
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+# 이 플랫폼은 쿠버네티스 API를 쓰지 않는다. 토큰을 파드에 넣을 이유가 없다.
+automountServiceAccountToken: false
+{{- end }}
+{{- if .Values.license.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-license
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+  annotations:
+    # 릴리스를 지워도 라이선스는 남긴다. 지워지면 재설치 때 발급 절차를
+    # 처음부터 다시 밟아야 하고, 폐쇄망에서는 며칠이 걸린다.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    # 여러 노드의 블록이 같은 .lic을 읽는다. RWO면 노드가 갈릴 때 기동이 막힌다.
+    - {{ .Values.license.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.license.persistence.size }}
+  {{- with .Values.license.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
+{{- $sec := index .Values.blocks "core-sec" }}
+{{- if and $sec $sec.enabled .Values.security.auditPersistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-audit
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+  annotations:
+    # 감사 로그를 릴리스와 함께 지우면 그 자체가 감사 사고다.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    # 단일 라이터. 여러 파드가 같은 디렉토리에 쓰면 해시 체인이 끊긴다.
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.security.auditPersistence.size }}
+  {{- with .Values.security.auditPersistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.license.content (not .Values.license.existingSecret) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $fullname }}-license
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  customer.lic: |
+    {{- .Values.license.content | nindent 4 }}
+  {{- with .Values.license.publicKey }}
+  public.pem: |
+    {{- . | nindent 4 }}
+  {{- end }}
+{{- end }}

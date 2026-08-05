@@ -1,0 +1,41 @@
+# 패키지 B — 스마트 회의록 (화자분리 + 회의록 자동 작성)
+#
+#   helm install visionai . -f values-meeting.yaml --set-file license.content=customer.lic
+#
+# AICC와 **같은 코어**(VAD·STT·요약)를 쓰고 앞뒤만 다르다.
+# 전화 인입(AUD-RTP)과 상담 지원(FLT-MICRO·TA-ASSIST)이 빠지는 대신
+# 화자분리(SPK-DIA)와 회의록 화면(UI-MEET)이 들어간다.
+
+blocks:
+  core-bus: { enabled: true }
+  core-gw: { enabled: true }
+  core-lic: { enabled: true }
+  core-sec: { enabled: true }
+  core-adm: { enabled: true }
+
+  aud-vad: { enabled: true, replicas: 2 }
+  stt-core: { enabled: true, replicas: 2 }
+  spk-dia:
+    enabled: true
+    env:
+      # 기본 spectral 임베더는 음역이 뚜렷이 다른 화자만 가른다. 회의록 품질이
+      # 필요한 고객사는 신경망 임베더를 쓰고 **유사도 임계값을 재조정한다.**
+      VAI_DIA_EMBEDDER: spectral
+
+  llm-gw: { enabled: true }
+  llm-sum: { enabled: true }
+  ui-meet: { enabled: true }
+
+  # 지식 검색은 회의록 패키지에 포함하지 않는다. 필요하면 애드온으로 켠다.
+  rag-kb: { enabled: false }
+  rag-srch: { enabled: false }
+  ta-assist: { enabled: false }
+  flt-micro: { enabled: false }
+  scn-studio: { enabled: false }
+  ui-agent: { enabled: false }
+  aud-rtp: { enabled: false }
+
+infra:
+  # 검색 블록이 없으므로 qdrant도 필요 없다.
+  qdrant:
+    enabled: false

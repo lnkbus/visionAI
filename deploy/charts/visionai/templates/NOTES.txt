@@ -1,0 +1,60 @@
+VisionAI {{ .Chart.AppVersion }} 설치됨 — 릴리스: {{ .Release.Name }}
+
+{{- $on := 0 }}{{- range $n, $b := .Values.blocks }}{{- if $b.enabled }}{{- $on = add1 $on }}{{- end }}{{- end }}
+블록 {{ $on }}개가 활성화되었습니다.
+
+{{ if not .Values.license.content }}{{ if not .Values.license.existingSecret }}
+⚠  라이선스가 아직 설치되지 않았습니다. CORE-LIC 외의 블록은 개발 모드로 뜨거나
+   (릴리스 빌드라면) 기동을 거부합니다.
+
+   1) 이 서버의 발급요청서를 만듭니다
+      kubectl exec deploy/{{ include "visionai.fullname" . }}-core-lic -- \
+        curl -sS -X POST localhost:8095/internal/v1/license/request \
+          -H 'content-type: application/json' \
+          -d '{"customer_id":"<고객사>","site":"<사이트>"}' > license.req
+
+   2) license.req 를 반출해 공급사에 전달합니다
+
+   3) 받은 .lic 을 반입해 설치합니다
+      kubectl exec -i deploy/{{ include "visionai.fullname" . }}-core-lic -- \
+        curl -sS -X POST localhost:8095/internal/v1/license \
+          -H 'content-type: application/json' \
+          -d "{\"content\": $(cat customer.lic), \"activate\": true}"
+{{ end }}{{ end }}
+{{- if and .Values.admin.requireAuth (not .Values.admin.jwtSecretName) }}
+⚠  운영 콘솔(CORE-ADM)이 기동을 거부합니다 — JWT 비밀키가 없습니다.
+   기본 비밀키로는 뜨지 않습니다("나중에 바꾸겠다"로 남는 기본값을 막기 위해서).
+
+      kubectl create secret generic visionai-admin \
+        --from-literal=jwt-secret="$(openssl rand -base64 48)"
+      helm upgrade {{ .Release.Name }} . --set admin.jwtSecretName=visionai-admin
+{{- end }}
+{{- if not .Values.security.masterKeySecret }}
+ℹ  저장 암호화가 꺼져 있습니다(평문 저장). 켜려면:
+
+      kubectl create secret generic visionai-master-key \
+        --from-literal=master.key="$(openssl rand -base64 32)"
+      helm upgrade {{ .Release.Name }} . --set security.masterKeySecret=visionai-master-key
+
+   ⚠ 이 키를 잃어버리면 암호화된 데이터를 **영구히** 복호할 수 없습니다.
+{{- end }}
+
+확인:
+{{- $fullname := include "visionai.fullname" . }}
+{{- if (index .Values.blocks "core-adm").enabled }}
+  운영 콘솔   kubectl port-forward svc/{{ $fullname }}-core-adm 8097:8097
+              → http://localhost:8097/console
+{{- end }}
+{{- if (index .Values.blocks "ui-agent").enabled }}
+  상담원 화면 kubectl port-forward svc/{{ $fullname }}-ui-agent 8091:8091
+              → http://localhost:8091/workspace
+{{- end }}
+{{- if (index .Values.blocks "ui-meet").enabled }}
+  회의록 화면 kubectl port-forward svc/{{ $fullname }}-ui-meet 8094:8094
+              → http://localhost:8094/minutes
+{{- end }}
+
+  전체 상태   kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+라이선스와 감사 로그 볼륨은 `helm uninstall` 로도 지워지지 않습니다
+(resource-policy: keep). 의도적으로 지우려면 PVC를 직접 삭제하십시오.

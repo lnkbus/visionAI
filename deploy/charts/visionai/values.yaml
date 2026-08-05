@@ -1,0 +1,218 @@
+# VisionAI 기본값 — 전 블록 활성(개발·통합 검증용).
+#
+# 실제 납품은 패키지 오버레이를 얹는다:
+#   helm install visionai . -f values-aicc.yaml      # 금융 AICC
+#   helm install visionai . -f values-meeting.yaml   # 스마트 회의록
+#
+# **블록 하나 = values의 항목 하나.** 켜고 끄는 것만으로 패키지가 조립되고,
+# 그 목록이 곧 라이선스(.lic)와 에어갭 번들의 목록과 같아야 한다.
+# 셋이 갈라지면 "돈은 받았는데 안 도는" 블록이 생긴다.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ""          # 폐쇄망은 로컬 로드라 레지스트리가 없다. 비워 둔다.
+  repository: visionai
+  tag: ""               # 비면 Chart.appVersion
+  # 에어갭에서는 이미지를 미리 docker/ctr load 해 둔다. Always면 기동이 실패한다.
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# 모든 블록에 들어가는 공통 환경변수.
+common:
+  environment: onprem
+  logLevel: INFO
+  logJson: true         # 고객사 로그 수집 체계에 태우려면 JSON이 기본이다
+  redisUrl: redis://visionai-redis:6379/0
+  coreBusUrl: http://visionai-core-bus:8081
+
+# 라이선스 — 모든 블록이 같은 파일을 읽는다(라이선스 서버 없음).
+license:
+  # 기존 Secret을 쓰면 이름만 지정한다. 비면 아래 값으로 Secret을 만든다.
+  existingSecret: ""
+  # .lic 내용(JSON 문자열). **values에 넣지 않는 것을 권한다** —
+  # helm 릴리스 이력에 그대로 남는다. --set-file 이나 existingSecret 을 쓴다.
+  content: ""
+  publicKey: ""         # 릴리스 이미지에 내장돼 있으면 비워 둔다
+  # CORE-LIC이 .lic을 설치할 쓰기 가능 볼륨. 나머지 블록은 읽기 전용으로 붙는다.
+  persistence:
+    enabled: true
+    size: 64Mi
+    storageClass: ""
+    accessMode: ReadWriteMany   # 여러 노드의 블록이 같은 .lic을 읽는다
+
+security:
+  # 감사 로그 저장소. CORE-SEC 단일 라이터를 전제한다.
+  auditPersistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  masterKeySecret: ""   # 저장 암호화 키(Secret 이름). 비면 암호화가 꺼진다.
+
+admin:
+  # 운영 콘솔 JWT 비밀키. 기본값으로는 블록이 기동을 거부한다.
+  jwtSecretName: ""
+  jwtSecretKey: jwt-secret
+  requireAuth: true
+
+# 폐쇄망에서 helm repo에 나갈 수 없으므로 인프라를 이 차트가 최소 구성으로 담는다.
+# 고객사가 이미 Redis/Qdrant를 운영 중이면 끄고 common.redisUrl 등을 가리킨다.
+infra:
+  redis:
+    enabled: true
+    image: redis:7-alpine
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: ""
+  qdrant:
+    enabled: true
+    image: qdrant/qdrant:v1.12.1
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+
+# 블록별 설정. port는 컨테이너가 여는 포트이며 VAI_PORT로 주입된다.
+blocks:
+  core-bus:
+    enabled: true
+    port: 8081
+    replicas: 2
+  core-gw:
+    enabled: true
+    port: 8080
+    replicas: 2
+    service:
+      type: ClusterIP     # 외부 노출은 ingress로. LoadBalancer는 온프렘에 없는 경우가 많다.
+  core-lic:
+    enabled: true
+    port: 8095
+    # 라이선스 파일의 단일 라이터. 복제하면 동시 설치로 파일이 깨진다.
+    replicas: 1
+  core-sec:
+    enabled: true
+    port: 8096
+    # 해시 체인은 단일 라이터를 전제한다. 복제하면 체인이 끊긴다.
+    replicas: 1
+    env:
+      VAI_CONSUMER_GROUP: sec
+      VAI_SEC_AUDIT_DIR: /var/lib/visionai/audit
+  core-adm:
+    enabled: true
+    port: 8097
+    replicas: 1
+  aud-rtp:
+    enabled: true
+    port: 8092
+    replicas: 2
+    # RTP는 UDP다. 전화 인입은 별도 Service로 노출한다(values-aicc 참조).
+    rtp:
+      enabled: true
+      port: 40000
+  aud-vad:
+    enabled: true
+    port: 8082
+    replicas: 2
+  stt-core:
+    enabled: true
+    port: 8083
+    replicas: 2
+    # GPU 노드에만 뜬다. 지정하지 않으면 CPU 노드에서 극단적으로 느려지고,
+    # 그 원인을 찾기 어렵다.
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    nodeSelector:
+      visionai.io/gpu: "true"
+    env:
+      VAI_STT_ADAPTER: faster_whisper
+  spk-dia:
+    enabled: true
+    port: 8093
+    replicas: 1
+    env:
+      VAI_DIA_EMBEDDER: spectral
+  flt-micro:
+    enabled: true
+    port: 8084
+    replicas: 2
+  llm-gw:
+    enabled: true
+    port: 8085
+    replicas: 1
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+    nodeSelector:
+      visionai.io/gpu: "true"
+  llm-sum:
+    enabled: true
+    port: 8089
+    replicas: 1
+  rag-kb:
+    enabled: true
+    port: 8086
+    replicas: 1
+    env:
+      VAI_RAG_STORE: qdrant
+      VAI_RAG_STORE_CONFIG: '{"url":"http://visionai-qdrant:6333"}'
+  rag-srch:
+    enabled: true
+    port: 8087
+    replicas: 2
+    env:
+      VAI_RAG_STORE: qdrant
+      VAI_RAG_STORE_CONFIG: '{"url":"http://visionai-qdrant:6333"}'
+  ta-assist:
+    enabled: true
+    port: 8088
+    replicas: 2
+  scn-studio:
+    enabled: true
+    port: 8090
+    replicas: 1
+  ui-agent:
+    enabled: true
+    port: 8091
+    replicas: 2
+  ui-meet:
+    enabled: true
+    port: 8094
+    replicas: 1
+
+# 블록에 개별 지정이 없을 때 쓰는 기본값.
+defaults:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  env: {}
+
+# 비루트 실행 — 고객사 보안 심사의 기본 점검 항목이다.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+serviceAccount:
+  create: true
+  name: ""
+
+ingress:
+  enabled: false
+  className: ""
+  host: visionai.local
+  tls: []
+  annotations: {}

@@ -1,0 +1,43 @@
+# 패키지 A — 금융 AICC (전화 상담 실시간 지원)
+#
+#   helm install visionai . -f values-aicc.yaml \
+#     --set-file license.content=customer.lic \
+#     --set admin.jwtSecretName=visionai-admin
+#
+# 이 파일의 enabled 목록은 **라이선스(.lic)·에어갭 번들과 같아야 한다.**
+# 셋이 갈라지면 "돈은 받았는데 안 도는" 블록이 생긴다.
+#   uv run blockctl bundle-plan --license customer.lic  ← 대조에 쓴다
+
+blocks:
+  # 기반
+  core-bus: { enabled: true }
+  core-gw: { enabled: true }
+  core-lic: { enabled: true }
+  core-sec: { enabled: true }
+  core-adm: { enabled: true }
+
+  # 전화 인입 → 인식
+  aud-rtp:
+    enabled: true
+    replicas: 3
+    rtp:
+      enabled: true
+      port: 40000
+  aud-vad: { enabled: true, replicas: 3 }
+  stt-core: { enabled: true, replicas: 3 }
+
+  # 실시간 지원
+  flt-micro: { enabled: true, replicas: 3 }
+  rag-kb: { enabled: true }
+  rag-srch: { enabled: true, replicas: 2 }
+  ta-assist: { enabled: true, replicas: 3 }
+  llm-gw: { enabled: true }
+  llm-sum: { enabled: true }
+
+  # 저작·화면
+  scn-studio: { enabled: true }
+  ui-agent: { enabled: true, replicas: 2 }
+
+  # 회의록 전용 블록은 끈다. 켜 두면 쓰지도 않는 GPU·메모리를 먹는다.
+  spk-dia: { enabled: false }
+  ui-meet: { enabled: false }

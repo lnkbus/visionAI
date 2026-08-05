@@ -297,6 +297,41 @@ CORE-BUS가 세션 인입 시점에 셉니다.
 콘솔은 사용률 70%에서 노랑, 90%에서 빨간 배너를 띄웁니다. 상한에 부딪힌 뒤에
 아는 것은 이미 상담을 놓친 뒤입니다.
 
+### 배포는 블록을 켜고 끄는 것 (Helm/K3s)
+
+```bash
+helm install visionai deploy/charts/visionai -f values-aicc.yaml \
+  --set-file license.content=customer.lic
+```
+
+| 패키지 | 블록 | 인프라 |
+|---|---|---|
+| `values-aicc.yaml` | 16개 (전화 인입 → 지식 팝업 → 요약) | redis + qdrant |
+| `values-meeting.yaml` | 11개 (화자분리 → 회의록) | redis |
+
+**블록 하나 = values 항목 하나.** 그 목록이 라이선스(`.lic`)·에어갭 번들 목록과
+같아야 합니다 — 셋이 갈라지면 "돈은 받았는데 안 도는" 블록이 생깁니다.
+`blockctl bundle-plan --license customer.lic`이 대조 근거입니다.
+
+폐쇄망을 전제로 한 선택들:
+
+- **의존 차트를 두지 않습니다.** helm repo에 나갈 수 없어 `bitnami/redis`는
+  설치 자체가 불가능합니다. redis·qdrant를 차트가 최소 구성으로 담고, 고객사가
+  이미 운영 중이면 `infra.*.enabled=false`로 끕니다
+- **`pullPolicy: IfNotPresent`** — 레지스트리가 없습니다. `Always`면 전 블록이
+  기동에 실패합니다
+- **`CORE-SEC`·`CORE-LIC`은 `replicas`를 올려도 1로 강제**됩니다. 복제하면
+  감사 해시 체인이 끊기거나 라이선스 파일이 깨집니다. "성능을 올리려다 감사
+  로그를 못 쓰게 만드는" 사고를 설정 실수로 낼 수 있게 두지 않았습니다
+- **라이선스 볼륨은 `CORE-LIC`만 쓰기 가능**합니다. 나머지 블록은 읽기 전용이라
+  자기 라이선스를 고쳐 쓸 수 없습니다
+- **라이선스·감사 PVC는 `helm uninstall`로도 안 지워집니다**(`resource-policy: keep`).
+  라이선스가 지워지면 발급 절차를 처음부터 다시 밟아야 하고(폐쇄망에서 며칠),
+  감사 로그가 지워지는 것은 그 자체로 감사 사고입니다
+
+차트가 카탈로그에서 표류하는 것은 테스트가 막습니다 — 블록을 추가하고 차트를
+잊으면 배포할 수 없는 블록이 생기고, 그 사실은 배포 당일(=검수일)에 드러납니다.
+
 ### 두 개의 제품 패키지가 같은 코어를 쓴다
 
 ```

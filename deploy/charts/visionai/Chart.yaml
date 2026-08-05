@@ -1,0 +1,18 @@
+apiVersion: v2
+name: visionai
+description: >
+  온프레미스 실시간 다국어 STT/TTS & sLLM AI 플랫폼. 블록을 켜고 끄는 것만으로
+  패키지(금융 AICC / 스마트 회의록)를 조립한다.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - stt
+  - aicc
+  - on-premise
+  - air-gapped
+# 의존 차트를 두지 않는다. 폐쇄망에서는 helm repo에 나갈 수 없어
+# bitnami/redis 같은 외부 차트는 설치 자체가 불가능하다.
+# redis·qdrant는 이 차트가 최소 구성으로 직접 담고, 고객사가 이미 운영 중이면
+# infra.*.enabled=false 로 끄고 기존 것을 가리킨다.
+dependencies: []

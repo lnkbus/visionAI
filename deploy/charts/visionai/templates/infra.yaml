@@ -1,0 +1,158 @@
+{{/*
+Redis · Qdrant 최소 구성.
+
+폐쇄망에서는 helm repo에 나갈 수 없어 bitnami/redis 같은 외부 차트를 쓸 수 없다.
+그렇다고 "고객사가 알아서 준비하세요"로 두면 PoC 첫날이 인프라 설치로 간다.
+운영 규모에서는 고객사 표준 Redis/Qdrant로 바꾸고 여기를 끄면 된다.
+*/}}
+{{- $fullname := include "visionai.fullname" . -}}
+{{- if .Values.infra.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+    visionai.io/infra: redis
+spec:
+  serviceName: {{ $fullname }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      visionai.io/infra: redis
+  template:
+    metadata:
+      labels:
+        {{- include "visionai.labels" . | nindent 8 }}
+        visionai.io/infra: redis
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: redis
+          image: {{ .Values.infra.redis.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # 이벤트 버스는 Streams다. 워커가 죽어도 펜딩 메시지가 남아야 하므로
+          # AOF를 켠다. 껐다가 재기동하면 처리 중이던 상담 이벤트가 사라진다.
+          args: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      {{- if not .Values.infra.redis.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.infra.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.infra.redis.persistence.size }}
+        {{- with .Values.infra.redis.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    visionai.io/infra: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}
+{{- if .Values.infra.qdrant.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-qdrant
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+    visionai.io/infra: qdrant
+spec:
+  serviceName: {{ $fullname }}-qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      visionai.io/infra: qdrant
+  template:
+    metadata:
+      labels:
+        {{- include "visionai.labels" . | nindent 8 }}
+        visionai.io/infra: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: {{ .Values.infra.qdrant.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 6333
+          volumeMounts:
+            - name: storage
+              mountPath: /qdrant/storage
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      {{- if not .Values.infra.qdrant.persistence.enabled }}
+      volumes:
+        - name: storage
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.infra.qdrant.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.infra.qdrant.persistence.size }}
+        {{- with .Values.infra.qdrant.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-qdrant
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    visionai.io/infra: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: http
+{{- end }}

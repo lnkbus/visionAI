@@ -1,0 +1,24 @@
+{{- $fullname := include "visionai.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-common
+  labels:
+    {{- include "visionai.labels" . | nindent 4 }}
+data:
+  # 환경 분기 금지 원칙(docs/06 §2-4): 코드에 if is_onprem 을 두지 않고
+  # 어댑터 이름과 엔드포인트를 설정으로 주입한다.
+  VAI_ENVIRONMENT: {{ .Values.common.environment | quote }}
+  VAI_LOG_LEVEL: {{ .Values.common.logLevel | quote }}
+  VAI_LOG_JSON: {{ .Values.common.logJson | quote }}
+  VAI_REDIS_URL: {{ .Values.common.redisUrl | quote }}
+  VAI_CORE_BUS_URL: {{ .Values.common.coreBusUrl | quote }}
+  VAI_LICENSE_PATH: /etc/visionai/license/customer.lic
+  # 블록 간 참조. compose와 같은 이름 규칙을 쓴다.
+  VAI_ADM_BUS_URL: http://{{ $fullname }}-core-bus:8081
+  VAI_ADM_LICENSE_URL: http://{{ $fullname }}-core-lic:8095
+  VAI_ADM_SECURITY_URL: http://{{ $fullname }}-core-sec:8096
+  VAI_MEETUI_SUMMARY_URL: http://{{ $fullname }}-llm-sum:8089
+  VAI_MEETUI_DIARIZATION_URL: http://{{ $fullname }}-spk-dia:8093
+  VAI_STUDIO_FILTER_URL: http://{{ $fullname }}-flt-micro:8084
+  VAI_STUDIO_SEARCH_URL: http://{{ $fullname }}-rag-srch:8087

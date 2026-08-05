@@ -50,3 +50,10 @@ bundle:  ## 에어갭 반입 번들 생성 (LICENSE=customer.lic 또는 BLOCKS="
 bundle-plan:  ## 반입 계획만 계산 (docker 없이 확인)
 	uv run blockctl bundle-plan $(if $(LICENSE),--license $(LICENSE),) \
 		$(foreach b,$(BLOCKS),--block $(b))
+
+chart:  ## Helm 차트 검증 (lint + 기본값·패키지 오버레이 렌더링)
+	cd deploy/charts/visionai && helm lint . && \
+		helm template visionai . > /dev/null && \
+		helm template visionai . -f values-aicc.yaml > /dev/null && \
+		helm template visionai . -f values-meeting.yaml > /dev/null && \
+		echo "✓ 차트 검증 통과"

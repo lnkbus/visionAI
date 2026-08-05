@@ -53,6 +53,27 @@ jobs:
         # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
         run: uv run pytest -q
 
+  chart:
+    name: Helm 차트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: 차트 검증
+        run: |
+          cd deploy/charts/visionai
+          helm lint .
+          # 기본값과 두 패키지 오버레이가 모두 렌더링되는지 확인한다.
+          # 오버레이 하나가 깨지면 그 패키지는 배포 당일에 막힌다.
+          helm template visionai . > /dev/null
+          helm template visionai . -f values-aicc.yaml > /dev/null
+          helm template visionai . -f values-meeting.yaml > /dev/null
+
+
   images:
     name: 블록 이미지 빌드
     runs-on: ubuntu-latest
