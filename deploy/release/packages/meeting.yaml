@@ -1,0 +1,130 @@
+_comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로 고치지 않는다. 구성이 바뀌면 `blockctl freeze
+  --write`로 다시 만들고 그 diff를 검토한다.
+package: meeting
+chart_version: 0.1.0
+app_version: 0.1.0
+configuration_hash: ea5339e7649685d1ecaeaede0c966387ff875ec5216794e75e4c67e68fc22ad2
+component_count: 15
+components:
+- id: AUD-VAD
+  name: 오디오 라우터 & 스트리밍 버퍼
+  version: 0.1.0
+  kind: block
+  source_hash: ad75549cd4b5a58c
+  license_key: AUD-VAD
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: CORE-ADM
+  name: 운영 콘솔
+  version: 0.1.0
+  kind: block
+  source_hash: e210011c566d37b4
+  license_key: CORE-ADM
+  capacity_unit: seats
+  depends_on:
+  - CORE-BUS
+  - CORE-LIC
+  - CORE-SEC
+- id: CORE-BUS
+  name: 세션 오케스트레이터 & 이벤트 버스
+  version: 0.1.0
+  kind: block
+  source_hash: a7722c0b3500fc65
+  license_key: CORE-BUS
+  capacity_unit: none
+- id: CORE-GW
+  name: API / WebSocket 게이트웨이
+  version: 0.1.0
+  kind: block
+  source_hash: 91b110e0965a4d90
+  license_key: CORE-GW
+  capacity_unit: none
+  depends_on:
+  - CORE-BUS
+- id: CORE-LIC
+  name: 오프라인 DRM 라이선스
+  version: 0.1.0
+  kind: block
+  source_hash: 772edbc5e2d96c7a
+  license_key: CORE-LIC
+  capacity_unit: none
+- id: CORE-SEC
+  name: 암호화·감사
+  version: 0.1.0
+  kind: block
+  source_hash: 71043383187731c7
+  license_key: CORE-SEC
+  capacity_unit: none
+  depends_on:
+  - CORE-BUS
+- id: LLM-GW
+  name: sLLM 서빙 게이트웨이
+  version: 0.1.0
+  kind: block
+  source_hash: c2bb184f0c14cefd
+  license_key: LLM-GW
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: LLM-SUM
+  name: 요약 & 분석
+  version: 0.1.0
+  kind: block
+  source_hash: 0dce590ae96b1875
+  license_key: LLM-SUM
+  capacity_unit: audio_hours_monthly
+  depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - LLM-GW
+- id: SPK-DIA
+  name: 화자분리
+  version: 0.1.0
+  kind: block
+  source_hash: 50d31ac63515fe3e
+  license_key: SPK-DIA
+  capacity_unit: audio_hours_monthly
+  depends_on:
+  - AUD-VAD
+  - CORE-BUS
+- id: STT-CORE
+  name: STT 어댑터 프레임워크
+  version: 0.1.0
+  kind: block
+  source_hash: 82e97ffc5ea34d42
+  license_key: STT-CORE
+  capacity_unit: concurrent_channels
+  depends_on:
+  - AUD-VAD
+  - CORE-BUS
+- id: UI-MEET
+  name: 스마트 회의록 UI
+  version: 0.1.0
+  kind: block
+  source_hash: 423e91f0f47addae
+  license_key: UI-MEET
+  capacity_unit: seats
+  depends_on:
+  - CORE-BUS
+  - LLM-SUM
+  - SPK-DIA
+- id: lib:contracts
+  name: vai_contracts
+  version: 0.1.0
+  kind: library
+  source_hash: 68c574836374c838
+- id: lib:common
+  name: vai_common
+  version: 0.1.0
+  kind: library
+  source_hash: 3a4e20397676582b
+- id: lib:retrieval
+  name: vai_retrieval
+  version: 0.1.0
+  kind: library
+  source_hash: 79fe8986dc97d767
+- id: infra:redis
+  name: redis
+  version: ''
+  kind: infra

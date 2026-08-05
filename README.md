@@ -36,6 +36,7 @@
 | [04. AI 가상상담원 확장 설계](docs/04-ai-avatar-counselor.md) | 아바타 파이프라인, WebRTC, 단계별 구현 |
 | [05. 데이터·보안·컴플라이언스](docs/05-data-security-compliance.md) | 망분리·KCMVP·개인정보·AI 리스크 통제 |
 | [06. 기술 스택 & MVP 개발 계획](docs/06-tech-stack-mvp.md) | 블록 모노레포 구조, Wave별 개발 계획 — **코딩 착수용** |
+| [07. GS인증 준비](docs/07-gs-certification.md) | 회의록 패키지 형상 고정, 심사 준비 상태(기계 보장 / 사람 손 필요) |
 
 ## 현재 구현 상태 (Wave 1~7 완료)
 

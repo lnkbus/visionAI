@@ -1,0 +1,204 @@
+_comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로 고치지 않는다. 구성이 바뀌면 `blockctl freeze
+  --write`로 다시 만들고 그 diff를 검토한다.
+package: voicebot
+chart_version: 0.1.0
+app_version: 0.1.0
+configuration_hash: 2e2488091ded70b33c2c90b4485c3c5f2a483b5f29da18ec503a95a2f27cf8e1
+component_count: 23
+components:
+- id: AUD-RTP
+  name: SIP/RTP 인입 게이트웨이
+  version: 0.1.0
+  kind: block
+  source_hash: e4b7f74a61da6be5
+  license_key: AUD-RTP
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: AUD-VAD
+  name: 오디오 라우터 & 스트리밍 버퍼
+  version: 0.1.0
+  kind: block
+  source_hash: ad75549cd4b5a58c
+  license_key: AUD-VAD
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: BOT-VOICE
+  name: 음성봇 대화 엔진
+  version: 0.1.0
+  kind: block
+  source_hash: 3e40eb8db00c97e3
+  license_key: BOT-VOICE
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+  - TTS-CORE
+- id: CORE-ADM
+  name: 운영 콘솔
+  version: 0.1.0
+  kind: block
+  source_hash: e210011c566d37b4
+  license_key: CORE-ADM
+  capacity_unit: seats
+  depends_on:
+  - CORE-BUS
+  - CORE-LIC
+  - CORE-SEC
+- id: CORE-BUS
+  name: 세션 오케스트레이터 & 이벤트 버스
+  version: 0.1.0
+  kind: block
+  source_hash: a7722c0b3500fc65
+  license_key: CORE-BUS
+  capacity_unit: none
+- id: CORE-GW
+  name: API / WebSocket 게이트웨이
+  version: 0.1.0
+  kind: block
+  source_hash: 91b110e0965a4d90
+  license_key: CORE-GW
+  capacity_unit: none
+  depends_on:
+  - CORE-BUS
+- id: CORE-LIC
+  name: 오프라인 DRM 라이선스
+  version: 0.1.0
+  kind: block
+  source_hash: 772edbc5e2d96c7a
+  license_key: CORE-LIC
+  capacity_unit: none
+- id: CORE-SEC
+  name: 암호화·감사
+  version: 0.1.0
+  kind: block
+  source_hash: 71043383187731c7
+  license_key: CORE-SEC
+  capacity_unit: none
+  depends_on:
+  - CORE-BUS
+- id: FLT-MICRO
+  name: Micro-Filter & 컴플라이언스 엔진
+  version: 0.1.0
+  kind: block
+  source_hash: f6cd6056f63b6431
+  license_key: FLT-MICRO
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+  - STT-CORE
+- id: LLM-GW
+  name: sLLM 서빙 게이트웨이
+  version: 0.1.0
+  kind: block
+  source_hash: c2bb184f0c14cefd
+  license_key: LLM-GW
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: LLM-SUM
+  name: 요약 & 분석
+  version: 0.1.0
+  kind: block
+  source_hash: 0dce590ae96b1875
+  license_key: LLM-SUM
+  capacity_unit: audio_hours_monthly
+  depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - LLM-GW
+- id: RAG-KB
+  name: 지식베이스 수집기
+  version: 0.1.0
+  kind: block
+  source_hash: 6d0ba64c008c37c1
+  license_key: RAG-KB
+  capacity_unit: index_chunks
+  depends_on:
+  - CORE-BUS
+- id: RAG-SRCH
+  name: 하이브리드 검색 & 리랭킹
+  version: 0.1.0
+  kind: block
+  source_hash: 04236b7a961ac750
+  license_key: RAG-SRCH
+  capacity_unit: index_chunks
+  depends_on:
+  - CORE-BUS
+  - RAG-KB
+- id: SCN-STUDIO
+  name: 시나리오·룰 스튜디오
+  version: 0.1.0
+  kind: block
+  source_hash: 98ce7462615840ba
+  license_key: SCN-STUDIO
+  capacity_unit: seats
+  depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - RAG-SRCH
+- id: STT-CORE
+  name: STT 어댑터 프레임워크
+  version: 0.1.0
+  kind: block
+  source_hash: 82e97ffc5ea34d42
+  license_key: STT-CORE
+  capacity_unit: concurrent_channels
+  depends_on:
+  - AUD-VAD
+  - CORE-BUS
+- id: TA-ASSIST
+  name: 실시간 Agent Assist
+  version: 0.1.0
+  kind: block
+  source_hash: df3f34e5685f2a8d
+  license_key: TA-ASSIST
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+  - FLT-MICRO
+  - LLM-GW
+  - RAG-SRCH
+- id: TTS-CORE
+  name: 음성 합성
+  version: 0.1.0
+  kind: block
+  source_hash: 200ac023082f5b5a
+  license_key: TTS-CORE
+  capacity_unit: concurrent_channels
+  depends_on:
+  - CORE-BUS
+- id: UI-AGENT
+  name: 상담원 워크스페이스
+  version: 0.1.0
+  kind: block
+  source_hash: 6f4c5cd85b3ce8c0
+  license_key: UI-AGENT
+  capacity_unit: seats
+  depends_on:
+  - CORE-BUS
+  - LLM-SUM
+  - SCN-STUDIO
+- id: lib:contracts
+  name: vai_contracts
+  version: 0.1.0
+  kind: library
+  source_hash: 68c574836374c838
+- id: lib:common
+  name: vai_common
+  version: 0.1.0
+  kind: library
+  source_hash: 3a4e20397676582b
+- id: lib:retrieval
+  name: vai_retrieval
+  version: 0.1.0
+  kind: library
+  source_hash: 79fe8986dc97d767
+- id: infra:qdrant
+  name: qdrant
+  version: ''
+  kind: infra
+- id: infra:redis
+  name: redis
+  version: ''
+  kind: infra
