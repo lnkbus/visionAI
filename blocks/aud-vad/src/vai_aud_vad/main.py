@@ -18,11 +18,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_aud_vad.adapters import create_vad
 from vai_aud_vad.worker import BLOCK_ID, VadWorker
-from vai_common.bus import EventBus, build_bus
+from vai_common.bus import build_bus
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
-from vai_contracts.events import SessionClosed
-from vai_contracts.topics import Topic
+from vai_common.worker import SessionReaper
 
 log = logging.getLogger(__name__)
 
@@ -60,15 +59,16 @@ def create_app() -> FastAPI:
         application.state.worker = worker
         log.info("VAD 어댑터 로드", extra={"adapter": vad.name})
 
-        reaper = _reap_sessions(bus, worker, common.consumer_group)
+        reaper = SessionReaper(bus, [worker], group=f"{common.consumer_group}:vad-reaper")
         tasks = [
             asyncio.create_task(worker.run(), name="vad-worker"),
-            asyncio.create_task(reaper, name="vad-reaper"),
+            asyncio.create_task(reaper.run(), name="vad-reaper"),
         ]
         try:
             yield
         finally:
             worker.stop()
+            reaper.stop()
             for task in tasks:
                 task.cancel()
             for task in tasks:
@@ -79,23 +79,6 @@ def create_app() -> FastAPI:
     return create_block_app(
         block_id=BLOCK_ID, title="VisionAI AUD-VAD", settings=common, lifespan=lifespan
     )
-
-
-async def _reap_sessions(bus: EventBus, worker: VadWorker, group: str) -> None:
-    """세션 종료 이벤트를 받아 분할기 버퍼를 해제한다.
-
-    별도 컨슈머 그룹을 쓴다 — 요약 블록(LLM-SUM)도 같은 토픽을 소비하므로
-    그룹을 공유하면 둘 중 하나만 메시지를 받는다.
-    """
-    stream = bus.consume(
-        Topic.SESSION_CLOSED,
-        SessionClosed,
-        group=f"{group}:vad-reaper",
-        consumer="reaper-1",
-    )
-    async for delivery in stream:
-        worker.release_session(delivery.event.session_id)
-        await delivery.ack()
 
 
 app = create_app()

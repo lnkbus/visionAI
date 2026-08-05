@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common.bus import build_bus
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_common.worker import SessionReaper
 from vai_ta_assist.answer import AnswerComposer
 from vai_ta_assist.clients import LlmClient, SearchClient
 from vai_ta_assist.extractor import QueryExtractor
@@ -85,9 +86,11 @@ def create_app() -> FastAPI:
             for i in range(max(1, cfg.workers))
         ]
         application.state.workers = workers
+        reaper = SessionReaper(bus, list(workers), group=f"{common.consumer_group}:assist-reaper")
         tasks = [
             asyncio.create_task(w.run(), name=f"assist-worker-{i}") for i, w in enumerate(workers)
         ]
+        tasks.append(asyncio.create_task(reaper.run(), name="assist-reaper"))
         log.info(
             "Agent Assist 기동",
             extra={
@@ -100,6 +103,7 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            reaper.stop()
             for worker in workers:
                 worker.stop()
             for task in tasks:

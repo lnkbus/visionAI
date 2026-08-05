@@ -5,6 +5,7 @@ CORE-BUS를 ASGI로 직접 물려 두 블록의 계약을 실제로 왕복시킨
 
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import httpx
@@ -181,3 +182,55 @@ def test_session_token_of_unknown_session_is_refused(client: TestClient) -> None
     with pytest.raises(Exception):  # noqa: B017
         with client.websocket_connect(f"/v1/audio/stream?token={token}"):
             pass
+
+
+# ── 스트림 한쪽만 죽는 경우 ──────────────────────────────────────────────────
+
+
+class _FakeWebSocket:
+    """수신은 영원히 기다리고, 송신은 기록만 한다."""
+
+    def __init__(self) -> None:
+        self.sent: list[dict[str, object]] = []
+
+    async def send_json(self, payload: dict[str, object]) -> None:
+        self.sent.append(payload)
+
+    async def receive_json(self) -> dict[str, object]:
+        await asyncio.sleep(3600)
+        return {}
+
+
+class _BrokenUiBus:
+    """UI 구독이 한 건 보내고 끊기는 버스(Redis 순단)."""
+
+    async def subscribe_ui(self, session_id: str):  # type: ignore[no-untyped-def]
+        yield {"event": "agent_assist_update", "session_id": session_id}
+        raise ConnectionError("pub/sub 끊김")
+
+    async def publish(self, topic: object, event: object) -> None:
+        return None
+
+
+async def test_broken_ui_forwarder_tells_the_client_and_closes() -> None:
+    """송신만 죽으면 "연결은 됐는데 자막이 안 나오는" 상태가 남는다.
+
+    오디오는 계속 올라가고 화면은 영원히 멈춘다 — 클라이언트는 무엇을 해야
+    할지 알 수 없다. 그래서 알리고 닫는다.
+    """
+    from vai_contracts.session import AudioFormat, Session, SessionProfile
+    from vai_core_gw.stream import AudioStreamHandler
+
+    websocket = _FakeWebSocket()
+    session = Session(
+        session_id="s1",
+        tenant_id="t1",
+        profile=SessionProfile.AICC,
+        audio_format=AudioFormat.PCM_16K,
+    )
+
+    handler = AudioStreamHandler(websocket, session, _BrokenUiBus())  # type: ignore[arg-type]
+    await asyncio.wait_for(handler.run(), timeout=5)
+
+    codes = [item.get("code") for item in websocket.sent if item.get("event") == "error"]
+    assert "stream_broken" in codes, "클라이언트가 재접속해야 한다는 것을 알아야 한다"

@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common.bus import build_bus
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_common.worker import SessionReaper
 from vai_spk_dia.diarizer import DiarizerConfig
 from vai_spk_dia.embedding import create_embedder
 from vai_spk_dia.worker import BLOCK_ID, DiarizationWorker
@@ -60,14 +61,21 @@ def create_app() -> FastAPI:
             ),
         )
         application.state.worker = worker
-        task = asyncio.create_task(worker.run(), name="spk-dia-worker")
+        reaper = SessionReaper(bus, [worker], group=f"{common.consumer_group}:dia-reaper")
+        tasks = [
+            asyncio.create_task(worker.run(), name="spk-dia-worker"),
+            asyncio.create_task(reaper.run(), name="spk-dia-reaper"),
+        ]
         try:
             yield
         finally:
             worker.stop()
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+            reaper.stop()
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             await embedder.close()
             await bus.close()
 
