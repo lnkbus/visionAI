@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 1bfd3c0f57c141adb5e40475f0a69037a7f261083c56b7c1f570ce67710fd02c
+configuration_hash: c0a1491006d8dbcd60c43ab3a736cc182b871d2d16aad70ca7c61514eddb285d
 component_count: 23
 components:
 - id: AUD-RTP
@@ -130,7 +130,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 57ed9b5a9d7df554
+  source_hash: 413cacd958474dfc
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:

@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 4948026d732df6bcda1748f41872868066b98033709d801fba0fef2f6f9caff2
+configuration_hash: 46f451a66dc60a1115ef0392c3814eae8f4f038fc69af2a51d6a98042fa4ba2d
 component_count: 23
 components:
 - id: AUD-VAD
@@ -131,7 +131,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 57ed9b5a9d7df554
+  source_hash: 413cacd958474dfc
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:

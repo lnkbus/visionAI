@@ -20,6 +20,7 @@ from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
@@ -66,6 +67,10 @@ class StudioSettings(BaseSettings):
     search_url: str = "http://localhost:8087"
     kb_url: str = "http://localhost:8086"
     filter_url: str = "http://localhost:8084"
+    tts_url: str = "http://localhost:8098"
+    """TTS-CORE — 읽기 미리듣기가 여기로 간다."""
+    bot_url: str = "http://localhost:8099"
+    """BOT-VOICE — 대화 시뮬레이터가 여기로 간다."""
     """FLT-MICRO. 룰 테스트를 실제 필터 구현으로 돌리기 위해 호출한다."""
 
     console_enabled: bool = True
@@ -117,6 +122,10 @@ def create_app(
         application.state.filter = filter_client or httpx.AsyncClient(
             base_url=cfg.filter_url.rstrip("/"), timeout=5.0
         )
+        # 저작 화면이 중계할 블록들. 기존 클라이언트와 같은 방식으로 둔다 —
+        # 요청마다 만들면 연결이 매번 새로 열리고, 시뮬레이터를 연타할 때 그대로 드러난다.
+        application.state.bot = httpx.AsyncClient(base_url=cfg.bot_url.rstrip("/"), timeout=15.0)
+        application.state.tts = httpx.AsyncClient(base_url=cfg.tts_url.rstrip("/"), timeout=15.0)
         try:
             yield
         finally:
@@ -281,6 +290,47 @@ def create_app(
         return _build_report(results)
 
     # ── 팝업 피드백 ──────────────────────────────────────────────────────────
+
+    # ── 대화 시뮬레이터 · 읽기 미리듣기 ──────────────────────────────────────
+    #
+    # 둘 다 다른 블록의 API를 그대로 중계한다. 저작 콘솔이 자체 구현을 갖지
+    # 않는 이유는 **시험 경로와 운영 경로가 갈리면 안 되기** 때문이다 —
+    # "시뮬레이터에서는 되는데 실제로는 안 된다"가 가능해진다.
+
+    async def _relay(request: Request, which: str, path: str, payload: Any) -> Any:
+        client_: httpx.AsyncClient = getattr(request.app.state, which)
+        try:
+            response = await client_.post(path, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                exc.response.status_code,
+                detail=f"{path} 응답 {exc.response.status_code}: {exc.response.text[:200]}",
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{path} 에 연결할 수 없다: {exc}",
+            ) from exc
+        return response.json()
+
+    @app.post("/internal/v1/simulate", tags=["authoring"])
+    async def simulate(payload: dict[str, Any], request: Request) -> Any:
+        """대화 시뮬레이터 — 배포 없이 시나리오 흐름을 확인한다.
+
+        고객사가 시나리오를 직접 늘리려면 "이렇게 말하면 어디로 가는지"를
+        스스로 볼 수 있어야 한다. 그게 안 되면 결국 공급사에 물어보게 된다.
+        """
+        return await _relay(request, "bot", "/internal/v1/scenarios/dry-run", payload)
+
+    @app.post("/internal/v1/tts/preview", tags=["authoring"])
+    async def tts_preview(payload: dict[str, Any], request: Request) -> Any:
+        """읽기 미리듣기 — 숫자·금액·전문용어가 어떻게 읽히는지 본다.
+
+        합성 전에 **읽기 텍스트**를 보여 준다. 소리를 들어야만 알 수 있으면
+        사전을 고칠 때마다 전체 합성을 돌려야 한다.
+        """
+        return await _relay(request, "tts", "/internal/v1/tts/preview", payload)
 
     @app.post("/internal/v1/feedback", status_code=status.HTTP_202_ACCEPTED, tags=["feedback"])
     async def record_feedback(payload: PopupFeedback, request: Request) -> dict[str, str]:

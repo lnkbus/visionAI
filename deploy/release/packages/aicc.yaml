@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 865d6a38704d081351db85299ec07015a8fa05f96f1bc32669e23cec272c8be5
+configuration_hash: 4e926b6beca3bfaca14771b81cd324a521100658334f37259746f142a8a9bc03
 component_count: 21
 components:
 - id: AUD-RTP
@@ -120,7 +120,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 57ed9b5a9d7df554
+  source_hash: 413cacd958474dfc
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:

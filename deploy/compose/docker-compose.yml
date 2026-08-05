@@ -177,15 +177,24 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: stt-core
+        # 실제 인식 엔진. 기본 이미지에는 없다 — 넣지 않으면 fake 어댑터밖에
+        # 못 쓰고, 그 사실이 기동 로그에만 남아 "설치는 됐는데 인식이 안 된다"가
+        # 된다. 가벼운 이미지가 필요하면 VAI_STT_EXTRAS= 로 비운다.
+        EXTRAS: ${VAI_STT_EXTRAS-whisper}
+    volumes:
+      - license-data:/licenses:ro
+      # 모델 가중치. `deploy/airgap/fetch_models.sh --out models` 로 먼저 받는다.
+      # 어댑터는 local_files_only 로 여니 컨테이너가 기동 중 밖으로 나가지 않는다.
+      - ${VAI_MODEL_DIR:-../../models}:/models:ro
     environment:
       <<: *block-env
       VAI_BLOCK_ID: STT-CORE
       VAI_CONSUMER_GROUP: stt
       VAI_CONSUMER_NAME: stt-1
-      # 기본은 GPU 없이 도는 fake. 실제 인식은 아래 두 줄을 바꾼다:
-      #   VAI_STT_ADAPTER: faster_whisper
-      #   VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3
-      VAI_STT_ADAPTER: fake
+      # 기본값이 실제 엔진이다. fake 로 돌리려면 VAI_STT_ADAPTER=fake 를 준다.
+      VAI_STT_ADAPTER: ${VAI_STT_ADAPTER:-faster_whisper}
+      VAI_STT_MODEL_PATH: ${VAI_STT_MODEL_PATH:-/models/faster-whisper-small}
+      VAI_STT_ADAPTER_CONFIG: '{"device":"cpu","compute_type":"int8","language":"ko"}'
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
       VAI_STT_PUBLISH_UI: "false"

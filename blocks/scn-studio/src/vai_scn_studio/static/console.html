@@ -75,6 +75,8 @@
     <button data-tab="tuning" aria-selected="false">검색 튜닝</button>
     <button data-tab="eval" aria-selected="false">평가셋</button>
     <button data-tab="feedback" aria-selected="false">팝업 채택률</button>
+    <button data-tab="sim" aria-selected="false">대화 시뮬레이터</button>
+    <button data-tab="tts" aria-selected="false">읽기 미리듣기</button>
   </nav>
 
   <!-- 컴플라이언스 룰 -->
@@ -186,6 +188,40 @@
       <div id="fb-out"></div>
     </div>
   </section>
+
+  <section id="tab-sim" hidden>
+    <div class="panel">
+      <h2>대화 시뮬레이터 — 배포 없이 흐름 확인</h2>
+      <p class="hint">
+        고객사가 시나리오를 직접 늘리려면 “이렇게 말하면 어디로 가는지”를 스스로 볼 수 있어야 한다.
+        그게 안 되면 결국 공급사에 물어보게 된다.
+        <b>실제 대화 엔진(BOT-VOICE)을 그대로 부른다</b> — 시뮬레이터 전용 구현을 두면
+        “시뮬레이터에서는 되는데 실제로는 안 된다”가 가능해진다.
+      </p>
+      <label for="simScenario">시나리오 (JSON)</label>
+      <textarea id="simScenario" rows="10" spellcheck="false"></textarea>
+      <label for="simUtterances">고객 발화 — 한 줄에 하나</label>
+      <textarea id="simUtterances" rows="4" spellcheck="false"
+        placeholder="카드 재발급 하려고요&#10;네"></textarea>
+      <div class="row"><button id="simRun">시뮬레이션</button></div>
+      <div id="simOut"></div>
+    </div>
+  </section>
+
+  <section id="tab-tts" hidden>
+    <div class="panel">
+      <h2>읽기 미리듣기 — 숫자·금액·전문용어</h2>
+      <p class="hint">
+        합성 전에 <b>읽기 텍스트</b>를 본다. 소리를 들어야만 알 수 있으면 사전을 고칠 때마다
+        전체 합성을 돌려야 한다. “2,000원”이 어떻게 읽히는지, 상품명이 영어로 새는지가 여기서 드러난다.
+      </p>
+      <label for="ttsText">문장</label>
+      <textarea id="ttsText" rows="3" spellcheck="false">재발급 수수료는 2,000원이며 3영업일 걸립니다. 접수번호는 A1234입니다.</textarea>
+      <div class="row"><button id="ttsRun">미리듣기</button></div>
+      <div id="ttsOut"></div>
+    </div>
+  </section>
+
 </main>
 
 <script type="module">
@@ -465,6 +501,92 @@ function escapeHtml(value) {
 rulesBody.append(ruleRow({ rule_id: "FORBIDDEN_GUARANTEE", pattern: "원금.?보장|무조건.?수익",
                            severity: "violation", message: "확정 수익 표현은 금지" }));
 lexBody.append(lexRow());
+
+// ── 대화 시뮬레이터 · 읽기 미리듣기 ──────────────────────────────────────────
+// 둘 다 다른 블록의 API를 콘솔이 중계한다. 여기서 다시 구현하지 않는 이유는
+// 시험 경로와 운영 경로가 갈리면 안 되기 때문이다.
+const SAMPLE_SCENARIO = {
+  tenant_id: "demo",
+  scenario_id: "card-reissue",
+  entry_node: "greet",
+  nodes: [
+    { node_id: "greet", kind: "say", prompt: "안녕하세요. 무엇을 도와드릴까요?", next_node: "ask" },
+    {
+      node_id: "ask", kind: "ask", slot: "purpose",
+      prompt: "어떤 업무를 도와드릴까요?",
+      reprompt: "다시 한 번 말씀해 주시겠어요?",
+      next_node: "bye",
+      intents: [{ name: "handoff", patterns: ["상담원", "사람"], next_node: "agent" }],
+    },
+    { node_id: "agent", kind: "handoff", prompt: "상담원을 연결해 드리겠습니다." },
+    { node_id: "bye", kind: "end", prompt: "접수되었습니다. 감사합니다." },
+  ],
+};
+
+if ($("simScenario") && !$("simScenario").value.trim()) {
+  $("simScenario").value = JSON.stringify(SAMPLE_SCENARIO, null, 2);
+}
+
+$("simRun")?.addEventListener("click", async () => {
+  const out = $("simOut");
+  out.innerHTML = '<p class="hint">시뮬레이션 중…</p>';
+  let scenario;
+  try {
+    scenario = JSON.parse($("simScenario").value);
+  } catch (error) {
+    out.innerHTML = `<p class="bad">시나리오 JSON 파싱 실패: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  const utterances = $("simUtterances").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  try {
+    const result = await api("/internal/v1/simulate", {
+      method: "POST",
+      body: JSON.stringify({ scenario, utterances }),
+    });
+    const problems = (result.problems ?? []).length
+      ? `<p class="bad">⚠ 시나리오 문제 ${result.problems.length}건<br>${
+          result.problems.map(escapeHtml).join("<br>")}</p>`
+      : "";
+    const turns = (result.turns ?? []).map((turn, i) => `
+      <div class="panel" style="margin:8px 0">
+        <div class="hint">턴 ${i} · 노드 <code>${escapeHtml(turn.node_id)}</code>${
+          turn.handed_off ? ' · <b class="bad">상담원 연결</b>' : ""}</div>
+        ${turn.user ? `<div>고객 — ${escapeHtml(turn.user)}</div>` : ""}
+        <div>봇 — ${escapeHtml(turn.bot)}</div>
+        ${Object.keys(turn.slots ?? {}).length
+          ? `<div class="hint">슬롯 ${escapeHtml(JSON.stringify(turn.slots))}</div>` : ""}
+      </div>`).join("");
+    out.innerHTML = problems + turns +
+      `<p class="hint">${result.finished ? "시나리오 종료" : "아직 진행 중 — 발화를 더 넣어 본다"}</p>`;
+  } catch (error) {
+    out.innerHTML = `<p class="bad">✗ ${escapeHtml(error.message)}</p>`;
+  }
+});
+
+$("ttsRun")?.addEventListener("click", async () => {
+  const out = $("ttsOut");
+  out.innerHTML = '<p class="hint">미리듣기…</p>';
+  try {
+    const result = await api("/internal/v1/tts/preview", {
+      method: "POST",
+      body: JSON.stringify({ text: $("ttsText").value }),
+    });
+    out.innerHTML = `
+      <div class="panel" style="margin:8px 0">
+        <div class="hint">원문</div>
+        <div style="margin:4px 0 10px">${escapeHtml(result.original ?? "")}</div>
+        <div class="hint">읽기 텍스트 — 실제로 이렇게 발음된다</div>
+        <div style="font-size:16px;margin:4px 0">${escapeHtml(result.normalized ?? "")}</div>
+        ${(result.chunks ?? []).length > 1
+          ? `<div class="hint">문장 ${result.chunks.length}개로 나뉘어 순차 합성된다 —
+             첫 소리까지 ${result.first_chunk_chars ?? "?"}자</div>`
+          : `<div class="hint">첫 소리까지 ${result.first_chunk_chars ?? "?"}자</div>`}
+      </div>`;
+  } catch (error) {
+    out.innerHTML = `<p class="bad">✗ ${escapeHtml(error.message)}</p>`;
+  }
+});
+
 </script>
 </body>
 </html>
