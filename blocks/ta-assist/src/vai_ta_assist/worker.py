@@ -9,6 +9,7 @@ docs/06 §5의 지연 회귀 감시 입력이 된다.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -19,6 +20,7 @@ from vai_contracts.retrieval import ScoredChunk, SearchRequest
 from vai_contracts.session import ChannelRole
 from vai_contracts.topics import Topic
 from vai_contracts.ws import AgentAssistUpdate
+from vai_ta_assist.answer import AnswerComposer
 from vai_ta_assist.extractor import ConversationWindow, QueryExtractor, should_search
 from vai_ta_assist.ports import SearchPort
 
@@ -27,6 +29,13 @@ BLOCK_ID = "TA-ASSIST"
 
 SNIPPET_CHARS = 180
 """팝업에 보여줄 근거 길이. 상담 중 훑어볼 수 있는 분량을 넘기면 안 읽힌다."""
+
+ANSWER_BUDGET_MS = 2000.0
+"""추천 답변 생성에 허용하는 시간.
+
+**근거 팝업의 1초 예산과는 별개다.** 근거는 먼저 띄우고 답변은 뒤따라 채운다 —
+답변을 기다리느라 근거까지 늦어지면 있는 정보도 못 쓰게 된다. 이 시간을 넘기면
+답변 없이 끝낸다. 상담원은 이미 다음 말을 하고 있다."""
 
 
 class AssistWorker(BlockWorker[FilterResult]):
@@ -47,10 +56,12 @@ class AssistWorker(BlockWorker[FilterResult]):
         kb_id: str = "default",
         top_k: int = 3,
         min_score: float = 0.0,
+        composer: AnswerComposer | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._extractor = extractor
         self._search = search
+        self._composer = composer or AnswerComposer()
         self._kb_id = kb_id
         self._top_k = top_k
         self._min_score = min_score
@@ -97,7 +108,8 @@ class AssistWorker(BlockWorker[FilterResult]):
             hits=[_to_hit(hit) for hit in response.hits],
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
-        await self.bus.publish(Topic.ASSIST_POPUP, popup)
+        # 근거를 먼저 띄운다. 추천 답변은 뒤따라 채운다 — 답변을 기다리느라
+        # 근거까지 늦어지면 1초 예산 안에 아무것도 못 보여주게 된다.
         await self.bus.publish_ui(event.session_id, AgentAssistUpdate.from_popup(popup))
 
         log.info(
@@ -108,6 +120,53 @@ class AssistWorker(BlockWorker[FilterResult]):
                 "hit_count": len(popup.hits),
                 "latency_ms": popup.latency_ms,
                 "search_ms": response.latency_ms,
+            },
+        )
+
+        if self._composer.enabled:
+            await self._attach_answer(event.session_id, query, response.hits, popup)
+
+        # 버스에는 최종 형태 한 번만 싣는다. 채택률 분석이 같은 팝업을 두 건으로
+        # 세면 지표가 어긋난다.
+        await self.bus.publish(Topic.ASSIST_POPUP, popup)
+
+    async def _attach_answer(
+        self,
+        session_id: str,
+        query: str,
+        hits: list[ScoredChunk],
+        popup: AssistPopup,
+    ) -> None:
+        """검증을 통과한 추천 답변만 팝업에 채워 다시 보낸다."""
+        started = time.perf_counter()
+        try:
+            verdict = await asyncio.wait_for(
+                self._composer.compose(query, hits), ANSWER_BUDGET_MS / 1000
+            )
+        except TimeoutError:
+            log.warning(
+                "추천 답변 생성 시간 초과 — 근거만 유지",
+                extra={"session_id": session_id, "budget_ms": ANSWER_BUDGET_MS},
+            )
+            return
+
+        if not verdict.accepted:
+            return
+
+        # 답변은 자신이 인용한 근거 카드에 붙인다. 다른 카드에 붙으면 상담원이
+        # 엉뚱한 조항을 근거로 읽게 된다.
+        target = verdict.citations[0] - 1
+        if not 0 <= target < len(popup.hits):
+            return
+        popup.hits[target].recommended_answer = verdict.answer
+
+        await self.bus.publish_ui(session_id, AgentAssistUpdate.from_popup(popup))
+        log.info(
+            "추천 답변 첨부",
+            extra={
+                "session_id": session_id,
+                "citations": verdict.citations,
+                "compose_ms": int((time.perf_counter() - started) * 1000),
             },
         )
 
@@ -124,7 +183,9 @@ def _to_hit(scored: ScoredChunk) -> KnowledgeHit:
         title=scored.chunk.title,
         score=round(scored.score, 4),
         snippet=snippet,
-        # 추천 답변 생성(sLLM)은 Wave 4에서 붙인다. 지금은 근거 원문을 그대로
-        # 보여준다 — 없는 답을 지어내느니 원문을 보여주는 편이 낫다.
+        # 비워 둔 채로 먼저 보낸다. 검증을 통과한 추천 답변이 있으면
+        # :meth:`AssistWorker._attach_answer`가 채워 다시 보낸다. 검증을 통과하지
+        # 못하면 끝까지 비어 있고, 화면에는 근거 원문만 남는다 — 없는 답을
+        # 지어내느니 원문을 보여주는 편이 낫다.
         recommended_answer="",
     )

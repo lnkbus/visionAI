@@ -10,9 +10,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
-from vai_bot_voice.engine import DialogEngine, Utterance
+from vai_bot_voice.classify import BaseIntentClassifier
+from vai_bot_voice.engine import DialogEngine, Utterance, match_intent
 from vai_bot_voice.store import DialogStore
 from vai_common.bus import EventBus
 from vai_common.worker import BlockWorker
@@ -23,6 +25,12 @@ from vai_contracts.topics import Topic
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "BOT-VOICE"
+
+CLASSIFY_BUDGET_MS = 600.0
+"""의도 분류에 허용하는 시간.
+
+통화 중이다. 이 시간을 넘기면 분류를 포기하고 되묻는다 — 늦은 정답보다
+제때의 되묻기가 낫다. 침묵이 길어지면 고객은 전화가 끊긴 줄 안다."""
 
 
 class BotWorker(BlockWorker[FilterResult]):
@@ -38,10 +46,12 @@ class BotWorker(BlockWorker[FilterResult]):
         group: str,
         consumer: str,
         voice: VoiceProfile | None = None,
+        classifier: BaseIntentClassifier | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._store = store
         self._voice = voice or VoiceProfile()
+        self._classifier = classifier
 
     async def handle(self, event: FilterResult) -> None:
         if not event.is_final or not event.clean_text.strip():
@@ -61,9 +71,39 @@ class BotWorker(BlockWorker[FilterResult]):
         else:
             if state.finished:
                 return
-            result = engine.reply(state, event.clean_text)
+            result = engine.reply(
+                state,
+                event.clean_text,
+                intent_name=await self._classify(engine, state, event.clean_text),
+            )
 
         await self._emit(event, result.state, result.text, result.utterances)
+
+    async def _classify(self, engine: DialogEngine, state: DialogState, text: str) -> str:
+        """정규식이 놓쳤을 때만 분류기를 부른다.
+
+        비용을 **되묻게 될 발화에서만** 낸다. 정규식이 맞힌 발화까지 모델에
+        태우면 저작자가 순서로 표현한 우선순위도 함께 흔들린다.
+        """
+        node = engine.awaiting(state)
+        if self._classifier is None or node is None or match_intent(node, text) is not None:
+            return ""
+        try:
+            chosen = await asyncio.wait_for(
+                self._classifier.classify(node, text), CLASSIFY_BUDGET_MS / 1000
+            )
+        except TimeoutError:
+            log.warning(
+                "의도 분류 시간 초과 — 되묻기로 진행",
+                extra={"session_id": state.session_id, "node": node.node_id},
+            )
+            return ""
+        if chosen:
+            log.info(
+                "정규식이 놓친 발화를 분류기가 라우팅",
+                extra={"session_id": state.session_id, "node": node.node_id, "intent": chosen},
+            )
+        return chosen or ""
 
     async def _emit(
         self,

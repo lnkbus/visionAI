@@ -150,8 +150,26 @@ class DialogEngine:
         )
         return self._advance(state, self._scenario.entry_node)
 
-    def reply(self, state: DialogState, text: str) -> StepResult:
-        """고객 발화를 받아 한 걸음 나아간다."""
+    def awaiting(self, state: DialogState) -> DialogNode | None:
+        """지금 답을 기다리는 ``ask`` 노드. 없으면 ``None``.
+
+        분류기를 호출할지 판단하려면 바깥에서도 이걸 알아야 한다. 엔진을
+        비동기로 만들지 않기 위한 통로다 — 이 상태 기계가 순수하게 남아야
+        막다른 골목 검사를 단위 테스트로 고정할 수 있다.
+        """
+        if state.finished:
+            return None
+        node = self._scenario.node(state.current_node)
+        return node if node is not None and node.kind is NodeKind.ASK else None
+
+    def reply(self, state: DialogState, text: str, *, intent_name: str = "") -> StepResult:
+        """고객 발화를 받아 한 걸음 나아간다.
+
+        ``intent_name``은 바깥 분류기(어휘·sLLM)가 고른 갈래다. **정규식이
+        놓쳤을 때만 쓰이고, 노드에 선언된 이름인지 여기서 다시 확인한다.**
+        분류기를 믿고 그대로 라우팅하면 시나리오 검증이 보장하던 것 — 도달
+        가능한 handoff, 갈래별 다음 노드 — 이 전부 무의미해진다.
+        """
         if state.finished:
             return StepResult(utterances=[], state=state)
 
@@ -163,6 +181,13 @@ class DialogEngine:
             return self._advance(state, node.next_node)
 
         intent = match_intent(node, text)
+        if intent is None and intent_name:
+            intent = next((i for i in node.intents if i.name == intent_name), None)
+            if intent is None:
+                log.warning(
+                    "선언되지 않은 인텐트 무시 — 되묻기로 진행",
+                    extra={"node": node.node_id, "intent": intent_name},
+                )
         if intent is not None:
             state.retries = 0
             if node.slot:

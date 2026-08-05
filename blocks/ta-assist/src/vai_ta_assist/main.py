@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common.bus import build_bus
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_ta_assist.answer import AnswerComposer
 from vai_ta_assist.clients import LlmClient, SearchClient
 from vai_ta_assist.extractor import QueryExtractor
 from vai_ta_assist.worker import BLOCK_ID, AssistWorker
@@ -30,6 +31,16 @@ class AssistSettings(BaseSettings):
     """False면 SLM 호출 없이 어휘 폴백만 쓴다. GPU가 부족한 소형 프로파일에서
     팝업을 포기하지 않고 품질만 낮춰 운영하는 경로."""
 
+    generate_answers: bool = True
+    """추천 답변 생성. 끄면 근거 원문만 뜬다.
+
+    GPU가 빠듯한 소형 프로파일에서 팝업 자체를 포기하지 않고 생성만 내리는
+    경로다. 켜 두어도 검증을 통과하지 못한 답변은 표시되지 않는다."""
+
+    answer_profile: str = "answer"
+    """LLM-GW 프로파일. 질의 추출용 SLM보다 큰 모델을 가리키도록 설정한다."""
+
+    answer_timeout: float = 2.5
     kb_id: str = "default"
     top_k: int = 3
     min_score: float = 0.0
@@ -47,6 +58,17 @@ def create_app() -> FastAPI:
         search = SearchClient(cfg.search_url)
         llm = LlmClient(cfg.llm_url) if cfg.use_slm else None
         extractor = QueryExtractor(llm.complete if llm else None)
+        answer_llm = (
+            LlmClient(
+                cfg.llm_url,
+                timeout=cfg.answer_timeout,
+                profile=cfg.answer_profile,
+                max_tokens=160,
+            )
+            if cfg.generate_answers
+            else None
+        )
+        composer = AnswerComposer(answer_llm.complete if answer_llm else None)
 
         workers = [
             AssistWorker(
@@ -58,6 +80,7 @@ def create_app() -> FastAPI:
                 kb_id=cfg.kb_id,
                 top_k=cfg.top_k,
                 min_score=cfg.min_score,
+                composer=composer,
             )
             for i in range(max(1, cfg.workers))
         ]
@@ -67,7 +90,12 @@ def create_app() -> FastAPI:
         ]
         log.info(
             "Agent Assist 기동",
-            extra={"kb_id": cfg.kb_id, "slm": cfg.use_slm, "workers": len(workers)},
+            extra={
+                "kb_id": cfg.kb_id,
+                "slm": cfg.use_slm,
+                "answers": cfg.generate_answers,
+                "workers": len(workers),
+            },
         )
         try:
             yield
@@ -82,6 +110,8 @@ def create_app() -> FastAPI:
             await search.aclose()
             if llm is not None:
                 await llm.aclose()
+            if answer_llm is not None:
+                await answer_llm.aclose()
             await bus.close()
 
     return create_block_app(

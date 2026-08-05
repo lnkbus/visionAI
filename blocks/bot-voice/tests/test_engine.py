@@ -389,3 +389,85 @@ async def test_시뮬레이터로_흐름을_확인한다(client: httpx.AsyncClie
     assert body["problems"] == []
     assert body["turns"][-1]["handed_off"] is True
     assert body["finished"] is True
+
+
+# ── 분류기 힌트 ──────────────────────────────────────────────────────────────
+
+
+def _ask_scenario() -> Scenario:
+    return Scenario(
+        scenario_id="hint",
+        tenant_id="t1",
+        entry_node="ask",
+        fallback_node="agent",
+        nodes=[
+            DialogNode(
+                node_id="ask",
+                kind=NodeKind.ASK,
+                prompt="진행할까요?",
+                reprompt="진행을 원하시면 네라고 말씀해 주세요.",
+                intents=[
+                    Intent(name="confirm", patterns=["^네$"], next_node="done"),
+                    Intent(name="deny", patterns=["^아니요$"], next_node="bye"),
+                ],
+            ),
+            DialogNode(node_id="done", kind=NodeKind.END, prompt="진행하겠습니다."),
+            DialogNode(node_id="bye", kind=NodeKind.END, prompt="알겠습니다."),
+            DialogNode(node_id="agent", kind=NodeKind.HANDOFF, prompt="상담원에게 연결합니다."),
+        ],
+    )
+
+
+def test_hint_routes_when_the_regex_misses() -> None:
+    engine = DialogEngine(_ask_scenario())
+    state = engine.start("s1", "t1").state
+    assert state is not None
+
+    result = engine.reply(state, "그렇게 해주세요", intent_name="confirm")
+
+    assert "진행하겠습니다" in result.text
+
+
+def test_regex_wins_over_the_hint() -> None:
+    """저작자가 순서로 표현한 우선순위를 분류기가 뒤집으면 안 된다."""
+    engine = DialogEngine(_ask_scenario())
+    state = engine.start("s1", "t1").state
+    assert state is not None
+
+    result = engine.reply(state, "아니요", intent_name="confirm")
+
+    assert "알겠습니다" in result.text
+
+
+def test_undeclared_hint_is_ignored_not_followed() -> None:
+    """분류기가 경로를 만들어 낼 수는 없다."""
+    engine = DialogEngine(_ask_scenario())
+    state = engine.start("s1", "t1").state
+    assert state is not None
+
+    result = engine.reply(state, "글쎄요", intent_name="cancel_everything")
+
+    assert "네라고 말씀해" in result.text, "선언되지 않은 힌트는 되묻기로 흡수된다"
+    assert state.retries == 1
+
+
+def test_hint_does_not_bypass_the_retry_cap() -> None:
+    """분류기가 붙어도 막다른 골목 보호는 그대로 살아 있어야 한다."""
+    engine = DialogEngine(_ask_scenario())
+    state = engine.start("s1", "t1").state
+    assert state is not None
+
+    for _ in range(3):
+        result = engine.reply(state, "글쎄요", intent_name="nonexistent")
+
+    assert result.utterances[-1].handoff
+
+
+def test_awaiting_returns_the_ask_node_only() -> None:
+    engine = DialogEngine(_ask_scenario())
+    state = engine.start("s1", "t1").state
+    assert state is not None
+    assert engine.awaiting(state) is not None
+
+    engine.reply(state, "네")
+    assert engine.awaiting(state) is None, "끝난 대화에는 분류기를 부르지 않는다"

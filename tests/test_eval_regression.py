@@ -45,11 +45,23 @@ def test_no_quality_regression(current: dict[str, dict[str, float]]) -> None:
     assert not findings, f"품질 회귀:\n{detail}"
 
 
-def test_masking_and_reading_stay_perfect(current: dict[str, dict[str, float]]) -> None:
-    """PII와 읽기는 100%가 기준이다.
+def test_safety_suites_stay_perfect(current: dict[str, dict[str, float]]) -> None:
+    """마스킹·읽기·근거검증은 100%가 기준이다.
 
-    검색은 못 찾으면 상담원이 직접 찾으면 되지만, 마스킹 실패는 유출이고
-    숫자 오독은 실패한 통화다. 이 둘에는 '대부분 맞음'이라는 상태가 없다.
+    검색은 못 찾으면 상담원이 직접 찾으면 되지만, 나머지 셋은 다르다 —
+    마스킹 실패는 유출이고, 숫자 오독은 실패한 통화이며, 환각을 통과시키면
+    상담원이 고객에게 틀린 숫자를 그대로 읽는다. 여기에는 '대부분 맞음'이라는
+    상태가 없다.
     """
     assert current["pii"]["accuracy"] == 1.0
     assert current["tts"]["accuracy"] == 1.0
+    assert current["grounding"]["accuracy"] == 1.0
+
+
+def test_no_misroutes(current: dict[str, dict[str, float]]) -> None:
+    """의도 라우팅은 정확도보다 **오라우팅 0건**이 먼저다.
+
+    기권(되묻기)은 고객이 다시 말하면 회복된다. 잘못된 갈래로 보내면 고객은
+    엉뚱한 안내를 끝까지 듣고 나서야 안다 — 같은 '실패 한 건'이 아니다.
+    """
+    assert current["intent"]["misroutes"] == 0.0

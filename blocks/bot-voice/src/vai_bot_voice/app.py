@@ -19,6 +19,13 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_bot_voice import BLOCK_ID
+from vai_bot_voice.classify import (
+    BaseIntentClassifier,
+    ChainClassifier,
+    ExampleSimilarityClassifier,
+    SlmIntentClassifier,
+)
+from vai_bot_voice.clients import LlmClient
 from vai_bot_voice.engine import DialogEngine, validate
 from vai_bot_voice.store import DialogStore, InMemoryDialogStore, RedisDialogStore
 from vai_bot_voice.worker import BotWorker
@@ -36,6 +43,19 @@ class BotSettings(BaseSettings):
 
     voice_id: str = "default"
     workers: int = 2
+
+    classify_examples: bool = True
+    """예시 발화 기반 어휘 분류. 모델이 필요 없어 소형 프로파일에서도 켜 둔다."""
+
+    classify_slm: bool = False
+    """sLLM 의도 분류. **어휘 분류가 기권했을 때만** 호출한다.
+
+    기본 꺼짐이다 — 켜면 통화마다 GPU를 더 쓰고, 그 값어치는 고객사 시나리오와
+    모델에 따라 다르다. 어휘 분류만으로 부족하다는 것을 평가셋으로 확인한 뒤
+    켜는 것이 순서다."""
+
+    llm_url: str = "http://localhost:8085"
+    classify_profile: str = "slm"
 
 
 class DryRunRequest(BaseModel):
@@ -64,6 +84,17 @@ def create_app(store: DialogStore | None = None, bus: EventBus | None = None) ->
     cfg = BotSettings()
     injected = bus is not None
 
+    def build_classifier() -> tuple[BaseIntentClassifier | None, LlmClient | None]:
+        """비용이 싼 단계부터 잇는다. 앞이 답하면 뒤는 호출되지 않는다."""
+        stages: list[BaseIntentClassifier] = []
+        if cfg.classify_examples:
+            stages.append(ExampleSimilarityClassifier())
+        llm: LlmClient | None = None
+        if cfg.classify_slm:
+            llm = LlmClient(cfg.llm_url, profile=cfg.classify_profile)
+            stages.append(SlmIntentClassifier(llm.complete))
+        return (ChainClassifier(*stages) if stages else None), llm
+
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         active_bus = bus or build_bus(common.redis_url)
@@ -76,6 +107,7 @@ def create_app(store: DialogStore | None = None, bus: EventBus | None = None) ->
             )
         application.state.bus = active_bus
         application.state.store = active_store
+        classifier, llm = build_classifier()
 
         workers = [
             BotWorker(
@@ -84,6 +116,7 @@ def create_app(store: DialogStore | None = None, bus: EventBus | None = None) ->
                 group=common.consumer_group,
                 consumer=f"{common.consumer_name}-{i}",
                 voice=VoiceProfile(voice_id=cfg.voice_id),
+                classifier=classifier,
             )
             for i in range(max(1, cfg.workers))
         ]
@@ -98,6 +131,8 @@ def create_app(store: DialogStore | None = None, bus: EventBus | None = None) ->
             for task in tasks:
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+            if llm is not None:
+                await llm.aclose()
             if not injected:
                 await active_bus.close()
 

@@ -47,7 +47,12 @@ class SearchClient:
 
 
 class LlmClient:
-    """LLM-GW 호출. 질의 추출 프로파일(SLM)을 쓴다."""
+    """LLM-GW 호출.
+
+    프로파일과 토큰 상한을 생성자에서 받는다. 질의 추출은 작은 모델로 48토큰이면
+    충분하지만 추천 답변은 더 큰 모델과 여유 있는 길이가 필요하다 — 같은 클라이언트를
+    두 용도로 쓰면 한쪽 기준이 다른 쪽을 망친다.
+    """
 
     def __init__(
         self,
@@ -55,21 +60,25 @@ class LlmClient:
         tenant_id: str = "",
         *,
         timeout: float = 1.0,
+        profile: str = "slm",
+        max_tokens: int = 48,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._client = client or httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout)
         self._tenant_id = tenant_id
+        self._profile = profile
+        self._max_tokens = max_tokens
 
     async def complete(self, prompt: str, system: str = "") -> str:
-        """:class:`QueryExtractor`가 기대하는 호출 형태."""
+        """:class:`QueryExtractor`·:class:`AnswerComposer`가 기대하는 호출 형태."""
         response = await self._client.post(
             "/internal/v1/complete",
             json=CompletionRequest(
                 tenant_id=self._tenant_id,
                 prompt=prompt,
                 system=system,
-                profile="slm",
-                max_tokens=48,
+                profile=self._profile,
+                max_tokens=self._max_tokens,
             ).model_dump(mode="json"),
         )
         response.raise_for_status()
