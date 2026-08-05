@@ -1,21 +1,29 @@
 {
   "_comment": "evalctl 회귀 기준선. 갱신은 품질 변화를 의도했을 때만 한다.",
-  "note": "질의 확장(구어→약관어) + 희소 전용 히트 복구 반영. 확장 전 대비 MRR 0.889→0.948.",
+  "note": "TA-ASSIST 추천 답변 근거 검증 스위트 추가(20건). 검색/PII/TTS 수치는 변화 없음.",
   "suites": {
+    "grounding": {
+      "accuracy": 1.0,
+      "known_limitations": 1.0,
+      "mean_latency_ms": 0.023,
+      "p95_latency_ms": 0.064,
+      "passed": 20.0,
+      "total": 20.0
+    },
     "pii": {
       "accuracy": 1.0,
       "known_limitations": 1.0,
-      "mean_latency_ms": 0.008,
-      "p95_latency_ms": 0.017,
+      "mean_latency_ms": 0.007,
+      "p95_latency_ms": 0.01,
       "passed": 20.0,
       "total": 20.0
     },
     "retrieval": {
       "hits": 42.0,
-      "mean_latency_ms": 0.55,
+      "mean_latency_ms": 0.54,
       "mrr": 0.9484,
       "ndcg_at_k": 0.9617,
-      "p95_latency_ms": 0.674,
+      "p95_latency_ms": 0.618,
       "recall_at_k": 1.0,
       "top_k": 3.0,
       "total": 42.0
@@ -23,8 +31,8 @@
     "tts": {
       "accuracy": 1.0,
       "known_limitations": 0.0,
-      "mean_latency_ms": 0.019,
-      "p95_latency_ms": 0.087,
+      "mean_latency_ms": 0.02,
+      "p95_latency_ms": 0.084,
       "passed": 18.0,
       "total": 18.0
     }

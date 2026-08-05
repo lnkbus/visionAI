@@ -63,6 +63,29 @@ class TtsCase:
 
 
 @dataclass(frozen=True)
+class GroundingCase:
+    """추천 답변 검증 사례.
+
+    LLM을 부르지 않는다. 재는 것은 **생성 품질이 아니라 검증기의 판단**이다 —
+    환각을 통과시키는가, 멀쩡한 답변을 버리는가. 그 둘은 모델과 무관하게
+    결정적으로 측정할 수 있고, 그래야 회귀 게이트가 흔들리지 않는다.
+    """
+
+    case_id: str
+    evidence: list[str]
+    answer: str
+    accept: bool
+    """**현재 검증기가 내는 판정**을 적는다.
+
+    ``known_limitation``이 붙은 사례에서는 이 값이 '옳은 판정'이 아니라
+    '지금의 판정'이다 — 구멍을 기록으로 고정해 두어야 나중에 막았을 때
+    이 사례가 깨지고, 그때 골든셋을 갱신하게 된다."""
+
+    known_limitation: bool = False
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class Article:
     """코퍼스의 인용 단위. 검색 정답이 가리키는 대상이다."""
 
@@ -74,6 +97,7 @@ class Article:
 _RETRIEVAL_KEYS = {"case_id", "query", "expected", "note"}
 _PII_KEYS = {"case_id", "text", "expect_types", "must_not_contain", "known_limitation", "note"}
 _TTS_KEYS = {"case_id", "text", "expect", "note"}
+_GROUNDING_KEYS = {"case_id", "evidence", "answer", "accept", "known_limitation", "note"}
 
 
 def _read_rows(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -165,6 +189,25 @@ def load_tts(path: Path) -> list[TtsCase]:
             case_id=str(row["case_id"]),
             text=str(row["text"]),
             expect=str(row["expect"]),
+            note=str(row.get("note", "")),
+        )
+        for row in rows
+    ]
+
+
+def load_grounding(path: Path) -> list[GroundingCase]:
+    _, rows = _read_rows(path)
+    _check_keys(path, rows, _GROUNDING_KEYS)
+    for row in rows:
+        if "accept" not in row:
+            raise DatasetError(f"{path.name} [{row['case_id']}] accept가 없다 — 기대 판정이 없다")
+    return [
+        GroundingCase(
+            case_id=str(row["case_id"]),
+            evidence=[str(item) for item in row.get("evidence", [])],
+            answer=str(row["answer"]),
+            accept=bool(row["accept"]),
+            known_limitation=bool(row.get("known_limitation", False)),
             note=str(row.get("note", "")),
         )
         for row in rows

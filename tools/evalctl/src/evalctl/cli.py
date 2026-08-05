@@ -27,21 +27,30 @@ from evalctl.dataset import (
     DatasetError,
     check_coverage,
     load_corpus,
+    load_grounding,
     load_pii,
     load_retrieval,
     load_tts,
 )
 from evalctl.metrics import CaseOutcome, CheckOutcome, summarize, summarize_checks
-from evalctl.runners import DEFAULT_TOP_K, corpus_path, run_pii, run_retrieval, run_tts
+from evalctl.runners import (
+    DEFAULT_TOP_K,
+    corpus_path,
+    run_grounding,
+    run_pii,
+    run_retrieval,
+    run_tts,
+)
 
 app = typer.Typer(help="VisionAI 골든셋 평가 하네스", no_args_is_help=True)
 
 RETRIEVAL_FILE = "retrieval-terms.jsonl"
 PII_FILE = "pii-masking.jsonl"
 TTS_FILE = "tts-reading.jsonl"
+GROUNDING_FILE = "answer-grounding.jsonl"
 BASELINE_FILE = "baseline.json"
 
-SUITE_NAMES = ("retrieval", "pii", "tts")
+SUITE_NAMES = ("retrieval", "pii", "tts", "grounding")
 
 
 @dataclass
@@ -107,6 +116,16 @@ def _run_tts_suite(eval_dir: Path) -> SuiteResult:
     )
 
 
+def _run_grounding_suite(eval_dir: Path) -> SuiteResult:
+    outcomes = run_grounding(load_grounding(eval_dir / GROUNDING_FILE))
+    metrics = summarize_checks(outcomes)
+    return SuiteResult(
+        name="grounding",
+        metrics={k: float(v) for k, v in metrics.to_dict().items()},
+        failures=_check_failures(outcomes),
+    )
+
+
 def run_suites(
     eval_dir: Path, suites: list[str], top_k: int, expand: bool = True
 ) -> list[SuiteResult]:
@@ -117,6 +136,8 @@ def run_suites(
         results.append(_run_pii_suite(eval_dir))
     if "tts" in suites:
         results.append(_run_tts_suite(eval_dir))
+    if "grounding" in suites:
+        results.append(_run_grounding_suite(eval_dir))
     return results
 
 
@@ -169,7 +190,7 @@ def _as_suite_metrics(results: list[SuiteResult]) -> SuiteMetrics:
 @app.command()
 def run(
     root: Path = typer.Option(None, help="레포 루트"),
-    suite: str = typer.Option("all", help="all | retrieval | pii | tts"),
+    suite: str = typer.Option("all", help="all | retrieval | pii | tts | grounding"),
     top_k: int = typer.Option(DEFAULT_TOP_K, help="검색 상위 K (출하 설정과 같게 둔다)"),
     json_out: Path = typer.Option(None, "--json", help="결과를 JSON으로 저장"),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="실패 사례를 전부 출력"),
@@ -266,6 +287,7 @@ def validate(root: Path = typer.Option(None, help="레포 루트")) -> None:
         articles = load_corpus(corpus_path(eval_dir, corpus_name))
         pii_cases = load_pii(eval_dir / PII_FILE)
         tts_cases = load_tts(eval_dir / TTS_FILE)
+        grounding_cases = load_grounding(eval_dir / GROUNDING_FILE)
     except DatasetError as exc:
         typer.secho(f"✗ {exc}", fg=typer.colors.RED)
         raise typer.Exit(1) from exc
@@ -276,7 +298,7 @@ def validate(root: Path = typer.Option(None, help="레포 루트")) -> None:
 
     typer.echo(
         f"검색 {len(cases)}건 / 조항 {len(articles)}개 · "
-        f"PII {len(pii_cases)}건 · TTS {len(tts_cases)}건"
+        f"PII {len(pii_cases)}건 · TTS {len(tts_cases)}건 · 근거검증 {len(grounding_cases)}건"
     )
     for gap in gaps:
         typer.secho(f"△ {gap}", fg=typer.colors.YELLOW)

@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from evalctl.dataset import Article, PiiCase, RetrievalCase, TtsCase
+from evalctl.dataset import Article, GroundingCase, PiiCase, RetrievalCase, TtsCase
 from evalctl.metrics import CaseOutcome, CheckOutcome, rank_of
 from vai_contracts.retrieval import Chunk, SearchRequest
 from vai_flt_micro.filter import MicroComplianceFilter
@@ -26,6 +26,7 @@ from vai_retrieval.hybrid import HybridSearchEngine
 from vai_retrieval.lexicon import QueryExpander
 from vai_retrieval.rerank import LexicalOverlapReranker
 from vai_retrieval.store import MemoryVectorStore
+from vai_ta_assist.answer import Evidence, verify
 from vai_tts_core.normalize import normalize
 
 EVAL_TENANT = "eval"
@@ -175,6 +176,45 @@ def run_tts(cases: list[TtsCase]) -> list[CheckOutcome]:
                 case_id=case.case_id,
                 passed=passed,
                 detail="" if passed else f"기대 {case.expect!r} ≠ 실제 {actual!r}",
+                latency_ms=elapsed,
+            )
+        )
+    return outcomes
+
+
+def run_grounding(cases: list[GroundingCase]) -> list[CheckOutcome]:
+    """추천 답변 검증기 채점.
+
+    LLM을 부르지 않는다 — 재는 것은 생성 품질이 아니라 **검증기의 판단**이다.
+    환각을 통과시켰는가(고객에게 틀린 숫자가 전달된다), 멀쩡한 답변을 버렸는가
+    (상담원이 쓸 수 있는 답을 못 쓰게 된다). 둘 다 실패로 센다.
+    """
+    outcomes: list[CheckOutcome] = []
+    for case in cases:
+        evidence = [
+            Evidence(index=i + 1, doc_id=f"d{i + 1}", title="", text=text)
+            for i, text in enumerate(case.evidence)
+        ]
+        started = time.perf_counter()
+        verdict = verify(case.answer, evidence) if evidence else None
+        elapsed = (time.perf_counter() - started) * 1000
+
+        accepted = bool(verdict and verdict.accepted)
+        passed = accepted == case.accept
+        if passed:
+            detail = ""
+        elif case.accept:
+            reason = verdict.reason if verdict else "근거 없음"
+            detail = f"멀쩡한 답변을 버렸다 — {reason}"
+        else:
+            detail = "환각을 통과시켰다"
+
+        outcomes.append(
+            CheckOutcome(
+                case_id=case.case_id,
+                passed=passed,
+                detail=detail,
+                known_limitation=case.known_limitation,
                 latency_ms=elapsed,
             )
         )
