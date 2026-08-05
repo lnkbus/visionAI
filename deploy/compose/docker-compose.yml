@@ -110,6 +110,10 @@ services:
       VAI_ADM_REQUIRE_AUTH: "false"
       VAI_ADM_LICENSE_URL: http://core-lic:8095
       VAI_ADM_SECURITY_URL: http://core-sec:8096
+      # 운영 통계·콜 이력 수집. 대화 이력은 개인정보라, 수집을 원하지 않는
+      # 고객사에서는 "안 보면 된다"가 아니라 실제로 저장하지 않아야 한다.
+      VAI_ADM_ANALYTICS: ${VAI_ADM_ANALYTICS:-true}
+      VAI_ADM_ANALYTICS_RETENTION_DAYS: ${VAI_ADM_ANALYTICS_RETENTION_DAYS:-90}
     depends_on:
       redis:
         condition: service_healthy

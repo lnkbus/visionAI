@@ -40,6 +40,7 @@
   .tag.degraded { color:var(--warn); border-color:var(--warn); }
   .tag.down { color:var(--danger); border-color:var(--danger); }
   .tag.unknown { color:var(--muted); }
+  .tag.warn { color:var(--warn); border-color:var(--warn); }
   .metrics { display:flex; gap:22px; flex-wrap:wrap; margin-bottom:6px; }
   .metric b { display:block; font-size:22px; font-weight:600; }
   .metric b.warn { color:var(--warn); } .metric b.bad { color:var(--danger); } .metric b.good { color:var(--ok); }
@@ -75,6 +76,9 @@
 
   <nav>
     <button data-tab="status" aria-selected="true">플랫폼 상태</button>
+    <button data-tab="stats" aria-selected="false">서비스 통계</button>
+    <button data-tab="calls" aria-selected="false">콜 이력</button>
+    <button data-tab="learn" aria-selected="false">재학습 후보</button>
     <button data-tab="audit" aria-selected="false">감사 로그</button>
     <button data-tab="diagnose" aria-selected="false">블록 시험</button>
   </nav>
@@ -90,6 +94,127 @@
         <thead><tr><th>블록</th><th>상태</th><th>지연</th><th>라이선스</th><th>비고</th></tr></thead>
         <tbody id="blocks"><tr><td colspan="5" class="empty">—</td></tr></tbody>
       </table>
+    </div>
+  </section>
+
+  <section id="tab-stats" hidden>
+    <div class="panel">
+      <h2>기간</h2>
+      <div class="row">
+        <div><label for="sTenant">테넌트</label><input id="sTenant" placeholder="토큰의 테넌트" /></div>
+        <div><label for="sDays">기간</label>
+          <select id="sDays">
+            <option value="1">오늘</option>
+            <option value="7" selected>최근 7일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <button class="act" id="sLoad">조회</button>
+      </div>
+      <div class="msg" id="sMsg"></div>
+    </div>
+
+    <div class="panel">
+      <h2>서비스 지표</h2>
+      <div class="metrics" id="sMetrics"><span class="empty">조회를 누르세요.</span></div>
+      <p class="sub" style="margin:8px 0 0">
+        평균은 <b>합계 ÷ 건수</b>로 낸다. 일별 평균을 다시 평균하면 통화가 많았던 날과
+        적었던 날이 같은 무게가 되어 틀린 값이 나온다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>일별 추이</h2>
+      <table>
+        <thead><tr><th>날짜</th><th>세션</th><th>발화</th><th>인식 신뢰도</th><th>마스킹</th><th>룰 적중</th><th>요약(성공/실패)</th></tr></thead>
+        <tbody id="sDaily"><tr><td colspan="7" class="empty">—</td></tr></tbody>
+      </table>
+      <p class="sub" style="margin:8px 0 0">
+        <b>마스킹이 0으로 계속 남으면 마스킹이 꺼진 것을 의심한다.</b> 개인정보가 한 건도
+        안 나오는 상담은 정상이 아니라 드문 일이다.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>플로우 · 룰 랭킹</h2>
+      <div class="row" style="align-items:flex-start">
+        <div>
+          <table>
+            <thead><tr><th>많이 지난 노드</th><th>횟수</th></tr></thead>
+            <tbody id="sNodes"><tr><td colspan="2" class="empty">—</td></tr></tbody>
+          </table>
+        </div>
+        <div>
+          <table>
+            <thead><tr><th>많이 걸린 룰</th><th>횟수</th></tr></thead>
+            <tbody id="sRules"><tr><td colspan="2" class="empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="sub" style="margin:8px 0 0">
+        시나리오를 어디부터 손볼지 정하는 근거다. 이게 없으면 개선은 늘 “민원이 들어온 곳”부터가
+        되고, 그건 가장 늦은 신호다.
+      </p>
+    </div>
+  </section>
+
+  <section id="tab-calls" hidden>
+    <div class="panel">
+      <h2>콜 · 회의 이력</h2>
+      <div class="row">
+        <div><label for="cTenant">테넌트</label><input id="cTenant" placeholder="토큰의 테넌트" /></div>
+        <div style="flex:2"><label for="cQuery">검색 — 세션 ID 또는 대화 내용</label><input id="cQuery" placeholder="카드 재발급" /></div>
+        <button class="act" id="cLoad">조회</button>
+      </div>
+      <div class="msg" id="cMsg"></div>
+      <p class="sub" style="margin:6px 0 0">
+        여기 남는 것은 <b>마스킹본뿐</b>이다. 원문은 어디에도 저장하지 않는다.
+        건별 열람은 <b>감사에 기록된다</b>.
+      </p>
+    </div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>세션</th><th>유형</th><th>종료</th><th>길이</th><th>발화</th><th>마스킹</th><th>요약</th><th></th></tr></thead>
+        <tbody id="cList"><tr><td colspan="8" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="panel" id="cDetailPanel" hidden>
+      <h2>대화 내용 <span class="mono" id="cDetailId"></span></h2>
+      <div id="cDetail"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="cDelete">이 이력 파기</button>
+      </div>
+      <p class="sub" style="margin:6px 0 0">
+        개인정보 파기 요구는 거절할 수 없다. 파기 자체도 감사에 남는다 —
+        지운 사실이 기록되지 않으면 “지웠다”도 “누가 지웠나”도 증명할 수 없다.
+      </p>
+    </div>
+  </section>
+
+  <section id="tab-learn" hidden>
+    <div class="panel">
+      <h2>폴백 발화 — 재학습 후보</h2>
+      <p class="sub">
+        봇이 못 알아들어 <b>사람에게 넘어가기 직전</b>의 고객 발화다. 무엇을 물었는데 못 알아들었는지가
+        인텐트 보강의 유일한 1차 자료이며, 이것 없이 인텐트를 늘리는 것은 추측이다.
+      </p>
+      <div class="row">
+        <div><label for="lTenant">테넌트</label><input id="lTenant" placeholder="토큰의 테넌트" /></div>
+        <button class="act" id="lLoad">조회</button>
+        <button class="ghost" id="lExport">CSV 내려받기</button>
+      </div>
+      <div class="msg" id="lMsg"></div>
+    </div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>발화</th><th>횟수</th><th>막힌 노드</th><th>마지막</th></tr></thead>
+        <tbody id="lList"><tr><td colspan="4" class="empty">—</td></tr></tbody>
+      </table>
+      <p class="sub" style="margin:8px 0 0">
+        내려받은 CSV를 시나리오 저작(SCN-STUDIO)에서 인텐트 예시로 붙인다.
+        <b>반복 횟수가 높은 것부터</b> 손대는 것이 가장 싸게 먹힌다.
+      </p>
     </div>
   </section>
 
@@ -114,6 +239,8 @@
             <option value="access_denied">접근 거부</option>
             <option value="session.start">세션 시작</option>
             <option value="session.end">세션 종료</option>
+            <option value="call.view">상담 이력 열람</option>
+            <option value="call.delete">상담 이력 파기</option>
             <option value="kb.delete">문서 파기</option>
             <option value="rule.publish">룰 배포</option>
             <option value="license.install">라이선스 설치</option>
@@ -167,11 +294,17 @@ $("token").addEventListener("change", () => sessionStorage.setItem(TOKEN_KEY, $(
 
 document.querySelectorAll("nav button").forEach((btn) => {
   btn.addEventListener("click", () => {
+    const wanted = btn.dataset.tab;
     document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
-    $("tab-status").hidden = btn.dataset.tab !== "status";
-    $("tab-audit").hidden = btn.dataset.tab !== "audit";
-    $("tab-diagnose").hidden = btn.dataset.tab !== "diagnose";
-    if (btn.dataset.tab === "diagnose" && !PROBES.length) loadProbes();
+    // 탭을 이름으로 대조한다. 탭이 늘 때마다 여기에 한 줄을 더하는 구조면
+    // 언젠가 빠뜨리고, 그러면 새 탭이 아무 반응도 없는 버튼이 된다.
+    document.querySelectorAll('section[id^="tab-"]').forEach((s) => {
+      s.hidden = s.id !== `tab-${wanted}`;
+    });
+    if (wanted === "diagnose" && !PROBES.length) loadProbes();
+    if (wanted === "stats") loadStats();
+    if (wanted === "calls") loadCalls();
+    if (wanted === "learn") loadFallbacks();
   });
 });
 
@@ -340,8 +473,180 @@ async function query() {
   }
 }
 
+// ── 서비스 통계 ──────────────────────────────────────────────────────────────
+
+const pct = (v) => `${(v * 100).toFixed(1)}%`;
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ms = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`);
+
+async function loadStats() {
+  const msg = $("sMsg");
+  msg.textContent = "조회 중…"; msg.className = "msg";
+  try {
+    const params = { tenant_id: $("sTenant").value.trim(), days: $("sDays").value };
+    const [total, ranks] = await Promise.all([
+      api("/v1/admin/analytics/overview", params),
+      api("/v1/admin/analytics/rankings", { tenant_id: params.tenant_id, limit: 10 }),
+    ]);
+    renderStats(total, ranks);
+    msg.textContent = `${total.since || "—"} ~ ${total.until || "—"} · 테넌트 ${total.tenant_id}`;
+    msg.className = "msg ok";
+  } catch (err) {
+    msg.textContent = err.message; msg.className = "msg err";
+  }
+}
+
+function renderStats(t, ranks) {
+  // 신뢰도 0.8 미만이면 사전·모델을 손볼 때다. 색으로 먼저 보이게 한다.
+  const confCls = t.mean_confidence >= 0.85 ? "good" : t.mean_confidence >= 0.7 ? "warn" : "bad";
+  $("sMetrics").innerHTML = [
+    metric(t.sessions, "세션"),
+    metric(t.utterances, "발화"),
+    metric(t.utterances ? t.mean_confidence.toFixed(2) : "—", "평균 인식 신뢰도", t.utterances ? confCls : ""),
+    metric(t.pii_masked, "개인정보 마스킹", t.utterances && !t.pii_masked ? "warn" : ""),
+    metric(t.rule_hits, "룰 적중"),
+    metric(t.handoffs ? pct(t.handoff_rate) : "—", "사람 연결 비율"),
+    metric(t.summaries_ready + t.summaries_failed ? pct(t.summary_success_rate) : "—", "요약 성공률",
+           t.summaries_failed ? "warn" : "good"),
+    metric(t.mean_summary_latency_ms ? ms(t.mean_summary_latency_ms) : "—", "요약 평균 시간"),
+    metric(t.summary_gave_up, "인식 양보 포기", t.summary_gave_up ? "warn" : ""),
+  ].join("");
+
+  $("sDaily").innerHTML = t.daily.length ? t.daily.map((d) => {
+    const conf = d.confidence_n ? (d.confidence_sum / d.confidence_n).toFixed(2) : "—";
+    return `<tr>
+      <td class="mono">${esc(d.day)}</td>
+      <td>${d.sessions}</td>
+      <td>${d.utterances}</td>
+      <td>${conf}</td>
+      <td>${d.pii_masked}</td>
+      <td>${d.rule_hits}</td>
+      <td>${d.summaries_ready} / ${d.summaries_failed}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">—</td></tr>`;
+
+  const rows = (list, colspan) => list.length
+    ? list.map((r) => `<tr><td class="mono">${esc(r.label || r.key)}</td><td>${r.count}</td></tr>`).join("")
+    : `<tr><td colspan="${colspan}" class="empty">기록 없음</td></tr>`;
+  $("sNodes").innerHTML = rows(ranks.nodes || [], 2);
+  $("sRules").innerHTML = rows(ranks.rules || [], 2);
+}
+
+// ── 콜 이력 ──────────────────────────────────────────────────────────────────
+
+let CALLS = [];
+
+async function loadCalls() {
+  const msg = $("cMsg");
+  msg.textContent = "조회 중…"; msg.className = "msg";
+  $("cDetailPanel").hidden = true;
+  try {
+    CALLS = await api("/v1/admin/calls", {
+      tenant_id: $("cTenant").value.trim(), q: $("cQuery").value.trim(), limit: 100,
+    });
+    $("cList").innerHTML = CALLS.length ? CALLS.map((c) => `
+      <tr>
+        <td class="mono">${esc(c.session_id)}</td>
+        <td>${c.profile === "meeting" ? "회의" : "상담"}</td>
+        <td class="mono">${c.ended_at ? new Date(c.ended_at).toLocaleString("ko-KR") : "—"}</td>
+        <td>${c.duration_ms ? ms(c.duration_ms) : "—"}</td>
+        <td>${c.utterances}${c.truncated ? " <span class=\"tag warn\">잘림</span>" : ""}</td>
+        <td>${c.pii_masked}</td>
+        <td>${esc(c.summary_status || "—")}</td>
+        <td><button class="ghost" data-call="${esc(c.session_id)}">보기</button></td>
+      </tr>`).join("") : `<tr><td colspan="8" class="empty">해당하는 이력이 없습니다.</td></tr>`;
+    document.querySelectorAll("[data-call]").forEach((b) => {
+      b.onclick = () => openCall(b.dataset.call);
+    });
+    msg.textContent = `${CALLS.length}건`;
+    msg.className = "msg ok";
+  } catch (err) {
+    msg.textContent = err.message; msg.className = "msg err";
+  }
+}
+
+async function openCall(sessionId) {
+  const msg = $("cMsg");
+  try {
+    const call = await api(`/v1/admin/calls/${encodeURIComponent(sessionId)}`);
+    $("cDetailId").textContent = call.session_id;
+    $("cDetailPanel").hidden = false;
+    $("cDetail").innerHTML = call.turns.length ? call.turns.map((t) => `
+      <div style="margin:4px 0">
+        <span class="tag">${esc(t.speaker || (t.is_bot ? "봇" : "참여자"))}</span>
+        ${esc(t.text)}
+      </div>`).join("")
+      + (call.truncated ? `<p class="sub">발화가 상한을 넘어 일부만 남았습니다.</p>` : "")
+      : `<p class="empty">남은 발화가 없습니다.</p>`;
+    $("cDelete").dataset.session = call.session_id;
+    msg.textContent = "열람이 감사에 기록되었습니다.";
+    msg.className = "msg ok";
+  } catch (err) {
+    msg.textContent = err.message; msg.className = "msg err";
+  }
+}
+
+$("cDelete").addEventListener("click", async () => {
+  const sessionId = $("cDelete").dataset.session;
+  if (!sessionId) return;
+  if (!confirm(`${sessionId} 이력을 파기합니다. 되돌릴 수 없습니다.`)) return;
+  try {
+    await api(`/v1/admin/calls/${encodeURIComponent(sessionId)}`, {}, "DELETE");
+    $("cDetailPanel").hidden = true;
+    await loadCalls();
+  } catch (err) {
+    $("cMsg").textContent = err.message; $("cMsg").className = "msg err";
+  }
+});
+
+// ── 재학습 후보 ──────────────────────────────────────────────────────────────
+
+let FALLBACKS = [];
+
+async function loadFallbacks() {
+  const msg = $("lMsg");
+  msg.textContent = "조회 중…"; msg.className = "msg";
+  try {
+    FALLBACKS = await api("/v1/admin/analytics/fallbacks", {
+      tenant_id: $("lTenant").value.trim(), limit: 200,
+    });
+    $("lList").innerHTML = FALLBACKS.length ? FALLBACKS.map((f) => `
+      <tr>
+        <td>${esc(f.text)}</td>
+        <td>${f.count}</td>
+        <td class="mono">${esc(f.node_id || "—")}</td>
+        <td class="mono">${new Date(f.last_seen).toLocaleString("ko-KR")}</td>
+      </tr>`).join("") : `<tr><td colspan="4" class="empty">폴백 기록이 없습니다.</td></tr>`;
+    msg.textContent = `${FALLBACKS.length}건`;
+    msg.className = "msg ok";
+  } catch (err) {
+    msg.textContent = err.message; msg.className = "msg err";
+  }
+}
+
+$("lExport").addEventListener("click", () => {
+  if (!FALLBACKS.length) { $("lMsg").textContent = "내려받을 항목이 없습니다."; return; }
+  // 폐쇄망에서는 외부 라이브러리를 못 쓴다. CSV는 엑셀이 그대로 연다.
+  // BOM을 붙이지 않으면 한글이 깨져서 열리고, 그러면 도구를 안 쓰게 된다.
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = ["발화,횟수,막힌노드,마지막"].concat(
+    FALLBACKS.map((f) => [f.text, f.count, f.node_id, f.last_seen].map(cell).join(","))
+  ).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `fallback-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
 $("refresh").addEventListener("click", refresh);
 $("query").addEventListener("click", query);
+$("sLoad").addEventListener("click", loadStats);
+$("cLoad").addEventListener("click", loadCalls);
+$("lLoad").addEventListener("click", loadFallbacks);
+$("cQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") loadCalls(); });
 if ($("token").value) refresh();
 </script>
 </body>

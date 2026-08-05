@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 46f451a66dc60a1115ef0392c3814eae8f4f038fc69af2a51d6a98042fa4ba2d
+configuration_hash: da66ad133b0d4b68675889841b24c7ffe53ca54030e07c139cbf9fe5e12db885
 component_count: 23
 components:
 - id: AUD-VAD
@@ -39,7 +39,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: 65f3753e2bb235e9
+  source_hash: b6fb1d7e4b8e4c3d
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -101,7 +101,7 @@ components:
   name: 요약 & 분석
   version: 0.2.0
   kind: block
-  source_hash: ef68030c7103ae83
+  source_hash: ff8f061e94e37967
   license_key: LLM-SUM
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -142,7 +142,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: e209eba323c8edaf
+  source_hash: 27525148c4ce4ff8
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -184,12 +184,12 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: 6c7d30e81a67bb05
+  source_hash: 17a4477a643e7196
 - id: lib:common
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: f731c9a39aab7fb2
+  source_hash: 180f5ae4888e8b47
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

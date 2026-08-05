@@ -12,6 +12,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from vai_contracts.events import BaseEvent
 from vai_contracts.session import SessionProfile
 
 
@@ -96,3 +97,21 @@ class Summary(BaseModel):
     """상한을 넘겨 양보를 포기했는가. 실패가 아니라 기록이다."""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SummaryDone(BaseEvent):
+    """``summary.done`` — 요약이 끝났다는 사실.
+
+    요약 본문을 싣지 않는다. 회의록은 개인정보 밀도가 가장 높은 산출물이고,
+    스트림은 여러 블록이 함께 읽는 자리다. 본문이 필요한 쪽은 LLM-SUM의 조회
+    API를 쓰면 되며, 그쪽에는 권한과 감사 기록이 걸려 있다.
+
+    통계·운영 화면은 여기 실린 숫자만으로 충분하다.
+    """
+
+    profile: SessionProfile
+    status: SummaryStatus = SummaryStatus.PENDING
+    latency_ms: int = 0
+    waited_for_stt_ms: int = 0
+    yield_gave_up: bool = False
+    transcript_chars: int = 0

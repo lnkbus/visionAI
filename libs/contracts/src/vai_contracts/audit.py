@@ -39,6 +39,15 @@ class AuditAction(StrEnum):
     """마스킹된 원문 열람. 감사에서 가장 먼저 확인하는 항목이다."""
 
     RECORDING_PLAY = "recording.play"
+
+    CALL_VIEW = "call.view"
+    """상담·회의 이력 열람. 담긴 것이 마스킹본이라 ``pii.reveal``과 구분한다 —
+    둘을 같은 이름으로 남기면 실제 원문 열람이 일상 조회에 묻힌다."""
+
+    CALL_DELETE = "call.delete"
+    """이력 파기. 지운 사실이 기록되지 않으면 "지웠다"도 "누가 지웠나"도
+    증명할 수 없다."""
+
     EXPORT = "export"
     """회의록·녹취 반출. 유출 사고의 조사 시작점이다."""
 
