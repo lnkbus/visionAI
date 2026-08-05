@@ -10,6 +10,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=portable.sh
+. "$(dirname "${BASH_SOURCE[0]}")/portable.sh"
 OUT_DIR=""
 LICENSE_FILE=""
 BLOCKS=()
@@ -47,10 +49,10 @@ PLAN_ARGS=(--root "$REPO_ROOT" --out "$STAGE/plan.json")
 for b in "${BLOCKS[@]+"${BLOCKS[@]}"}"; do PLAN_ARGS+=(--block "$b"); done
 (cd "$REPO_ROOT" && uv run blockctl bundle-plan "${PLAN_ARGS[@]}")
 
-mapfile -t IMAGES < <(python3 -c '
+read_into IMAGES < <(python3 -c '
 import json, sys
 print("\n".join(json.load(open(sys.argv[1]))["images"]))' "$STAGE/plan.json")
-mapfile -t PLAN_BLOCKS < <(python3 -c '
+read_into PLAN_BLOCKS < <(python3 -c '
 import json, sys
 print("\n".join(json.load(open(sys.argv[1]))["blocks"]))' "$STAGE/plan.json")
 
@@ -79,6 +81,8 @@ echo "▸ 설치 자산 복사"
 cp "$REPO_ROOT/deploy/airgap/install.sh" "$REPO_ROOT/deploy/airgap/selftest.sh" "$STAGE/"
 # 설치 마법사. 표준 라이브러리만 쓰므로 반입 대상이 늘지 않는다.
 cp -r "$REPO_ROOT/deploy/airgap/installer" "$STAGE/"
+# 이식 계층. install.sh·selftest.sh 가 source 하므로 함께 들어가야 한다.
+cp "$REPO_ROOT/deploy/airgap/portable.sh" "$STAGE/"
 cp "$REPO_ROOT/deploy/compose/docker-compose.yml" "$STAGE/"
 cp "$REPO_ROOT/deploy/compose/compliance-rules.json" "$STAGE/" 2>/dev/null || true
 chmod +x "$STAGE/install.sh" "$STAGE/selftest.sh"
@@ -87,12 +91,12 @@ printf '%s\n' "$TAG" > "$STAGE/VERSION"
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 설치 전에 대조하지 않으면
 # 반쯤 깨진 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
 echo "▸ 체크섬"
-(cd "$STAGE" && find . -type f ! -name SHA256SUMS -print0 | sort -z |
-  xargs -0 sha256sum > SHA256SUMS)
+(cd "$STAGE" && sorted_files . | sha256_list > SHA256SUMS)
 
 echo "▸ 아카이브"
 tar -C "$OUT_DIR" -czf "$OUT_DIR/visionai-$TAG.tar.gz" "visionai-$TAG"
-sha256sum "$OUT_DIR/visionai-$TAG.tar.gz" > "$OUT_DIR/visionai-$TAG.tar.gz.sha256"
+echo "$(sha256_of "$OUT_DIR/visionai-$TAG.tar.gz")  visionai-$TAG.tar.gz" \
+  > "$OUT_DIR/visionai-$TAG.tar.gz.sha256"
 
 echo
 echo "✓ 번들: $OUT_DIR/visionai-$TAG.tar.gz ($(du -h "$OUT_DIR/visionai-$TAG.tar.gz" | cut -f1))"

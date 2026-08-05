@@ -9,9 +9,16 @@
 #   ./install.sh --gui               # 브라우저 설치 마법사
 #   ./install.sh --dry-run           # 반입 전 점검만 (docker 조작 없음)
 #   sudo ./install.sh --blocks "STT-CORE TA-ASSIST"   # 일부만 기동
+#
+# 리눅스와 macOS에서 돈다(bash 3.2 이상). Windows는 WSL2 안에서 실행한다 —
+# 컨테이너 이미지가 리눅스용이라 네이티브 지원은 사실상 다른 제품이 된다.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# GNU coreutils가 없는 곳(macOS)에서도 같은 답을 내게 한다.
+# shellcheck source=portable.sh
+. "$HERE/portable.sh"
+
 DRY_RUN=0
 DATA_DIR="/var/lib/visionai"
 BLOCKS=""
@@ -67,8 +74,8 @@ fi
 # 이미지 적재는 압축을 풀어 저장하므로 아카이브보다 훨씬 많은 공간을 쓴다.
 # 여유 없이 시작했다가 중간에 멈추면 절반만 적재된 상태가 남는다.
 if [[ -f "$HERE/images.tar" ]]; then
-  NEED_MB=$(( $(stat -c%s "$HERE/images.tar") / 1048576 * 3 ))
-  AVAIL_MB=$(df -Pm "$HERE" | awk 'NR==2 {print $4}')
+  NEED_MB=$(( $(file_size "$HERE/images.tar") / 1048576 * 3 ))
+  AVAIL_MB=$(( $(avail_kb "$HERE") / 1024 ))
   if (( AVAIL_MB > NEED_MB )); then
     ok "디스크 여유 ${AVAIL_MB}MB (필요 추정 ${NEED_MB}MB)"
   else
@@ -110,9 +117,12 @@ step 2 "무결성 대조"
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 대조 없이 적재하면 반쯤 깨진
 # 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
 if [[ -f "$HERE/SHA256SUMS" ]]; then
-  if (cd "$HERE" && sha256sum --quiet -c SHA256SUMS); then
-    ok "$(wc -l < "$HERE/SHA256SUMS")개 파일 일치"
+  if mismatch="$(cd "$HERE" && sha256_verify SHA256SUMS)"; then
+    ok "$(wc -l < "$HERE/SHA256SUMS" | tr -d ' ')개 파일 일치"
   else
+    # 어느 파일이 깨졌는지 알려 준다. "무결성 실패"만 던지면 반입을 다시
+    # 밟을지, 파일 하나만 다시 받을지 판단할 수 없다.
+    [ -n "$mismatch" ] && echo "$mismatch" | sed 's/^/    /'
     fail "체크섬 불일치 — 이 번들로 설치하면 안 된다"
   fi
 fi

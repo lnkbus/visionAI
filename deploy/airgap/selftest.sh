@@ -7,19 +7,28 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=portable.sh
+. "$HERE/portable.sh"
+
 HOST="${VAI_SELFTEST_HOST:-localhost}"
 DEADLINE="${VAI_SELFTEST_TIMEOUT:-90}"
 
-PORTS_CORE_BUS=8081 PORTS_CORE_GW=8080 PORTS_AUD_VAD=8082 PORTS_STT_CORE=8083
-PORTS_FLT_MICRO=8084 PORTS_LLM_GW=8085 PORTS_RAG_KB=8086 PORTS_RAG_SRCH=8087
-PORTS_TA_ASSIST=8088 PORTS_LLM_SUM=8089 PORTS_SCN_STUDIO=8090 PORTS_UI_AGENT=8091
-PORTS_AUD_RTP=8092 PORTS_SPK_DIA=8093 PORTS_UI_MEET=8094 PORTS_CORE_LIC=8095
-PORTS_CORE_SEC=8096 PORTS_CORE_ADM=8097
+# 블록 ID를 변수 이름으로 바꿔 간접 확장(${!v})으로 읽는다. shellcheck는 그
+# 참조를 보지 못해 전부 미사용으로 본다 — 연관배열은 bash 4+ 전용이라 macOS
+# 기본 bash에서 쓸 수 없다. 묶음 하나로 만들어 지시어가 표 전체를 덮게 한다.
+# shellcheck disable=SC2034
+{
+  PORTS_CORE_BUS=8081 PORTS_CORE_GW=8080 PORTS_AUD_VAD=8082 PORTS_STT_CORE=8083
+  PORTS_FLT_MICRO=8084 PORTS_LLM_GW=8085 PORTS_RAG_KB=8086 PORTS_RAG_SRCH=8087
+  PORTS_TA_ASSIST=8088 PORTS_LLM_SUM=8089 PORTS_SCN_STUDIO=8090 PORTS_UI_AGENT=8091
+  PORTS_AUD_RTP=8092 PORTS_SPK_DIA=8093 PORTS_UI_MEET=8094 PORTS_CORE_LIC=8095
+  PORTS_CORE_SEC=8096 PORTS_CORE_ADM=8097
+}
 
 port_for() { local v="PORTS_${1//-/_}"; echo "${!v:-}"; }
 
 if [[ -f "$HERE/plan.json" ]]; then
-  mapfile -t BLOCKS < <(python3 -c '
+  read_into BLOCKS < <(python3 -c '
 import json, sys
 print("\n".join(json.load(open(sys.argv[1]))["blocks"]))' "$HERE/plan.json")
 else
