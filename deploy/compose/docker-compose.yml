@@ -427,17 +427,18 @@ services:
     environment:
       <<: *block-env
       VAI_BLOCK_ID: SPK-DIA
-      # 기본값이 신경망 임베더다. spectral 로 내리려면 명시한다.
-      VAI_SPK_EMBEDDER: ${VAI_SPK_EMBEDDER:-speechbrain}
-      VAI_SPK_EMBEDDER_MODEL: ${VAI_SPK_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
-      VAI_SPK_EMBEDDER_CONFIG: '{"device":"cpu"}'
       VAI_CONSUMER_GROUP: dia
       VAI_CONSUMER_NAME: dia-1
-      # 운영에서는 신경망 임베더로 바꾼다. spectral은 음역이 뚜렷이 다른
-      # 화자만 가른다:
-      #   VAI_DIA_EMBEDDER: speechbrain
-      #   VAI_DIA_EMBEDDER_MODEL: /models/ecapa-tdnn
-      VAI_DIA_EMBEDDER: spectral
+      # 블록이 읽는 접두사는 VAI_DIA_ 다. 다른 이름으로 주면 조용히 무시되고
+      # 기본값(spectral)으로 도는데, 그 사실은 "비슷한 목소리를 못 가른다"로만
+      # 나타나 원인을 찾기 어렵다.
+      #
+      # 기본값이 신경망 임베더(ECAPA-TDNN)다. `fetch_models.sh --spk` 로 받은
+      # 가중치가 없으면 기동에 실패하므로, 모델 없이 돌릴 때는 spectral 로 내린다:
+      #   VAI_DIA_EMBEDDER=spectral docker compose up -d spk-dia
+      VAI_DIA_EMBEDDER: ${VAI_DIA_EMBEDDER:-speechbrain}
+      VAI_DIA_EMBEDDER_MODEL: ${VAI_DIA_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
+      VAI_DIA_EMBEDDER_CONFIG: '{"device":"cpu"}'
     ports:
       - "8093:8093"
 

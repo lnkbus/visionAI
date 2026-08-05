@@ -7,10 +7,14 @@
 
 | 화면 | 주소 | 누가 쓰나 |
 |---|---|---|
-| 운영 콘솔 | `core-adm:8094/console` | 고객사 운영자 |
-| 저작 콘솔 | `scn-studio:8097/console` | 고객사 시나리오 담당 |
-| 상담원 화면 | `ui-agent:8091` | 상담사 |
-| 회의록 | `ui-meet:8092` | 회의 참석자 |
+| 운영 콘솔 | <http://localhost:8097/console> | 고객사 운영자 |
+| 저작 콘솔 | <http://localhost:8090/console> | 고객사 시나리오 담당 |
+| 상담원 워크스페이스 | <http://localhost:8091/workspace> | 상담사 |
+| 스마트 회의록 | <http://localhost:8094/minutes> | 회의 참석자 |
+| 고객 데모(마이크→자막) | <http://localhost:8080/demo> | 시연용 |
+
+> 포트는 `deploy/compose/docker-compose.yml` 이 기준이다. 문서에 손으로 적은
+> 번호는 언젠가 어긋나므로, 안 맞으면 `docker compose ps` 를 먼저 본다.
 
 **운영 콘솔 6탭** — 플랫폼 상태 · 서비스 통계 · 콜 이력 · 재학습 후보 · 감사 로그 · 블록 시험
 **저작 콘솔 8탭** — 컴플라이언스 룰 · STT 사전 · 검색 튜닝 · 평가셋 · 팝업 채택률 ·

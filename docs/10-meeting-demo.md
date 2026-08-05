@@ -22,13 +22,29 @@
 
 ## 1. 준비 (한 번만, 네트워크 있는 곳에서)
 
+### 1.0 맥에서 할 때 — 먼저 챙길 것
+
+| | |
+|---|---|
+| **Docker Desktop 메모리** | 설정 → Resources → Memory를 **최소 8GB, 권장 12GB**. 기본값(보통 4~8GB)이면 STT 모델을 올리다 컨테이너가 조용히 죽는다 |
+| **디스크** | 이미지 + 모델로 **15GB 이상** 비워 둔다 |
+| **아키텍처** | Apple Silicon(arm64)은 그대로 빌드된다. 로제타 에뮬레이션이 아니다 |
+| **최초 빌드 시간** | 블록 21개 + 인식 엔진. **회의 직전에 하지 않는다** — 전날 한 번 돌려 둔다 |
+| **마이크** | `http://localhost` 은 보안 컨텍스트로 취급되어 브라우저가 마이크를 허용한다. Safari보다 Chrome이 덜 까다롭다 |
+
 ```bash
 # 모델 목록과 크기
 deploy/airgap/fetch_models.sh --list
 
 # 회의록 실사용 하한. Apple Silicon 16GB면 large-v3-turbo 도 올라간다.
 uv run --with huggingface_hub bash deploy/airgap/fetch_models.sh --out models --stt small
+
+# 화자분리 신경망 임베더(ECAPA-TDNN, ~85MB). compose 기본값이 이걸 쓴다.
+uv run --with huggingface_hub bash deploy/airgap/fetch_models.sh --out models --spk --no-stt
 ```
+
+**임베더 모델을 안 받았으면 SPK-DIA 가 기동에 실패한다.** 모델 없이 돌리려면
+`VAI_DIA_EMBEDDER=spectral` 로 내린다 — 대신 음역이 뚜렷이 다른 화자만 갈린다.
 
 | 모델 | 크기 | 어디에 |
 |---|---|---|
@@ -38,13 +54,44 @@ uv run --with huggingface_hub bash deploy/airgap/fetch_models.sh --out models --
 | `medium` | 1.5 GB | 상담 녹취 |
 | `large-v3-turbo` | 1.6 GB | 품질/속도 균형이 가장 좋다 |
 
+### 1.1 요약을 진짜로 나오게 하려면 (맥 GPU)
+
+compose 기본값은 `VAI_LLM_ADAPTER=echo` 다. **echo 면 요약이 프롬프트를 그대로
+돌려준다** — 회의록 검증이 목적이라면 이걸 먼저 바꾼다.
+
+```bash
+# 맥에서 (Metal 가속)
+brew install ollama && ollama serve &
+ollama pull qwen2.5:7b-instruct-q4_K_M
+```
+
+```bash
+# compose 를 띄울 때
+VAI_LLM_ADAPTER=openai_compatible \
+VAI_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
+VAI_LLM_MODEL=qwen2.5:7b-instruct-q4_K_M \
+  docker compose -f deploy/compose/docker-compose.yml up -d llm-gw
+```
+
+16GB 맥에서 STT 와 sLLM 을 **동시에** 올리면 스왑이 난다. 그래서 요약은 회의
+종료 후에 돌게 해 뒀다(STT 우선, docs/12 §4.1) — 회의 중에는 겹치지 않는다.
+
 ## 2. 기동
 
 ```bash
 docker compose -f deploy/compose/docker-compose.yml up --build -d
+docker compose -f deploy/compose/docker-compose.yml ps    # 포트는 여기가 기준이다
 ```
 
 첫 빌드는 오래 걸린다(엔진 포함). 이후에는 캐시가 받는다.
+
+| 화면 | 주소 |
+|---|---|
+| 스마트 회의록 | <http://localhost:8094/minutes> |
+| 운영 콘솔 | <http://localhost:8097/console> |
+| 저작 콘솔 | <http://localhost:8090/console> |
+| 상담원 워크스페이스 | <http://localhost:8091/workspace> |
+| 고객 데모(마이크→자막) | <http://localhost:8080/demo> |
 
 모델을 `models/` 말고 다른 곳에 뒀다면:
 
@@ -107,3 +154,51 @@ http://localhost:8094/minutes
 | 모델을 못 찾는다 | `VAI_STT_MODEL_PATH`와 마운트 경로가 맞는지. 컨테이너 안 경로는 `/models/...` 다 |
 | 인식이 영어로 나온다 | `VAI_STT_ADAPTER_CONFIG` 의 `language: ko` 확인 |
 | 회의록이 비어 있다 | 세션이 실제로 종료됐는지(`session.closed`). 콘솔 → LLM-GW 직접 호출로 모델 연결 확인 |
+
+## 7. 설치 화면까지 시연하려면 (고객사 설치 경로)
+
+위(§2)는 **개발 경로**다. 고객사에서 실제로 하는 일은 다르다 — 인터넷이 없는
+서버에 USB로 번들을 들고 들어가 설치기를 돌린다. 그 과정을 그대로 보여 준다.
+
+```bash
+# ① 번들 만들기 (맥에서 시연할 것이므로 arm64)
+deploy/airgap/build_bundle.sh --block UI-MEET --block SPK-DIA --block STT-CORE \
+  --arch arm64 --out dist/
+
+# ② 반입한 척 풀기
+tar -xzf dist/visionai-0.1.0.tar.gz -C /tmp && cd /tmp/visionai-0.1.0
+
+# ③ 반입 전 점검만 (docker 를 건드리지 않는다)
+./install.sh --dry-run
+
+# ④ 브라우저 설치 마법사
+./install.sh --gui        # http://127.0.0.1:8099
+```
+
+시연에서 짚을 것:
+
+| | |
+|---|---|
+| **모듈 선택** | 화면에서 블록을 골라 설치한다 — 고객사가 산 블록만 들어간다 |
+| **프로그레스** | 5단계(사전 점검 → 무결성 → 적재 → 기동 → 자가진단)가 실시간으로 흐른다 |
+| **앞이 실패하면 뒤로 안 간다** | 설치 중 실패는 흔하고, 진짜 문제는 *어디까지 됐는지 모르는 실패*다 |
+| **`--dry-run` 은 건너뛴 단계를 "건너뜀"으로 적는다** | ✓ 로 보이면 점검만 한 것을 설치했다고 오해한다 |
+| **127.0.0.1 에만 붙는다** | 마법사는 인증 없이 docker 를 조작한다. 외부에 열면 그 자체가 원격 실행 통로다 |
+
+설치 단계는 마법사가 다시 구현하지 않고 `install.sh` 를 몰아준다. 두 번
+구현하면 둘이 갈라지고, 갈라진 사실은 현장에서 한쪽만 실패할 때 드러난다.
+
+> 번들 빌드는 이미지를 `docker save` 로 담으므로 시간이 걸린다. 블록을 좁혀
+> (`--block`) 만드는 편이 시연에는 낫다 — 21개 전부 담으면 수 GB가 된다.
+
+## 8. 회의 당일 순서 (권장)
+
+```
+전날  ① 모델 반입 (--stt small --spk)   ② docker compose up --build -d
+      ③ Ollama 로 요약 붙이기            ④ 운영 콘솔에서 STT-CORE 왕복 시험 초록 확인
+당일  ⑤ 회의록 화면에서 참석자 이름 입력  ⑥ 회의 진행
+      ⑦ 세션 종료 → 요약 대기 표시 → 회의록
+      ⑧ 운영 콘솔 [서비스 통계]에서 방금 회의가 숫자로 잡히는지 확인
+```
+
+⑧ 이 시연의 마무리로 좋다 — **방금 한 회의가 그대로 지표가 되는 것**을 보여 준다.
