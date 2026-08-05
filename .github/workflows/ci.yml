@@ -49,6 +49,14 @@ jobs:
       - name: 블록 카탈로그 정합성
         run: uv run blockctl check --root .
 
+      - name: 패키지 형상 대조
+        # 형상이 조용히 어긋나는 것을 막는다. 의도한 변경이면
+        # `blockctl freeze <패키지> --write`로 갱신하고 그 diff가 리뷰에 남는다.
+        run: |
+          for package in meeting aicc voicebot avatar; do
+            uv run blockctl freeze "$package" --root .
+          done
+
       - name: 테스트
         # fake 어댑터와 인메모리 버스 덕에 GPU·Redis 없이 파이프라인 전체가 검증된다.
         run: uv run pytest -q

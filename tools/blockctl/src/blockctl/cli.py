@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 
 import typer
+import yaml
 
 from blockctl.bundle import licensed_blocks, plan
 from blockctl.catalog import CatalogError, load_catalog, validate
+from blockctl.freeze import FreezeError, diff, freeze_package, render
 from blockctl.release import Severity, blocking, embed_public_key, verify_release
 
 app = typer.Typer(help="VisionAI 블록 카탈로그 도구", no_args_is_help=True)
@@ -151,6 +153,63 @@ def release_check(root: Path = typer.Option(None, help="검사할 릴리스 트�
         typer.secho(f"\n✗ 납품 불가 — 차단 항목 {len(fatal)}건", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     typer.secho("✓ 릴리스 검사 통과", fg=typer.colors.GREEN)
+
+
+FREEZE_DIR = Path("deploy/release/packages")
+
+
+@app.command()
+def freeze(
+    package: str = typer.Argument(..., help="패키지 이름 (values-<이름>.yaml)"),
+    root: Path = typer.Option(None, help="레포 루트"),
+    write: bool = typer.Option(False, "--write", help="형상 명세 파일을 갱신한다"),
+) -> None:
+    """패키지 형상을 계산해 기록본과 대조한다 (GS인증·납품 검수 게이트).
+
+    기본 동작은 **검사**다. 구성이 바뀌었는데 명세가 그대로면 실패하고,
+    무엇이 달라졌는지 항목 단위로 알려 준다. 의도한 변경이면 ``--write``로
+    갱신하고 그 diff를 검토한다 — 형상 변경이 리뷰를 거치게 하는 것이 목적이다.
+    """
+    base = root or Path.cwd()
+    chart_dir = base / "deploy" / "charts" / "visionai"
+    try:
+        blocks = load_catalog(_blocks_dir(root))
+        current = freeze_package(package, blocks, root=base, chart_dir=chart_dir)
+    except (CatalogError, FreezeError) as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    target = base / FREEZE_DIR / f"{package}.yaml"
+    if write:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render(current), encoding="utf-8")
+        typer.secho(f"✓ 형상 명세 기록: {target.relative_to(base)}", fg=typer.colors.GREEN)
+        typer.echo(
+            f"  구성요소 {len(current.components)}개 · 해시 {current.configuration_hash[:16]}"
+        )
+        return
+
+    if not target.is_file():
+        typer.secho(
+            f"✗ 형상 명세가 없다: {target.relative_to(base)} — `blockctl freeze {package} --write`",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    recorded = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
+    problems = diff(current, recorded)
+    if problems:
+        typer.secho(f"✗ 형상이 기록본과 다르다 ({package})", fg=typer.colors.RED, err=True)
+        for problem in problems:
+            typer.secho(f"  · {problem}", fg=typer.colors.RED, err=True)
+        typer.echo(f"\n의도한 변경이면: blockctl freeze {package} --write")
+        raise typer.Exit(1)
+    typer.secho(
+        f"✓ 형상 일치 ({package}) — 구성요소 {len(current.components)}개 · "
+        f"해시 {current.configuration_hash[:16]}",
+        fg=typer.colors.GREEN,
+    )
 
 
 if __name__ == "__main__":
