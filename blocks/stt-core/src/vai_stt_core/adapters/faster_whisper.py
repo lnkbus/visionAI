@@ -55,7 +55,7 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         )
 
     async def transcribe_stream(
-        self, audio_chunk: bytes, sample_rate: int = 16000
+        self, audio_chunk: bytes, sample_rate: int = 16000, *, hint: str = ""
     ) -> AsyncGenerator[SttResult, None]:
         if self._model is None:
             raise RuntimeError("initialize()를 먼저 호출해야 한다")
@@ -63,7 +63,7 @@ class FasterWhisperAdapter(BaseSTTAdapter):
             return
 
         audio = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
-        segments, info = await asyncio.to_thread(self._run, audio, sample_rate)
+        segments, info = await asyncio.to_thread(self._run, audio, sample_rate, hint)
         for segment in segments:
             text = segment.text.strip()
             if not text:
@@ -76,10 +76,17 @@ class FasterWhisperAdapter(BaseSTTAdapter):
                 language=info.language or self._language or "ko",
             )
 
-    def _run(self, audio: np.ndarray, sample_rate: int) -> tuple[list[Any], Any]:
+    def _run(self, audio: np.ndarray, sample_rate: int, hint: str) -> tuple[list[Any], Any]:
         if sample_rate != 16000:
             audio = _resample_to_16k(audio, sample_rate)
-        segments, info = self._model.transcribe(audio, language=self._language, **self._options)
+        segments, info = self._model.transcribe(
+            audio,
+            language=self._language,
+            # 커스텀 사전의 상품명·전문용어를 디코딩 힌트로 넣는다. 후처리 교정이
+            # 등록된 변형만 잡는 데 비해, 이쪽은 미등록 변형에도 도움이 된다.
+            initial_prompt=hint or None,
+            **self._options,
+        )
         return list(segments), info
 
     async def close(self) -> None:

@@ -38,12 +38,16 @@ class BaseSTTAdapter(ABC):
 
     @abstractmethod
     async def transcribe_stream(
-        self, audio_chunk: bytes, sample_rate: int = 16000
+        self, audio_chunk: bytes, sample_rate: int = 16000, *, hint: str = ""
     ) -> AsyncGenerator[SttResult, None]:
         """오디오 구간을 수신하여 실시간 STT 결과(Delta)를 생성한다.
 
         하나의 구간에서 여러 결과가 나올 수 있다(문장 단위 분할). 호출자는
         받는 대로 즉시 다음 단계로 흘려보내야 지연 예산을 지킬 수 있다.
+
+        ``hint``는 디코딩 편향용 힌트다(커스텀 사전의 상품명·전문용어).
+        사양서 원래 시그니처에 키워드 인자로만 덧붙여, 기존 어댑터는
+        무시해도 동작이 깨지지 않는다.
         """
         raise NotImplementedError
         yield  # pragma: no cover - 시그니처를 async generator로 고정하기 위한 표식

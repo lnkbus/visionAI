@@ -13,7 +13,13 @@ from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common.bus import RedisEventBus, build_bus
-from vai_common.config_store import CachedConfig, ConfigKind, InMemoryConfigStore, RedisConfigStore
+from vai_common.config_store import (
+    CachedConfig,
+    ConfigKind,
+    ConfigStore,
+    InMemoryConfigStore,
+    RedisConfigStore,
+)
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
 from vai_contracts.authoring import Lexicon
@@ -56,14 +62,15 @@ def create_app() -> FastAPI:
         log.info("STT 어댑터 로드", extra={"adapter": adapter.name})
 
         lexicons: LexiconCache | None = None
+        config_store: ConfigStore | None = None
         if stt_cfg.lexicon_enabled:
-            configs = (
+            config_store = (
                 RedisConfigStore(bus.redis)
                 if isinstance(bus, RedisEventBus)
                 else InMemoryConfigStore()
             )
             lexicons = LexiconCache(
-                CachedConfig(configs, ConfigKind.LEXICON, Lexicon, ttl_s=stt_cfg.lexicon_ttl_s)
+                CachedConfig(config_store, ConfigKind.LEXICON, Lexicon, ttl_s=stt_cfg.lexicon_ttl_s)
             )
 
         workers = [
@@ -81,6 +88,13 @@ def create_app() -> FastAPI:
         tasks = [
             asyncio.create_task(w.run(), name=f"stt-worker-{i}") for i, w in enumerate(workers)
         ]
+        if lexicons is not None and config_store is not None:
+            # 배포 알림을 받으면 캐시 TTL을 기다리지 않고 즉시 새 사전을 쓴다.
+            tasks.append(
+                asyncio.create_task(
+                    _watch_lexicon_updates(config_store, lexicons), name="stt-lexicon-watch"
+                )
+            )
         try:
             yield
         finally:
@@ -97,6 +111,23 @@ def create_app() -> FastAPI:
     return create_block_app(
         block_id=BLOCK_ID, title="VisionAI STT-CORE", settings=common, lifespan=lifespan
     )
+
+
+async def _watch_lexicon_updates(store: ConfigStore, lexicons: LexiconCache) -> None:
+    """사전 배포 알림 구독.
+
+    알림을 놓쳐도 캐시 TTL이 만료되면 따라잡으므로, 이 태스크가 죽어도
+    동작이 깨지지는 않는다 — 반영이 늦어질 뿐이다.
+    """
+    try:
+        async for kind, tenant_id in store.watch():
+            if kind is ConfigKind.LEXICON:
+                lexicons.invalidate(tenant_id)
+                log.info("사전 갱신 알림 수신", extra={"tenant_id": tenant_id})
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("사전 알림 구독 중단 — TTL 갱신으로 계속 동작한다")
 
 
 app = create_app()

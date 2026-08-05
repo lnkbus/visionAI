@@ -291,6 +291,23 @@ services:
     ports:
       - "8091:8091"
 
+  aud-rtp:
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: aud-rtp
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: AUD-RTP
+      VAI_RTP_PORT_START: "40000"
+      VAI_RTP_PORT_END: "40100"
+    ports:
+      - "8092:8092"
+      # RTP는 UDP다. 고객사 미디어 게이트웨이가 이 대역으로 보낸다.
+      - "40000-40100:40000-40100/udp"
+
 volumes:
   redis-data:
   qdrant-data:

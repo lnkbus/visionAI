@@ -53,7 +53,11 @@ class SttWorker(BlockWorker[AudioSegment]):
     async def handle(self, event: AudioSegment) -> None:
         corrector = await self._corrector_for(event.tenant_id)
 
-        async for result in self._adapter.transcribe_stream(event.pcm, event.sample_rate):
+        hint = corrector.initial_prompt if corrector is not None else ""
+
+        async for result in self._adapter.transcribe_stream(
+            event.pcm, event.sample_rate, hint=hint
+        ):
             text = result["text"].strip()
             if not text:
                 continue

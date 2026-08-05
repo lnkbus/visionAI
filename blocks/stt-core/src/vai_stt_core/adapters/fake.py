@@ -35,7 +35,7 @@ class FakeSTTAdapter(BaseSTTAdapter):
         self._cursor = 0
 
     async def transcribe_stream(
-        self, audio_chunk: bytes, sample_rate: int = 16000
+        self, audio_chunk: bytes, sample_rate: int = 16000, *, hint: str = ""
     ) -> AsyncGenerator[SttResult, None]:
         if not audio_chunk:
             return

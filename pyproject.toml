@@ -36,6 +36,7 @@ ignore = ["B008"]  # FastAPI Depends() in defaults
 known-first-party = [
     "blockctl",
     "tests",
+    "vai_aud_rtp",
     "vai_aud_vad",
     "vai_common",
     "vai_contracts",

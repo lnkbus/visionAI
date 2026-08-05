@@ -1,0 +1,21 @@
+id: AUD-RTP
+name: SIP/RTP 인입 게이트웨이
+tier: speech
+version: 0.1.0
+description: >
+  전화망 오디오(G.711 μ-law/A-law 8kHz)를 받아 파이프라인에 넣는다. RTP 파싱,
+  지터 버퍼(재정렬·손실 보정), 채널 분리(고객/상담원)를 담당한다.
+  시그널링은 고객사 환경(SIPREC/미디어게이트웨이/CTI)마다 달라 제어 API로 열어 두고,
+  이 블록은 미디어만 책임진다.
+depends_on:
+  - CORE-BUS
+adapters: []
+contracts:
+  consumes: []
+  produces:
+    - audio.in
+  openapi: contracts/openapi.yaml
+billing:
+  capacity_unit: concurrent_channels
+  dev_effort_mm: 2.5
+  included_in_package: false

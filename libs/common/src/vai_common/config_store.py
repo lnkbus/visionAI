@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from enum import StrEnum
 from typing import Generic, TypeVar
 
@@ -53,6 +54,20 @@ class ConfigStore(ABC):
     async def load(self, kind: ConfigKind, tenant_id: str, model: type[ModelT]) -> ModelT | None:
         """배포된 설정을 읽는다. 실시간 블록이 호출한다."""
 
+    def watch(self) -> AsyncIterator[tuple[ConfigKind, str]]:
+        """배포 알림을 구독한다. 캐시 TTL을 기다리지 않고 즉시 반영하기 위한 경로.
+
+        기본 구현은 아무것도 내보내지 않는다 — 알림을 놓쳐도 TTL 만료로
+        따라잡으므로, 구현하지 않은 저장소에서도 동작에 문제가 없다.
+        """
+        return _never()
+
+
+async def _never() -> AsyncIterator[tuple[ConfigKind, str]]:
+    """알림을 지원하지 않는 저장소용 빈 스트림."""
+    return
+    yield  # pragma: no cover - async generator로 만들기 위한 표식
+
 
 class RedisConfigStore(ConfigStore):
     def __init__(self, redis: Redis) -> None:
@@ -64,6 +79,30 @@ class RedisConfigStore(ConfigStore):
         # 전달 보장은 필요 없다.
         await self._redis.publish(VERSION_CHANNEL, f"{kind.value}:{tenant_id}".encode())
         log.info("설정 배포", extra={"kind": kind.value, "tenant_id": tenant_id})
+
+    def watch(self) -> AsyncIterator[tuple[ConfigKind, str]]:
+        return self._watch()
+
+    async def _watch(self) -> AsyncIterator[tuple[ConfigKind, str]]:
+        pubsub = self._redis.pubsub()
+        await pubsub.subscribe(VERSION_CHANNEL)
+        try:
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                raw_data = message["data"]
+                text = raw_data.decode() if isinstance(raw_data, bytes) else str(raw_data)
+                kind_name, _, tenant_id = text.partition(":")
+                try:
+                    kind = ConfigKind(kind_name)
+                except ValueError:
+                    # 상위 버전 블록이 발행한 미지의 종류. 무시하고 계속 듣는다.
+                    log.debug("알 수 없는 설정 종류", extra={"kind": kind_name})
+                    continue
+                yield kind, tenant_id
+        finally:
+            await pubsub.unsubscribe(VERSION_CHANNEL)
+            await pubsub.aclose()  # type: ignore[no-untyped-call]
 
     async def load(self, kind: ConfigKind, tenant_id: str, model: type[ModelT]) -> ModelT | None:
         raw = await self._redis.get(config_key(kind, tenant_id))
