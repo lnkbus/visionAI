@@ -7,6 +7,13 @@
 #
 #   ./build_bundle.sh --license customer.lic --out dist/
 #   ./build_bundle.sh --block TA-ASSIST --block UI-AGENT --out dist/
+#
+# 기본 아키텍처는 amd64다 — 고객사 서버가 x86이기 때문이다. Apple Silicon
+# 노트북에서 K3s 리허설을 할 때만 --arch arm64 를 준다. 납품 번들에 두
+# 아키텍처를 담지 않는 이유는 크기가 두 배가 되기 때문이고, 반입 승인은
+# 크기로 걸린다.
+#
+#   ./build_bundle.sh --block UI-MEET --arch arm64 --out dist/   # 리허설용
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -17,6 +24,7 @@ LICENSE_FILE=""
 BLOCKS=()
 TAG="0.1.0"
 SKIP_BUILD=0
+ARCH="amd64"
 
 usage() {
   sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -29,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --block) BLOCKS+=("$2"); shift 2 ;;
     --out) OUT_DIR="$2"; shift 2 ;;
     --tag) TAG="$2"; shift 2 ;;
+    --arch) ARCH="$2"; shift 2 ;;         # amd64(기본, 납품) | arm64(리허설)
     --skip-build) SKIP_BUILD=1; shift ;;   # 이미 빌드된 이미지를 담을 때
     -h|--help) usage 0 ;;
     *) echo "알 수 없는 옵션: $1" >&2; usage 1 ;;
@@ -36,6 +45,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$OUT_DIR" ]] || { echo "--out 이 필요하다" >&2; exit 1; }
+case "$ARCH" in
+  amd64|arm64) ;;
+  *) echo "--arch 는 amd64 또는 arm64 다 (받은 값: $ARCH)" >&2; exit 1 ;;
+esac
+if [[ "$ARCH" != "amd64" ]]; then
+  echo "⚠ 아키텍처 $ARCH — 리허설용이다. 고객사 납품 번들은 amd64 로 만든다." >&2
+fi
 if [[ -z "$LICENSE_FILE" && ${#BLOCKS[@]} -eq 0 ]]; then
   echo "--license 또는 --block 이 필요하다" >&2; exit 1
 fi
@@ -62,6 +78,7 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
     dir="$(echo "$block_id" | tr '[:upper:]' '[:lower:]')"
     echo "  - $dir"
     docker build -q -f "$REPO_ROOT/deploy/docker/Dockerfile" \
+      --platform "linux/$ARCH" \
       --build-arg "BLOCK=$dir" -t "visionai/$dir:$TAG" "$REPO_ROOT" >/dev/null
   done
 fi
@@ -69,7 +86,7 @@ fi
 echo "▸ 인프라 이미지 확보"
 for image in "${IMAGES[@]}"; do
   [[ "$image" == visionai/* ]] && continue
-  docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+  docker image inspect "$image" >/dev/null 2>&1 || docker pull --platform "linux/$ARCH" "$image"
 done
 
 # 한 번에 save 하면 공통 레이어가 중복 저장되지 않는다. 블록마다 따로 저장하면
@@ -87,6 +104,9 @@ cp "$REPO_ROOT/deploy/compose/docker-compose.yml" "$STAGE/"
 cp "$REPO_ROOT/deploy/compose/compliance-rules.json" "$STAGE/" 2>/dev/null || true
 chmod +x "$STAGE/install.sh" "$STAGE/selftest.sh"
 printf '%s\n' "$TAG" > "$STAGE/VERSION"
+# 설치기가 대조할 수 있게 남긴다. 아키텍처가 다른 번들을 적재하면 컨테이너가
+# "exec format error" 로 죽는데, 그 문구만으로는 원인을 알기 어렵다.
+printf '%s\n' "$ARCH" > "$STAGE/ARCH"
 
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 설치 전에 대조하지 않으면
 # 반쯤 깨진 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
@@ -100,7 +120,7 @@ echo "$(sha256_of "$OUT_DIR/visionai-$TAG.tar.gz")  visionai-$TAG.tar.gz" \
 
 echo
 echo "✓ 번들: $OUT_DIR/visionai-$TAG.tar.gz ($(du -h "$OUT_DIR/visionai-$TAG.tar.gz" | cut -f1))"
-echo "  블록 ${#PLAN_BLOCKS[@]}개 / 이미지 ${#IMAGES[@]}개"
+echo "  블록 ${#PLAN_BLOCKS[@]}개 / 이미지 ${#IMAGES[@]}개 / 아키텍처 $ARCH"
 echo "  설치: sudo ./install.sh  또는  ./install.sh --gui (브라우저 마법사)"
 echo "  반출 시 .sha256 파일을 **별도 경로**로 전달한다 — 같은 매체에 두면"
 echo "  매체가 바꿔치기될 때 체크섬도 함께 바뀐다."

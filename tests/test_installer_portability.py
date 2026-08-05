@@ -236,3 +236,87 @@ def test_verify_passes_on_an_intact_bundle(path_kind: str, bsd_path: str, tmp_pa
 def test_read_into_replaces_mapfile(bsd_path: str) -> None:
     out = _run('read_into XS < <(printf "a\\nb\\nc\\n"); echo "${#XS[@]}:${XS[1]}"', bsd_path)
     assert out == "3:b"
+
+
+# ── 아키텍처 ────────────────────────────────────────────────────────────────
+#
+# arm64 이미지는 개발 편의가 아니라 **K3s 실기동 리허설**을 위한 것이다.
+# 리허설에는 GPU가 필요 없어 Apple Silicon 노트북이면 되는데, amd64 이미지만
+# 있으면 QEMU 에뮬레이션으로 돌아 21개 블록이 전부 느려진다.
+
+
+def test_host_arch_speaks_docker_notation() -> None:
+    """uname -m 표기가 제각각이다. 번들의 ARCH 파일과 대조하려면 하나로 맞춰야 한다."""
+    assert _run("host_arch", os.environ["PATH"]) in {"amd64", "arm64"}
+
+
+def test_bundle_builder_defaults_to_amd64() -> None:
+    """납품 기본값이 arm64로 넘어가면 고객사 서버(x86)에서 안 돈다.
+
+    그 실패는 반입을 마친 뒤 기동 단계에서야 드러난다 — 되돌리려면
+    반출입 승인을 다시 밟아야 한다.
+    """
+    builder = (AIRGAP / "build_bundle.sh").read_text(encoding="utf-8")
+    found = re.search(r'^ARCH="([^"]+)"', builder, re.M)
+    assert found, "build_bundle.sh 에 기본 아키텍처가 없다"
+    assert found.group(1) == "amd64"
+
+
+def test_bundle_builder_rejects_an_unknown_arch() -> None:
+    """오타가 그대로 --platform 으로 넘어가면 docker 가 이해할 수 없는 오류를 낸다."""
+    builder = (AIRGAP / "build_bundle.sh").read_text(encoding="utf-8")
+    assert "amd64|arm64)" in builder, "허용 아키텍처 검사가 없다"
+
+
+def test_installer_compares_the_bundle_arch() -> None:
+    """아키텍처가 다른 번들은 'exec format error' 로 죽는다 — 이미지를 다 푼 뒤에."""
+    script = (AIRGAP / "install.sh").read_text(encoding="utf-8")
+    assert "host_arch" in script and "ARCH" in script, "설치기가 아키텍처를 대조하지 않는다"
+
+
+@pytest.mark.parametrize(
+    ("bundle_arch", "expect_ok"),
+    [("amd64", True), ("arm64", False)],
+    ids=["일치", "불일치"],
+)
+def test_installer_blocks_a_mismatched_bundle(
+    bundle_arch: str, expect_ok: bool, tmp_path: Path
+) -> None:
+    """문자열 검사만으로는 '대조한다'는 것만 알 뿐 '막는다'는 것은 모른다."""
+    host = subprocess.run(
+        ["bash", "-c", f". {PORTABLE}; host_arch"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    # 이 머신이 amd64 라는 전제 위에서만 성립하는 시험이 되지 않게 뒤집어 만든다.
+    other = "arm64" if host == "amd64" else "amd64"
+    written = host if expect_ok else other
+
+    for name in ("install.sh", "selftest.sh", "portable.sh"):
+        (tmp_path / name).write_bytes((AIRGAP / name).read_bytes())
+    (tmp_path / "installer").mkdir()
+    for name in ("server.py", "index.html"):
+        (tmp_path / "installer" / name).write_bytes((AIRGAP / "installer" / name).read_bytes())
+    (tmp_path / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (tmp_path / "plan.json").write_text('{"blocks":[],"images":[],"infra":[]}\n', encoding="utf-8")
+    (tmp_path / "VERSION").write_text("0.0.0\n", encoding="utf-8")
+    (tmp_path / "ARCH").write_text(f"{written}\n", encoding="utf-8")
+    (tmp_path / "images.tar").write_bytes(b"x" * 1024)
+    subprocess.run(
+        ["bash", "-c", f". {PORTABLE}; sorted_files . | sha256_list > SHA256SUMS"],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    result = subprocess.run(
+        ["bash", str(tmp_path / "install.sh"), "--dry-run"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+    )
+    output = result.stdout + result.stderr
+    if expect_ok:
+        assert f"아키텍처 {written}" in output
+        assert "맞는 번들을 반입한다" not in output
+    else:
+        assert "맞는 번들을 반입한다" in output, f"불일치를 그냥 통과시켰다:\n{output}"
+        assert result.returncode != 0
