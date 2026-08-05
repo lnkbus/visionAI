@@ -469,3 +469,19 @@ async def test_이력_발화가_시간순으로_정렬된다(bus: InMemoryEventB
         "무엇을 도와드릴까요",
         "그리고 한도도요",
     ]
+
+
+def test_종료되지_않은_세션이_무한히_쌓이지_않는다(caplog: pytest.LogCaptureFixture) -> None:
+    """종료 이벤트가 끝내 오지 않는 세션이 있다. 통계 화면 때문에 상담이
+    멈추는 일은 없어야 한다."""
+    from vai_core_adm.analytics import _Accumulator
+
+    acc = _Accumulator(max_open=3)
+    with caplog.at_level("WARNING"):
+        for index in range(5):
+            acc.get(f"s{index}", TENANT)
+
+    assert len(acc.records) == 3
+    assert "s0" not in acc.records, "가장 오래된 것부터 버린다"
+    assert "s4" in acc.records
+    assert any("상한" in record.message for record in caplog.records), "조용히 버리면 안 된다"

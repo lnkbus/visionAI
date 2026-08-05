@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: e12da242a69e82338524c46d3d347fe9c06a0798e5c5b368dd0192668aaedc24
+configuration_hash: 0c6bfbfd16304953477378d13ce1273d7f22db3325c0b071e8d4a0764c9b52eb
 component_count: 23
 components:
 - id: AUD-VAD
@@ -39,7 +39,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: 7a83bf35bbf0e316
+  source_hash: de18ce482f2d20bb
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:

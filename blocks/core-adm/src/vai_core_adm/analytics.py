@@ -51,6 +51,13 @@ MAX_TURNS = 500
 가득 채우는 일은 있다. 상한을 넘으면 잘라 두고 **잘랐다는 사실을 기록에
 남긴다** — 숨기면 이력을 증거로 쓸 수 없다."""
 
+MAX_OPEN_SESSIONS = 5_000
+"""동시에 들고 있을 진행 중 세션 수.
+
+동시 채널 상한(1,000석 x 2채널 x 75% = 1,500)보다 넉넉하다. 이 상한에 닿는다는
+것은 정상 동작이 아니라 **종료 이벤트가 오지 않고 있다**는 신호이며, 그래서
+버릴 때 경고를 남긴다."""
+
 MAX_FALLBACKS = 500
 DEFAULT_RETENTION_DAYS = 90
 
@@ -346,15 +353,29 @@ class _Accumulator:
     세션이 끝나야 한 건이 완성되므로 중간 상태를 들고 있어야 하고, 그러면
     **버려야 할 때 버리는 것**이 중요해진다. 24시간 도는 온프렘에서 이 딕셔너리가
     새면 어느 날 조용히 죽는다 — :class:`SessionReaper` 가 해제한다.
+
+    종료 이벤트가 끝내 오지 않는 세션도 있다(게이트웨이 강제 종료, 이벤트 유실).
+    그래서 상한을 하나 더 둔다 — **통계 화면 때문에 상담이 멈추는 일은 없어야
+    한다.** 버릴 때는 가장 오래된 것부터, 그리고 조용히 버리지 않는다.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_open: int = MAX_OPEN_SESSIONS) -> None:
         self.records: dict[str, CallRecord] = {}
         self.last_customer: dict[str, str] = {}
+        self._max_open = max_open
 
     def get(self, session_id: str, tenant_id: str) -> CallRecord:
         record = self.records.get(session_id)
         if record is None:
+            if len(self.records) >= self._max_open:
+                # 삽입 순서를 유지하는 dict 이므로 첫 항목이 가장 오래된 것이다.
+                stale = next(iter(self.records))
+                self.drop(stale)
+                log.warning(
+                    "진행 중 세션이 상한을 넘어 가장 오래된 이력을 버린다 — "
+                    "종료 이벤트가 오지 않는 세션이 쌓이고 있다",
+                    extra={"dropped": stale, "limit": self._max_open},
+                )
             record = CallRecord(session_id=session_id, tenant_id=tenant_id)
             self.records[session_id] = record
         return record

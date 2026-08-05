@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: d1e2bcd315e2d9f609e463d7af50a54995ff0c7a628a4e17866927e0c09d00bd
+configuration_hash: e8f6a8142094298d4c1d705a4fd2956abae1b3aea5d21aee6bc84cd65c0e5daa
 component_count: 15
 components:
 - id: AUD-VAD
@@ -19,7 +19,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: 7a83bf35bbf0e316
+  source_hash: de18ce482f2d20bb
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
