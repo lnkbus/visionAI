@@ -472,7 +472,15 @@ class BotTurnCollector(BlockWorker[BotTurn]):
         record = self._acc.get(event.session_id, event.tenant_id)
         record.bot_turns += 1
         if len(record.turns) < MAX_TURNS:
-            record.turns.append(CallTurn(speaker="봇", text=event.text, is_bot=True))
+            # 봇 발화에는 오디오 오프셋이 없다. 세션 시작 이후 경과 시간을 대신
+            # 쓴다 — 정확한 값은 아니지만, **자리를 정하는 값이 없으면** 고객
+            # 발화와 봇 발화가 도착 순서대로 섞여 대화가 앞뒤로 튄다.
+            elapsed = (datetime.now(UTC) - record.started_at).total_seconds()
+            record.turns.append(
+                CallTurn(
+                    at_ms=max(0, int(elapsed * 1000)), speaker="봇", text=event.text, is_bot=True
+                )
+            )
 
         if not event.handed_off:
             return
@@ -555,6 +563,10 @@ class SessionCollector(BlockWorker[SessionClosed]):
         record.profile = event.profile
         record.ended_at = datetime.now(UTC)
         record.duration_ms = event.duration_ms
+        # 고객 발화와 봇 발화는 **다른 워커가** 모은다. 도착 순서를 그대로 두면
+        # 대화가 앞뒤로 튀고, 그런 이력은 읽을 수 없다. 같은 시각이면 들어온
+        # 순서를 지킨다(정렬이 안정적이다).
+        record.turns.sort(key=lambda turn: turn.at_ms)
         await self._store.put_call(record)
 
 

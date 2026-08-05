@@ -433,3 +433,39 @@ async def test_같은_폴백_발화는_횟수로_모인다() -> None:
 
     assert len(items) == 1
     assert items[0].count == 3, "반복되는 질문이 우선순위가 높다"
+
+
+async def test_이력_발화가_시간순으로_정렬된다(bus: InMemoryEventBus) -> None:
+    """고객 발화와 봇 발화는 다른 워커가 모은다. 도착 순서를 그대로 두면
+    대화가 앞뒤로 튀고, 그런 이력은 읽을 수 없다."""
+    async with Harness(bus) as h:
+        # 뒤쪽 발화가 먼저 도착한다(다른 워커·다른 지연).
+        await bus.publish(Topic.FILTER_CLEAN, clean("그리고 한도도요", start_ms=5000))
+        await h.settle()
+        await bus.publish(
+            Topic.BOT_TURN,
+            BotTurn(
+                session_id=SESSION,
+                tenant_id=TENANT,
+                turn_id=f"{SESSION}:1",
+                node_id="greet",
+                text="무엇을 도와드릴까요",
+            ),
+        )
+        await h.settle()
+        await bus.publish(Topic.FILTER_CLEAN, clean("카드 재발급이요", start_ms=0))
+        await h.settle()
+        await bus.publish(
+            Topic.SESSION_CLOSED,
+            SessionClosed(session_id=SESSION, tenant_id=TENANT, profile=SessionProfile.AICC),
+        )
+        await h.settle()
+
+        record = await h.store.get_call(SESSION)
+
+    assert record is not None
+    assert [turn.text for turn in record.turns] == [
+        "카드 재발급이요",
+        "무엇을 도와드릴까요",
+        "그리고 한도도요",
+    ]
