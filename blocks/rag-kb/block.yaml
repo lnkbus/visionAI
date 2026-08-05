@@ -13,7 +13,9 @@ adapters:
   - sentence_transformers
 contracts:
   consumes: []
-  produces: []
+  produces:
+    # 감사 기록의 생산자. audit.log는 CORE-SEC이 해시 체인으로 받는다.
+    - audit.log
   openapi: contracts/openapi.yaml
 billing:
   capacity_unit: index_chunks

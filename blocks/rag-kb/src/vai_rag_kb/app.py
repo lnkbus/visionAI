@@ -11,8 +11,11 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from vai_common import audit
+from vai_common.bus import build_bus
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
+from vai_contracts.audit import AuditAction
 from vai_contracts.retrieval import Document, DocumentStatus, IngestRequest
 from vai_rag_kb.indexer import DocumentStore, IngestionPipeline, new_doc_id
 from vai_retrieval.embedding import create_embedder
@@ -64,8 +67,14 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
         application.state.pipeline = IngestionPipeline(
             application.state.documents, search.index_chunks
         )
+        # 문서 파기는 감사 대상이다(docs/05 §2.2). "지웠다"를 증명할 수 없으면
+        # 파기 완전성 요구를 충족했다고 말할 수 없다.
+        application.state.bus = build_bus(common.redis_url)
         log.info("지식베이스 블록 기동", extra={"embedder": kb_cfg.embedder, "store": kb_cfg.store})
-        yield
+        try:
+            yield
+        finally:
+            await application.state.bus.close()
 
     app = create_block_app(
         block_id=BLOCK_ID, title="VisionAI RAG-KB", settings=common, lifespan=lifespan
@@ -123,6 +132,19 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
             document.tenant_id, document.kb_id, doc_id
         )
         request.app.state.documents.delete(doc_id)
+        await audit.emit(
+            request.app.state.bus,
+            action=AuditAction.KB_DELETE,
+            actor=BLOCK_ID,
+            block_id=BLOCK_ID,
+            resource=doc_id,
+            tenant_id=document.tenant_id,
+            detail={
+                "kb_id": document.kb_id,
+                "removed_chunks": str(removed),
+                "title": document.title,
+            },
+        )
         return DeleteResponse(doc_id=doc_id, removed_chunks=removed)
 
     @app.post("/internal/v1/kb/{kb_id}/documents/sync", response_model=Document, tags=["knowledge"])

@@ -11,6 +11,8 @@ contracts:
   consumes: []
   produces:
     - session.closed
+    # 세션 시작·종료 감사. CORE-SEC이 해시 체인으로 받는다.
+    - audit.log
   openapi: contracts/openapi.yaml
 billing:
   capacity_unit: none

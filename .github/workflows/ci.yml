@@ -62,7 +62,7 @@ jobs:
       matrix:
         block: [core-bus, core-gw, aud-vad, stt-core, flt-micro, llm-gw, llm-sum,
                 rag-kb, rag-srch, ta-assist, scn-studio, ui-agent, aud-rtp, spk-dia, ui-meet,
-                core-lic]
+                core-lic, core-sec]
     steps:
       - uses: actions/checkout@v4
 

@@ -27,10 +27,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from vai_common import audit
 from vai_common.bus import RedisEventBus, build_bus
 from vai_common.config_store import ConfigKind, ConfigStore, InMemoryConfigStore, RedisConfigStore
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
+from vai_contracts.audit import AuditAction
 from vai_contracts.authoring import (
     ComplianceRuleSpec,
     EvalCaseResult,
@@ -173,6 +175,18 @@ def create_app(
                 "rule_count": len(published.rules),
             },
         )
+        # 컴플라이언스 룰 배포는 상담 동작을 바꾸는 행위다. 누가 언제 어느
+        # 버전을 내보냈는지가 남아야 사후에 "그때 왜 이 문구가 안 걸렸나"를 답할 수 있다.
+        if request.app.state.bus is not None:
+            await audit.emit(
+                request.app.state.bus,
+                action=AuditAction.RULE_PUBLISH,
+                actor=BLOCK_ID,
+                block_id=BLOCK_ID,
+                resource=f"{tenant_id}:v{published.version}",
+                tenant_id=tenant_id,
+                detail={"version": str(published.version), "rule_count": str(len(published.rules))},
+            )
         return PublishResult(ruleset=published, exported=export_rules_for_pipeline(published))
 
     @app.get("/internal/v1/rules/{tenant_id}/history", response_model=list[RuleSet], tags=["rules"])

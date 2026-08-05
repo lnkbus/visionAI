@@ -50,6 +50,13 @@ class Topic(StrEnum):
     SUMMARY_DONE = "summary.done"
     """LLM-SUM → UI. 요약 완료."""
 
+    AUDIT_LOG = "audit.log"
+    """모든 블록 → CORE-SEC. 감사 기록.
+
+    버스를 경유하는 이유: 감사 저장이 상담 응답 경로에 동기적으로 끼면
+    저장소가 느려질 때 상담이 느려진다. 단, 접근 통제에 관한 기록(PII 열람 등)은
+    **기록 성공 후 열람 허용**이어야 하므로 그쪽은 CORE-SEC의 동기 API를 쓴다."""
+
 
 def stream(topic: Topic) -> str:
     """토픽의 Redis Stream 키."""

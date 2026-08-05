@@ -1,0 +1,23 @@
+id: CORE-SEC
+name: 암호화·감사
+tier: foundation
+version: 0.1.0
+description: >
+  해시 체인 append-only 감사 로그와 저장 암호화. 감사 기록은 모든 블록이 audit.log
+  토픽으로 흘리고, 접근 통제에 관한 기록(PII 원문 열람 등)은 동기 API로 남긴 뒤에야
+  열람을 허용한다. 암복호 자체는 각 블록이 인프로세스로 수행한다(vai_common.crypto) —
+  저장 경로마다 네트워크 왕복을 넣으면 이 블록이 전 블록의 병목이자 단일 장애점이 된다.
+  KCMVP 검증모듈은 고객사 조달품이라 어댑터 연동 지점으로 둔다.
+depends_on:
+  - CORE-BUS
+adapters:
+  - aes-gcm
+  - kcmvp
+contracts:
+  consumes:
+    - audit.log
+  produces: []
+billing:
+  capacity_unit: none
+  dev_effort_mm: 1.5
+  included_in_package: true

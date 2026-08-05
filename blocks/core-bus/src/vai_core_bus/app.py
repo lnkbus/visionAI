@@ -14,9 +14,11 @@ from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
+from vai_common import audit
 from vai_common.bus import EventBus, InMemoryEventBus, RedisEventBus
 from vai_common.service import create_block_app
 from vai_common.settings import CommonSettings, get_settings
+from vai_contracts.audit import AuditAction
 from vai_contracts.events import SessionClosed
 from vai_contracts.session import Session, SessionCreate, SessionState
 from vai_contracts.topics import Topic
@@ -81,7 +83,9 @@ def create_app(
         tags=["sessions"],
     )
     async def create_session(
-        payload: SessionCreate, store: SessionStore = Depends(get_store)
+        payload: SessionCreate,
+        store: SessionStore = Depends(get_store),
+        bus: EventBus = Depends(get_bus),
     ) -> Session:
         session = Session(
             session_id=new_session_id(),
@@ -99,6 +103,18 @@ def create_app(
                 "tenant_id": session.tenant_id,
                 "profile": session.profile.value,
             },
+        )
+        # 감사: 언제 어느 테넌트의 상담이 시작됐는가. 세션 이력 조회의 기준선이며,
+        # PII 열람 기록을 특정 상담과 엮을 때 이 기록이 있어야 맥락이 선다.
+        await audit.emit(
+            bus,
+            action=AuditAction.SESSION_START,
+            actor=BLOCK_ID,
+            block_id=BLOCK_ID,
+            resource=session.session_id,
+            session_id=session.session_id,
+            tenant_id=session.tenant_id,
+            detail={"profile": session.profile.value},
         )
         return session
 
@@ -141,6 +157,16 @@ def create_app(
                 ),
             )
             log.info("세션 종료", extra={"session_id": session_id, "duration_ms": duration_ms})
+            await audit.emit(
+                bus,
+                action=AuditAction.SESSION_END,
+                actor=BLOCK_ID,
+                block_id=BLOCK_ID,
+                resource=session.session_id,
+                session_id=session.session_id,
+                tenant_id=session.tenant_id,
+                detail={"duration_ms": str(duration_ms)},
+            )
         return session
 
     return app

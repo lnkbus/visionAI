@@ -70,6 +70,29 @@ services:
     ports:
       - "8095:8095"
 
+  core-sec:
+    # 감사 저장소. 해시 체인은 단일 라이터를 전제하므로 **복제하지 않는다** —
+    # 여러 인스턴스가 같은 디렉토리에 쓰면 체인이 깨진다.
+    <<: *block
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        BLOCK: core-sec
+    environment:
+      <<: *block-env
+      VAI_BLOCK_ID: CORE-SEC
+      VAI_CONSUMER_GROUP: sec
+      VAI_CONSUMER_NAME: sec-1
+      VAI_SEC_AUDIT_DIR: /var/lib/visionai/audit
+      # 마스터 키를 지정하면 저장 암호화가 켜진다. 데모 구성은 감사만 쓴다:
+      #   VAI_SEC_MASTER_KEY_PATH: /run/secrets/master.key
+    volumes:
+      - license-data:/licenses:ro
+      - audit-data:/var/lib/visionai/audit
+    ports:
+      - "8096:8096"
+
   core-bus:
     <<: *block
     build:
@@ -378,5 +401,6 @@ services:
 
 volumes:
   redis-data:
+  audit-data:
   qdrant-data:
   license-data:
