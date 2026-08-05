@@ -26,6 +26,7 @@ from vai_retrieval.embedding import create_embedder
 from vai_retrieval.hybrid import HybridSearchEngine, SearchBudget
 from vai_retrieval.rerank import create_reranker
 from vai_retrieval.store import create_store
+from vai_retrieval.tokenize import set_tokenizer
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "RAG-SRCH"
@@ -41,6 +42,11 @@ class SearchSettings(BaseSettings):
     store_config: str = "{}"
     reranker: str = "lexical"
     reranker_model: str = ""
+    tokenizer: str = "syllable"
+    """``syllable``(기본) 또는 ``kiwi``.
+
+    **색인 블록(RAG-KB)과 같은 값이어야 한다.** 다르면 BM25도 해싱 임베딩도
+    어긋나는데, 오류가 아니라 "검색이 좀 이상하다"로만 나타난다."""
     warm_tenants: str = ""
     """기동 시 BM25 색인을 복원할 ``tenant:kb`` 목록(쉼표 구분).
 
@@ -61,6 +67,11 @@ def create_app(engine: HybridSearchEngine | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        # 색인과 질의가 같은 토크나이저를 써야 한다. 어긋나면 오류가 아니라
+        # "검색이 좀 이상하다"로만 나타나므로, 이름을 기동 로그에 남긴다.
+        tokenizer = set_tokenizer(cfg.tokenizer)
+        log.info("토크나이저", extra={"tokenizer": tokenizer.name})
+
         search = engine
         if search is None:
             embedder = create_embedder(cfg.embedder)

@@ -87,10 +87,12 @@ def _check_failures(outcomes: list[CheckOutcome]) -> list[str]:
     return [f"[{o.case_id}] {o.detail}" for o in outcomes if not o.passed]
 
 
-async def _run_retrieval_suite(eval_dir: Path, top_k: int, expand: bool = True) -> SuiteResult:
+async def _run_retrieval_suite(
+    eval_dir: Path, top_k: int, expand: bool = True, tokenizer: str = "syllable"
+) -> SuiteResult:
     cases, corpus_name = load_retrieval(eval_dir / RETRIEVAL_FILE)
     articles = load_corpus(corpus_path(eval_dir, corpus_name))
-    outcomes = await run_retrieval(cases, articles, top_k=top_k, expand=expand)
+    outcomes = await run_retrieval(cases, articles, top_k=top_k, expand=expand, tokenizer=tokenizer)
     metrics = summarize(outcomes, top_k=top_k)
     return SuiteResult(
         name="retrieval",
@@ -144,11 +146,15 @@ async def _run_intent_suite(eval_dir: Path, use_classifier: bool = True) -> Suit
 
 
 def run_suites(
-    eval_dir: Path, suites: list[str], top_k: int, expand: bool = True
+    eval_dir: Path,
+    suites: list[str],
+    top_k: int,
+    expand: bool = True,
+    tokenizer: str = "syllable",
 ) -> list[SuiteResult]:
     results: list[SuiteResult] = []
     if "retrieval" in suites:
-        results.append(asyncio.run(_run_retrieval_suite(eval_dir, top_k, expand)))
+        results.append(asyncio.run(_run_retrieval_suite(eval_dir, top_k, expand, tokenizer)))
     if "pii" in suites:
         results.append(_run_pii_suite(eval_dir))
     if "tts" in suites:
@@ -222,10 +228,15 @@ def run(
         "--no-expand",
         help="모델 없는 보강 계층(질의 확장·어휘 의도 분류)을 끄고 돌린다 — 이득을 A/B로 확인할 때",
     ),
+    tokenizer: str = typer.Option(
+        "syllable", help="syllable(기본) | kiwi — 형태소 분석기 교체 이득을 재볼 때"
+    ),
 ) -> None:
     """골든셋을 돌려 품질 수치를 낸다 (판정 없음)."""
     try:
-        results = run_suites(_eval_dir(root), _resolve_suites(suite), top_k, not no_expand)
+        results = run_suites(
+            _eval_dir(root), _resolve_suites(suite), top_k, not no_expand, tokenizer
+        )
     except DatasetError as exc:
         typer.secho(f"골든셋 오류: {exc}", fg=typer.colors.RED)
         raise typer.Exit(1) from exc

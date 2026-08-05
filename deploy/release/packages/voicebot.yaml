@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 21103eaf805ef5445166300a59bac14e733d85b4f42c931ea8397e394cff58e6
+configuration_hash: 6e15a8bfef18c511b475f67fb9f703d0251084683f0664ec88a08094a725b9ef
 component_count: 23
 components:
 - id: AUD-RTP
@@ -109,18 +109,18 @@ components:
   - LLM-GW
 - id: RAG-KB
   name: 지식베이스 수집기
-  version: 0.2.0
+  version: 0.3.0
   kind: block
-  source_hash: 2b078e64b5afbcca
+  source_hash: 59faae106b88a6ca
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:
   - CORE-BUS
 - id: RAG-SRCH
   name: 하이브리드 검색 & 리랭킹
-  version: 0.2.0
+  version: 0.3.0
   kind: block
-  source_hash: e852cf7f31eaab55
+  source_hash: 7c20f99eacf5b054
   license_key: RAG-SRCH
   capacity_unit: index_chunks
   depends_on:
@@ -191,9 +191,9 @@ components:
   source_hash: 64a1ce0648a4d18a
 - id: lib:retrieval
   name: vai_retrieval
-  version: 0.2.0
+  version: 0.3.0
   kind: library
-  source_hash: 5c0d49a09f0a3695
+  source_hash: e6649069047e58e5
 - id: infra:qdrant
   name: qdrant
   version: ''

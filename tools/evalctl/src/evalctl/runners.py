@@ -36,6 +36,7 @@ from vai_retrieval.hybrid import HybridSearchEngine
 from vai_retrieval.lexicon import QueryExpander
 from vai_retrieval.rerank import LexicalOverlapReranker
 from vai_retrieval.store import MemoryVectorStore
+from vai_retrieval.tokenize import set_tokenizer
 from vai_ta_assist.answer import Evidence, verify
 from vai_tts_core.normalize import normalize
 
@@ -51,13 +52,18 @@ DEFAULT_TOP_K = 3
 CANDIDATE_K = 10
 
 
-async def build_engine(articles: list[Article], *, expand: bool = True) -> HybridSearchEngine:
+async def build_engine(
+    articles: list[Article], *, expand: bool = True, tokenizer: str = "syllable"
+) -> HybridSearchEngine:
     """코퍼스를 색인한 검색 엔진을 만든다.
 
     임베더는 :class:`HashingEmbedder`다 — 모델 없이 도는 어휘 임베딩이라
     절대 점수는 로컬 임베딩 모델보다 낮다. 그래도 **변화**는 정확히 잡힌다.
     베이스라인이 재는 것은 절대 점수가 아니라 변화다.
     """
+    # 색인과 질의가 같은 토크나이저를 쓰게 고정한다 — 여기서 갈리면 측정값이
+    # 검색 품질이 아니라 설정 불일치를 재게 된다.
+    set_tokenizer(tokenizer)
     embedder = HashingEmbedder()
     store = MemoryVectorStore()
     await store.initialize({"multiprocess_warning": False})
@@ -92,8 +98,9 @@ async def run_retrieval(
     top_k: int = DEFAULT_TOP_K,
     *,
     expand: bool = True,
+    tokenizer: str = "syllable",
 ) -> list[CaseOutcome]:
-    engine = await build_engine(articles, expand=expand)
+    engine = await build_engine(articles, expand=expand, tokenizer=tokenizer)
 
     outcomes: list[CaseOutcome] = []
     for case in cases:

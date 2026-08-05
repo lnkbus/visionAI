@@ -29,6 +29,7 @@ from vai_retrieval.embedding import create_embedder
 from vai_retrieval.hybrid import HybridSearchEngine
 from vai_retrieval.rerank import create_reranker
 from vai_retrieval.store import create_store
+from vai_retrieval.tokenize import set_tokenizer
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "RAG-KB"
@@ -41,6 +42,11 @@ class KbSettings(BaseSettings):
     embedder_model: str = ""
     embedder_config: str = "{}"
     store: str = "memory"
+    tokenizer: str = "syllable"
+    """``syllable``(기본) 또는 ``kiwi``.
+
+    **조회 블록(RAG-SRCH)과 같은 값이어야 한다.** 색인은 kiwi로 하고 질의는
+    syllable로 하면 BM25도 해싱 임베딩도 어긋난다 — 그런데 오류는 나지 않는다."""
     store_config: str = "{}"
 
 
@@ -57,6 +63,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        tokenizer = set_tokenizer(kb_cfg.tokenizer)
+        log.info("토크나이저", extra={"tokenizer": tokenizer.name})
         search = engine
         if search is None:
             embedder = create_embedder(kb_cfg.embedder)
