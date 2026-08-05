@@ -53,6 +53,11 @@ class HybridSearchEngine:
         self._expander = expander or QueryExpander()
         # 테넌트·KB별 BM25 색인. 컬렉션이 다르면 교차 검색이 구조적으로 불가능하다.
         self._sparse: dict[str, BM25Index] = {}
+        self._warmed: set[str] = set()
+        """자가 복원을 이미 시도한 컬렉션.
+
+        정말로 문서가 없는 컬렉션에 매 질의마다 복원을 시도하면, 검색이 없는
+        문서를 찾느라 느려진다."""
 
     def _index(self, tenant_id: str, kb_id: str) -> BM25Index:
         return self._sparse.setdefault(collection_name(tenant_id, kb_id), BM25Index())
@@ -61,6 +66,7 @@ class HybridSearchEngine:
         """색인. RAG-KB가 호출한다."""
         if not chunks:
             return
+        self._warmed.add(collection_name(chunks[0].tenant_id, chunks[0].kb_id))
         vectors = await self._embedder.embed([chunk.text for chunk in chunks])
         await self._store.upsert(chunks, vectors)
         sparse = self._index(chunks[0].tenant_id, chunks[0].kb_id)
@@ -88,11 +94,40 @@ class HybridSearchEngine:
         index.clear()
         for chunk in chunks:
             index.add(chunk.chunk_id, f"{chunk.title}\n{chunk.text}")
+        # 명시적 복원은 자가 복원 표시도 함께 세운다 — 직후 질의가 또 훑을 이유가 없다.
+        self._warmed.add(collection_name(tenant_id, kb_id))
         return len(chunks)
+
+    async def _ensure_sparse(self, tenant_id: str, kb_id: str) -> None:
+        """희소 색인이 비어 있으면 저장소에서 되살린다.
+
+        BM25 색인은 메모리 상주라 프로세스가 재시작하면 사라진다. 그 상태의
+        검색은 **오류를 내지 않는다** — 밀집 축만으로 결과를 내놓기 때문에
+        겉보기에는 정상이고, 희소 점수만 전부 0이다. 장애로 보이지 않는 장애가
+        가장 오래 간다.
+
+        기존에는 ``VAI_SRCH_WARM_TENANTS``에 테넌트를 적어 두는 것이 유일한
+        방어였는데, 그건 **적어 두는 것을 잊었다는 사실 자체를 아무도 모른다**는
+        것이 문제다. 여기서 스스로 복원한다.
+        """
+        key = collection_name(tenant_id, kb_id)
+        if key in self._warmed:
+            return
+        self._warmed.add(key)
+        if self._index(tenant_id, kb_id).size:
+            return
+
+        count = await self.rebuild_sparse(tenant_id, kb_id)
+        if count:
+            log.warning(
+                "희소 색인이 비어 있어 자가 복원했다 — 재시작 후 첫 질의로 보인다",
+                extra={"tenant_id": tenant_id, "kb_id": kb_id, "chunk_count": count},
+            )
 
     async def search(self, request: SearchRequest) -> SearchResponse:
         """RAG-SRCH가 호출하는 질의 경로."""
         started = time.perf_counter()
+        await self._ensure_sparse(request.tenant_id, request.kb_id)
 
         # 구어를 약관 용어로 다리 놓는다. 회수 단계에만 쓰고, 리랭킹에는
         # 원문 질의를 넘긴다 — 크로스 인코더는 자연스러운 문장을 전제로 한다.

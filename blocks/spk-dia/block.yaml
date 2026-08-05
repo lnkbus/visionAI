@@ -1,7 +1,7 @@
 id: SPK-DIA
 name: 화자분리
 tier: speech
-version: 0.1.0
+version: 0.2.0
 description: >
   회의 프로파일에서 "누가 말했는가"를 판정한다. 발화 구간의 화자 임베딩을 뽑아
   온라인 군집화로 참석자를 식별한다. 참석자 수를 미리 모르는 회의 특성상

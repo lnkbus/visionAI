@@ -1,7 +1,7 @@
 id: TA-ASSIST
 name: 실시간 Agent Assist
 tier: intelligence
-version: 0.1.0
+version: 0.2.0
 description: >
   상담 맥락에서 SLM이 검색 질의를 뽑고(<200ms), 하이브리드 검색과 리랭킹을 거쳐
   상담원 화면에 지식 팝업을 밀어 넣는다(<50ms). STT 수신부터 팝업까지

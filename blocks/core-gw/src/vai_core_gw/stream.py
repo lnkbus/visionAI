@@ -10,6 +10,11 @@
 * **송신 태스크** — 세션 UI 채널 구독 → 클라이언트로 팬아웃
 
 두 방향을 한 코루틴에서 처리하면 STT 결과를 보내는 동안 오디오 수신이 멈춘다.
+
+다만 나눠 놓았다는 것은 **한쪽만 죽을 수 있다**는 뜻이기도 하다. 송신이 죽고
+수신만 살아 있으면 오디오는 계속 올라가는데 화면은 영원히 멈춘다 — 클라이언트
+입장에서는 "연결은 되어 있는데 자막이 안 나온다"이고, 그 상태로는 무엇을
+해야 할지 알 수 없다. 그래서 송신이 끊기면 알리고 연결을 닫는다.
 """
 
 from __future__ import annotations
@@ -46,18 +51,44 @@ class AudioStreamHandler:
 
     async def run(self) -> None:
         forwarder = asyncio.create_task(self._forward_ui(), name="ui-forwarder")
+        receiver = asyncio.create_task(self._receive_loop(), name="audio-receiver")
         try:
-            await self._receive_loop()
+            # 어느 쪽이 먼저 끝나든 나머지를 접는다. 수신만 남기면 자막 없는
+            # 통화가 계속되고, 송신만 남기면 아무도 말하지 않는 화면이 남는다.
+            done, _ = await asyncio.wait({forwarder, receiver}, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                # 예외를 꺼내 올린다. 태스크 안에서 조용히 죽는 것을 막는 지점이다.
+                task.result()
         except WebSocketDisconnect:
             log.info("클라이언트 연결 종료", extra={"session_id": self._session.session_id})
+        except Exception:
+            # 이미 클라이언트에게 알린 뒤다. 여기서 프레임워크까지 예외를 올리면
+            # Redis 순단 한 번이 스택트레이스로만 남고 원인은 더 안 보인다.
+            log.exception("스트림 종료", extra={"session_id": self._session.session_id})
         finally:
-            forwarder.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await forwarder
+            for task in (forwarder, receiver):
+                task.cancel()
+            # 취소 예외도, 이미 끝난 태스크의 예외도 여기서는 다시 다루지 않는다.
+            for task in (forwarder, receiver):
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
 
     async def _forward_ui(self) -> None:
-        async for payload in self._bus.subscribe_ui(self._session.session_id):
-            await self._ws.send_json(payload)
+        try:
+            async for payload in self._bus.subscribe_ui(self._session.session_id):
+                await self._ws.send_json(payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # 여기서 조용히 죽으면 "연결은 되어 있는데 자막만 안 나오는" 상태가
+            # 남는다. 클라이언트가 재접속할 수 있도록 알리고 끝낸다.
+            log.exception(
+                "UI 송신 중단 — 연결을 닫는다",
+                extra={"session_id": self._session.session_id},
+            )
+            with contextlib.suppress(Exception):
+                await self._send_error("stream_broken", "결과 전송이 끊겼다 — 재접속이 필요하다")
+            raise
 
     async def _receive_loop(self) -> None:
         while True:

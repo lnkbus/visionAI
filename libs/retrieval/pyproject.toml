@@ -1,6 +1,6 @@
 [project]
 name = "vai-retrieval"
-version = "0.1.0"
+version = "0.2.0"
 description = "검색 인프라 — 청킹·임베딩·벡터/키워드 색인·리랭킹 (RAG 블록 공유)"
 requires-python = ">=3.11"
 dependencies = ["vai-contracts", "numpy>=1.26"]

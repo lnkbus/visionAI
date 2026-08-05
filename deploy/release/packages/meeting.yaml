@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: bdaf8827e34d28a272b38c7e9faaf9ff5e763a63189cfd01f77debcdd1ad4ef1
+configuration_hash: 572610903f8c9975ba4d698f67c589d9dc0f68962e25eaff4d96406acf55ed83
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 1238f42d37b6a144
+  source_hash: 51cd226c7c06904e
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -35,9 +35,9 @@ components:
   capacity_unit: none
 - id: CORE-GW
   name: API / WebSocket 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 91b110e0965a4d90
+  source_hash: 0430a69634a9d39b
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -60,9 +60,9 @@ components:
   - CORE-BUS
 - id: LLM-GW
   name: sLLM 서빙 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: c2bb184f0c14cefd
+  source_hash: 271d3cdbbc0e1ccb
   license_key: LLM-GW
   capacity_unit: concurrent_channels
   depends_on:
@@ -80,9 +80,9 @@ components:
   - LLM-GW
 - id: SPK-DIA
   name: 화자분리
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 50d31ac63515fe3e
+  source_hash: f4d73e49cc7a56d1
   license_key: SPK-DIA
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -90,9 +90,9 @@ components:
   - CORE-BUS
 - id: STT-CORE
   name: STT 어댑터 프레임워크
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 82e97ffc5ea34d42
+  source_hash: 791a9cd80d5bbf67
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -116,14 +116,14 @@ components:
   source_hash: 68c574836374c838
 - id: lib:common
   name: vai_common
-  version: 0.1.0
+  version: 0.2.0
   kind: library
-  source_hash: 3ee02e1184412da1
+  source_hash: 64a1ce0648a4d18a
 - id: lib:retrieval
   name: vai_retrieval
-  version: 0.1.0
+  version: 0.2.0
   kind: library
-  source_hash: 79fe8986dc97d767
+  source_hash: 5c0d49a09f0a3695
 - id: infra:redis
   name: redis
   version: ''

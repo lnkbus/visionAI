@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: c54e9af3ae6910fe3b5b05a586d4b16697417aec723dfbd608eab4adb42d2113
+configuration_hash: 02b064b5b7d86a15af54ceaae603005c3926f2b0c2809c91894407459a427c09
 component_count: 23
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 1238f42d37b6a144
+  source_hash: 51cd226c7c06904e
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -55,9 +55,9 @@ components:
   capacity_unit: none
 - id: CORE-GW
   name: API / WebSocket 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 91b110e0965a4d90
+  source_hash: 0430a69634a9d39b
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -90,9 +90,9 @@ components:
   - STT-CORE
 - id: LLM-GW
   name: sLLM 서빙 게이트웨이
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: c2bb184f0c14cefd
+  source_hash: 271d3cdbbc0e1ccb
   license_key: LLM-GW
   capacity_unit: concurrent_channels
   depends_on:
@@ -119,9 +119,9 @@ components:
   - CORE-BUS
 - id: RAG-SRCH
   name: 하이브리드 검색 & 리랭킹
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 04236b7a961ac750
+  source_hash: e852cf7f31eaab55
   license_key: RAG-SRCH
   capacity_unit: index_chunks
   depends_on:
@@ -140,9 +140,9 @@ components:
   - RAG-SRCH
 - id: STT-CORE
   name: STT 어댑터 프레임워크
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: 82e97ffc5ea34d42
+  source_hash: 791a9cd80d5bbf67
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -150,9 +150,9 @@ components:
   - CORE-BUS
 - id: TA-ASSIST
   name: 실시간 Agent Assist
-  version: 0.1.0
+  version: 0.2.0
   kind: block
-  source_hash: df3f34e5685f2a8d
+  source_hash: a386125c941d0560
   license_key: TA-ASSIST
   capacity_unit: concurrent_channels
   depends_on:
@@ -187,14 +187,14 @@ components:
   source_hash: 68c574836374c838
 - id: lib:common
   name: vai_common
-  version: 0.1.0
+  version: 0.2.0
   kind: library
-  source_hash: 3ee02e1184412da1
+  source_hash: 64a1ce0648a4d18a
 - id: lib:retrieval
   name: vai_retrieval
-  version: 0.1.0
+  version: 0.2.0
   kind: library
-  source_hash: 79fe8986dc97d767
+  source_hash: 5c0d49a09f0a3695
 - id: infra:qdrant
   name: qdrant
   version: ''

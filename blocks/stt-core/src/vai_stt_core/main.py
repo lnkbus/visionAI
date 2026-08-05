@@ -22,6 +22,7 @@ from vai_common.config_store import (
 )
 from vai_common.service import create_block_app, serve
 from vai_common.settings import get_settings
+from vai_common.worker import SessionReaper
 from vai_contracts.authoring import Lexicon
 from vai_stt_core.adapters import create_stt
 from vai_stt_core.lexicon import LexiconCache
@@ -85,9 +86,11 @@ def create_app() -> FastAPI:
             for i in range(max(1, stt_cfg.workers))
         ]
         application.state.workers = workers
+        reaper = SessionReaper(bus, list(workers), group=f"{common.consumer_group}:stt-reaper")
         tasks = [
             asyncio.create_task(w.run(), name=f"stt-worker-{i}") for i, w in enumerate(workers)
         ]
+        tasks.append(asyncio.create_task(reaper.run(), name="stt-reaper"))
         if lexicons is not None and config_store is not None:
             # 배포 알림을 받으면 캐시 TTL을 기다리지 않고 즉시 새 사전을 쓴다.
             tasks.append(
@@ -98,6 +101,7 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            reaper.stop()
             for worker in workers:
                 worker.stop()
             for task in tasks:

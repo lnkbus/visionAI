@@ -1,6 +1,6 @@
 [project]
 name = "vai-stt-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "STT-CORE — STT 모델 추상화 레이어"
 requires-python = ">=3.11"
 dependencies = ["vai-contracts", "vai-common", "numpy>=1.26"]

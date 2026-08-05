@@ -1,6 +1,6 @@
 [project]
 name = "vai-core-gw"
-version = "0.1.0"
+version = "0.2.0"
 description = "CORE-GW — API/WebSocket 게이트웨이"
 requires-python = ">=3.11"
 dependencies = [

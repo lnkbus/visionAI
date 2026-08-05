@@ -1,7 +1,7 @@
 id: CORE-GW
 name: API / WebSocket 게이트웨이
 tier: foundation
-version: 0.1.0
+version: 0.2.0
 description: >
   외부 트래픽의 유일한 진입점. 인증(JWT/SSO), 테넌트 라우팅, 레이트 리밋을 담당하고
   사양서 §4의 /v1/audio/stream WebSocket 프로토콜을 종단한다. 와이어 규격과

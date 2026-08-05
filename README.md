@@ -57,9 +57,9 @@
 | `STT-CORE` | `BaseSTTAdapter` ABC, fake/Faster-Whisper 어댑터 핫스왑 | ✅ |
 | `FLT-MICRO` | PII 마스킹 + 컴플라이언스 룰 체크 (Fast-Path <10ms) | ✅ |
 | `RAG-KB` | 문서 파서(**HWP**/HWPX/PDF/DOCX), 조항 경계 청킹, 임베딩, 색인, 문서 파기 | ✅ |
-| `RAG-SRCH` | Qdrant Dense + BM25 Sparse RRF 융합, 리랭킹 | ✅ |
+| `RAG-SRCH` | Qdrant Dense + BM25 Sparse RRF 융합, 리랭킹, **희소 색인 자가 복원** | ✅ |
 | `TA-ASSIST` | 맥락 기반 질의 추출 → 검색 → 지식 팝업 (1초 예산) → **근거 검증을 통과한 추천 답변** | ✅ |
-| `LLM-GW` | vLLM/상용 API 추상화, 프로파일별 모델 분기, 토큰 계측 | ✅ |
+| `LLM-GW` | vLLM/상용 API 추상화, 프로파일별 모델 분기, **테넌트·월별 토큰 계측** | ✅ |
 | `LLM-SUM` | 세션 종료 배치 요약 (AICC 표준요약 / 회의록·Action Item), **영속 저장·파기 API** | ✅ |
 | `SCN-STUDIO` | **저작·학습 콘솔** — 룰 저작·즉시테스트·배포, STT 사전, 검색 튜닝, 평가셋, 채택률 | ✅ |
 | `UI-AGENT` | **상담원 워크스페이스** — 자막·컴플라이언스 경고·지식 팝업·요약·채택 피드백 | ✅ |
