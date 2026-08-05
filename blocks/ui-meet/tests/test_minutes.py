@@ -207,3 +207,53 @@ def test_minutes_page_is_served(bus: InMemoryEventBus) -> None:
 
     assert response.status_code == 200
     assert "스마트 회의록" in response.text
+
+
+# ── 참석자 실명 (사람이 입력한 데이터) ───────────────────────────────────────
+
+
+async def test_speaker_names_survive_a_restart() -> None:
+    """화자분리는 "다른 사람"까지만 안다. 실명은 사람이 직접 입력한 사실이다.
+
+    프로세스 메모리에 두면 재기동으로 사라지고, 복제본이 둘이면 입력한 화면과
+    조회하는 화면이 갈려 애초에 안 보인다 — 회의록의 "누가 말했는가"가
+    speaker_1로 되돌아간다.
+    """
+    import redis.asyncio as aioredis
+
+    from vai_ui_meet.app import RedisSpeakerNames
+
+    client = aioredis.Redis(db=13)
+    try:
+        await client.ping()
+    except Exception:
+        pytest.skip("Redis가 없다")
+
+    try:
+        await client.flushdb()
+        await RedisSpeakerNames(client).put("m1", {"speaker_1": "김부장", "speaker_2": "이대리"})
+
+        restarted = RedisSpeakerNames(client)  # 블록 재기동
+
+        assert await restarted.get("m1") == {"speaker_1": "김부장", "speaker_2": "이대리"}
+    finally:
+        await client.flushdb()
+        await client.aclose()
+
+
+async def test_renaming_drops_removed_speakers() -> None:
+    """지운 이름이 남아 있으면 회의록에 없는 참석자가 계속 붙는다."""
+    from vai_ui_meet.app import InMemorySpeakerNames
+
+    names = InMemorySpeakerNames()
+    await names.put("m1", {"speaker_1": "김부장", "speaker_2": "이대리"})
+
+    await names.put("m1", {"speaker_1": "김상무"})
+
+    assert await names.get("m1") == {"speaker_1": "김상무"}
+
+
+async def test_unknown_session_has_no_names() -> None:
+    from vai_ui_meet.app import InMemorySpeakerNames
+
+    assert await InMemorySpeakerNames().get("없는회의") == {}

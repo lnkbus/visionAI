@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,13 +27,16 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from redis.asyncio import Redis
 
-from vai_common.bus import EventBus, build_bus
+from vai_common.bus import EventBus, RedisEventBus, build_bus
 from vai_common.service import create_block_app
 from vai_common.settings import get_settings
 from vai_contracts.events import SpeakerLabel
 from vai_contracts.summary import Summary
 from vai_contracts.topics import Topic
+
+NAMES_KEY_PREFIX = "vai:meet:names:"
 
 log = logging.getLogger(__name__)
 BLOCK_ID = "UI-MEET"
@@ -69,16 +73,22 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-        application.state.bus = bus or build_bus(common.redis_url)
+        active_bus = bus or build_bus(common.redis_url)
+        application.state.bus = active_bus
         application.state.summary = summary_client or httpx.AsyncClient(
             base_url=cfg.summary_url.rstrip("/"), timeout=5.0
         )
         application.state.diarization = diarization_client or httpx.AsyncClient(
             base_url=cfg.diarization_url.rstrip("/"), timeout=5.0
         )
-        # 실명 매핑은 화면에서만 쓰는 표시 정보라 메모리에 둔다.
-        # 영속이 필요해지면 CORE-ADM으로 옮긴다.
-        application.state.names = {}
+        # 참석자 실명은 **사람이 직접 입력한 데이터**다. 프로세스 메모리에 두면
+        # 재기동으로 사라지고, 복제본이 둘이면 입력한 화면과 조회하는 화면이
+        # 갈려 애초에 안 보인다. 회의록의 "누가 말했는가"가 speaker_1로 되돌아간다.
+        application.state.names = (
+            RedisSpeakerNames(active_bus.redis)
+            if isinstance(active_bus, RedisEventBus)
+            else InMemorySpeakerNames()
+        )
         # 화자 라벨을 UI 채널로 중계하는 태스크들(세션별).
         application.state.relays = {}
         try:
@@ -107,17 +117,23 @@ def create_app(
         # 자막(UI 채널)과 화자 라벨(스트림 토픽)은 경로가 다르다. 두 갈래를
         # 한 소켓으로 합쳐 화면이 한 곳만 보게 한다.
         labels = asyncio.create_task(_relay_labels(bus_, websocket, session_id))
+        subtitles = asyncio.create_task(_relay_subtitles(bus_, websocket, session_id))
         try:
-            async for payload in bus_.subscribe_ui(session_id):
-                await websocket.send_json(payload)
+            # 한쪽만 죽으면 화면이 조용히 반쪽이 된다 — 자막은 흐르는데 화자
+            # 라벨이 영영 안 붙거나, 그 반대다. 어느 쪽이 끝나든 함께 접는다.
+            done, _ = await asyncio.wait({labels, subtitles}, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
         except WebSocketDisconnect:
             log.info("회의 화면 종료", extra={"session_id": session_id})
         except Exception:
             log.exception("회의 관찰 소켓 오류", extra={"session_id": session_id})
         finally:
-            labels.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await labels
+            for task in (labels, subtitles):
+                task.cancel()
+            for task in (labels, subtitles):
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
 
     @app.get("/v1/meet/summary/{session_id}", response_model=Summary, tags=["meeting"])
     async def get_summary(session_id: str, request: Request) -> Summary:
@@ -146,7 +162,7 @@ def create_app(
         if response.status_code != httpx.codes.OK:
             return []
 
-        names: dict[str, str] = request.app.state.names.get(session_id, {})
+        names: dict[str, str] = await request.app.state.names.get(session_id)
         return [
             {**item, "display_name": names.get(str(item["speaker_id"]), "")}
             for item in response.json()
@@ -162,9 +178,9 @@ def create_app(
         사람이 메운다 — 자동 추정을 시도하면 회의록에 엉뚱한 이름이 박힌다.
         """
         payload.session_id = session_id
-        request.app.state.names[session_id] = {
-            item.speaker_id: item.display_name for item in payload.names
-        }
+        await request.app.state.names.put(
+            session_id, {item.speaker_id: item.display_name for item in payload.names}
+        )
         return payload
 
     @app.get("/minutes", include_in_schema=False)
@@ -172,6 +188,72 @@ def create_app(
         return FileResponse(STATIC_DIR / "minutes.html")
 
     return app
+
+
+class SpeakerNames(ABC):
+    """화자 → 실명 매핑 저장소.
+
+    화자분리는 "다른 사람"까지만 알려 주고 "누구인지"는 모른다. 그 간극을
+    사람이 메우므로, 여기 담기는 것은 추정이 아니라 **입력된 사실**이다.
+    잃어버리면 사용자가 다시 입력해야 한다.
+    """
+
+    @abstractmethod
+    async def get(self, session_id: str) -> dict[str, str]: ...
+
+    @abstractmethod
+    async def put(self, session_id: str, names: dict[str, str]) -> None: ...
+
+
+class InMemorySpeakerNames(SpeakerNames):
+    """단일 프로세스용. 재기동하면 사라진다."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, dict[str, str]] = {}
+
+    async def get(self, session_id: str) -> dict[str, str]:
+        return self._data.get(session_id, {})
+
+    async def put(self, session_id: str, names: dict[str, str]) -> None:
+        self._data[session_id] = names
+
+
+class RedisSpeakerNames(SpeakerNames):
+    """재기동과 복제를 넘어 남는다.
+
+    요약과 같은 수명을 준다 — 회의록을 여는 한 참석자 이름도 함께 있어야 한다.
+    """
+
+    def __init__(self, redis: Redis) -> None:
+        self._redis = redis
+
+    def _key(self, session_id: str) -> str:
+        return f"{NAMES_KEY_PREFIX}{session_id}"
+
+    async def get(self, session_id: str) -> dict[str, str]:
+        raw = await self._redis.hgetall(self._key(session_id))
+        return {
+            (k.decode() if isinstance(k, bytes) else str(k)): (
+                v.decode() if isinstance(v, bytes) else str(v)
+            )
+            for k, v in raw.items()
+        }
+
+    async def put(self, session_id: str, names: dict[str, str]) -> None:
+        key = self._key(session_id)
+        pipe = self._redis.pipeline()
+        pipe.delete(key)
+        # 필드별로 넣는다. 참석자는 많아야 열몇 명이라 파이프라인 한 번에
+        # 다 들어가고, mapping 인자의 타입을 우회하려 캐스팅할 이유가 없다.
+        for speaker_id, display_name in names.items():
+            pipe.hset(key, speaker_id, display_name)
+        await pipe.execute()
+
+
+async def _relay_subtitles(bus: EventBus, websocket: WebSocket, session_id: str) -> None:
+    """UI 채널(자막·요약)을 소켓으로 넘긴다."""
+    async for payload in bus.subscribe_ui(session_id):
+        await websocket.send_json(payload)
 
 
 async def _relay_labels(bus: EventBus, websocket: WebSocket, session_id: str) -> None:
@@ -193,4 +275,7 @@ async def _relay_labels(bus: EventBus, websocket: WebSocket, session_id: str) ->
     except asyncio.CancelledError:
         raise
     except Exception:
+        # 조용히 죽으면 자막은 흐르는데 화자 라벨만 영영 안 붙는다. 회의록에서
+        # "누가 말했는가"가 통째로 비는 상태이고, 화면은 정상으로 보인다.
         log.exception("화자 라벨 중계 중단", extra={"session_id": session_id})
+        raise

@@ -1,6 +1,6 @@
 [project]
 name = "vai-ui-meet"
-version = "0.1.0"
+version = "0.2.0"
 description = "UI-MEET — 스마트 회의록 화면"
 requires-python = ">=3.11"
 dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30", "httpx>=0.27"]
