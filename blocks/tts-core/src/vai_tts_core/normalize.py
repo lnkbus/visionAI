@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
 SINO_DIGITS = ("영", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구")
 SINO_SMALL_UNITS = ("", "십", "백", "천")
@@ -214,6 +215,7 @@ _MONEY = re.compile(r"\b(\d{1,3}(?:,\d{3})+|\d+)\s*원")
 _NUMBER_UNIT = re.compile(r"(\d{1,3}(?:,\d{3})*|\d+)\s*(%|％|[A-Za-z]{1,2}|[가-힣]{1,3})")
 _BARE_NUMBER = re.compile(r"\b\d{1,3}(?:,\d{3})+\b|\b\d+\b")
 _ENGLISH_WORD = re.compile(r"\b[A-Z]{2,}\b")
+_SPACE_FREE = re.compile(r"\s+")
 
 
 def _digits(text: str) -> int:
@@ -261,10 +263,52 @@ def _split_counter(token: str) -> tuple[str, str]:
     return token, ""
 
 
-def normalize(text: str) -> str:
-    """TTS에 넣기 전 텍스트를 읽는 대로 바꾼다."""
+def apply_readings(text: str, readings: Mapping[str, str]) -> str:
+    """사전에 등록된 표기를 소리로 먼저 바꾼다.
+
+    **한 번만 훑는다.** 항목마다 따로 치환하면 앞서 바꿔 놓은 결과를 뒤 항목이
+    다시 건드린다 — "무배당행복플러스"를 바꾼 자리에 "행복플러스"가 또 걸려
+    긴 표기를 등록한 의미가 사라진다.
+
+    **긴 표기가 이긴다.** 정규식 교대는 먼저 쓴 쪽이 이기므로 길이 내림차순으로
+    잇는다.
+
+    띄어쓰기는 흡수한다 — 문서마다 "무배당행복플러스"와 "무배당 행복 플러스"가
+    섞여 있고, 그 둘을 따로 등록하게 하면 사전이 두 배로 늘고 한쪽은 빠뜨린다.
+    """
+    if not readings or not text:
+        return text
+
+    order: list[tuple[str, str]] = []
+    for surface in sorted(readings, key=len, reverse=True):
+        squeezed = _SPACE_FREE.sub("", surface)
+        if squeezed:
+            order.append((squeezed, readings[surface]))
+    if not order:
+        return text
+
+    pattern = "|".join(
+        "(" + r"\s*".join(re.escape(char) for char in squeezed) + ")" for squeezed, _ in order
+    )
+
+    def _replace(match: re.Match[str]) -> str:
+        # 어느 항목이 걸렸는지는 채워진 그룹 번호로 안다.
+        index = next(i for i, group in enumerate(match.groups()) if group is not None)
+        return order[index][1]
+
+    return re.sub(pattern, _replace, text)
+
+
+def normalize(text: str, *, readings: Mapping[str, str] | None = None) -> str:
+    """TTS에 넣기 전 텍스트를 읽는 대로 바꾼다.
+
+    사전(``readings``)을 **먼저** 적용한다. 나중에 하면 숫자·단위 규칙이
+    이미 바꿔 놓은 자리를 사전이 다시 건드려 결과가 예측 불가능해진다.
+    """
     if not text:
         return text
+    if readings:
+        text = apply_readings(text, readings)
 
     # 개인정보는 한 자리씩. 붙여 읽으면 고객이 받아 적지 못한다.
     text = _RRN.sub(

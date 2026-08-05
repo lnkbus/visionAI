@@ -16,6 +16,7 @@ from vai_common.bus import EventBus
 from vai_common.worker import BlockWorker
 from vai_contracts.speech import SpeechCancel, SpeechChunk, SynthesisRequest
 from vai_contracts.topics import Topic
+from vai_tts_core.readings import ReadingCache
 from vai_tts_core.synth import Synthesizer, TurnStats
 
 log = logging.getLogger(__name__)
@@ -28,15 +29,25 @@ class SynthesisWorker(BlockWorker[SynthesisRequest]):
     source_model = SynthesisRequest
 
     def __init__(
-        self, bus: EventBus, synthesizer: Synthesizer, *, group: str, consumer: str
+        self,
+        bus: EventBus,
+        synthesizer: Synthesizer,
+        *,
+        group: str,
+        consumer: str,
+        readings: ReadingCache | None = None,
     ) -> None:
         super().__init__(bus, group=group, consumer=consumer)
         self._synth = synthesizer
+        self._readings = readings
 
     async def handle(self, event: SynthesisRequest) -> None:
         stats = TurnStats()
+        # 사전은 테넌트별이다. 고유명사 읽기는 고객사마다 다르고, 한 장비에
+        # 여러 테넌트가 올라가는 SaaS 구성에서 섞이면 남의 회사 용어로 읽는다.
+        readings = await self._readings.readings(event.tenant_id) if self._readings else None
         async for segment, turn_stats in self._synth.synthesize(
-            event.session_id, event.turn_id, event.text, event.voice
+            event.session_id, event.turn_id, event.text, event.voice, readings=readings
         ):
             stats = turn_stats
             await self.bus.publish(

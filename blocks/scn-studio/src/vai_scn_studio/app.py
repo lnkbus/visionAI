@@ -46,6 +46,7 @@ from vai_contracts.authoring import (
     RuleSet,
     RuleTestRequest,
     RuleTestResult,
+    TtsLexicon,
 )
 from vai_contracts.dialog import Scenario, ScenarioRevision, ScenarioStage
 from vai_contracts.retrieval import SearchRequest, SearchResponse
@@ -261,6 +262,37 @@ def create_app(
         # 실시간 블록이 저작 도구를 직접 부르지 않게 하려는 것이다.
         await request.app.state.configs.publish(ConfigKind.LEXICON, tenant_id, saved)
         return saved
+
+    # ── TTS 읽기 사전 ────────────────────────────────────────────────────────
+    #
+    # 전처리 규칙은 숫자·날짜·단위처럼 **규칙으로 정해지는 것**을 다룬다.
+    # 고유명사와 사내 용어는 규칙이 없다 — 그걸 코드로 받으면 안내 문구 하나에
+    # 공급사 배포가 필요해진다.
+
+    @app.get("/internal/v1/tts-lexicon/{tenant_id}", response_model=TtsLexicon, tags=["lexicon"])
+    async def get_tts_lexicon(tenant_id: str, request: Request) -> TtsLexicon:
+        found = await request.app.state.configs.load(ConfigKind.TTS_LEXICON, tenant_id, TtsLexicon)
+        return found or TtsLexicon(tenant_id=tenant_id)
+
+    @app.put("/internal/v1/tts-lexicon/{tenant_id}", response_model=TtsLexicon, tags=["lexicon"])
+    async def save_tts_lexicon(tenant_id: str, payload: TtsLexicon, request: Request) -> TtsLexicon:
+        """읽기 사전 저장 + 배포.
+
+        STT 사전과 나눠 둔다. 방향이 반대이기 때문이다 — STT는 '잘못 들린 것을
+        정답 표기로', 이건 '쓰인 표기를 어떻게 소리 낼지'다. 하나로 합치면
+        한쪽을 고칠 때 다른 쪽이 조용히 망가진다.
+
+        룰셋과 달리 초안 단계를 두지 않는다. 읽기가 틀리면 즉시 들리고 즉시
+        되돌릴 수 있으므로, 배포 절차를 두면 얻는 것보다 잃는 것이 많다.
+        """
+        payload.tenant_id = tenant_id
+        current = await request.app.state.configs.load(
+            ConfigKind.TTS_LEXICON, tenant_id, TtsLexicon
+        )
+        payload.version = (current.version + 1) if current else 1
+        payload.updated_at = datetime.now(UTC)
+        await request.app.state.configs.publish(ConfigKind.TTS_LEXICON, tenant_id, payload)
+        return payload
 
     # ── 검색 튜닝 · 평가 ─────────────────────────────────────────────────────
 

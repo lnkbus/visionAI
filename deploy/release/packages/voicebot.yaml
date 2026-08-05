@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 63ae1556d28c5f0d68095af6e5cdafef281fdb0d09ee6db5d2e975b3116088ee
+configuration_hash: fa9a4125e14c50dc2b52bf090c866b19f5f0213b8a15f55a6e14a2890402b071
 component_count: 23
 components:
 - id: AUD-RTP
@@ -130,7 +130,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 15d6d8c092cb18bf
+  source_hash: 0e85d679452c04e2
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:
@@ -163,7 +163,7 @@ components:
   name: 음성 합성
   version: 0.1.0
   kind: block
-  source_hash: 7716520a12add66e
+  source_hash: 31d0c0a0e43ae9ff
   license_key: TTS-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -183,12 +183,12 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: be82f93927ccb386
+  source_hash: f5a627d054c16767
 - id: lib:common
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 180f5ae4888e8b47
+  source_hash: 703a1bfb69f0c7f8
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 
 from vai_contracts.speech import AudioEncoding, VoiceProfile
@@ -93,7 +93,13 @@ class Synthesizer:
     registry: CancellationRegistry = field(default_factory=CancellationRegistry)
 
     async def synthesize(
-        self, session_id: str, turn_id: str, text: str, voice: VoiceProfile
+        self,
+        session_id: str,
+        turn_id: str,
+        text: str,
+        voice: VoiceProfile,
+        *,
+        readings: Mapping[str, str] | None = None,
     ) -> AsyncIterator[tuple[Segment, TurnStats]]:
         """조각을 순서대로 흘린다. 취소되면 즉시 멈춘다."""
         stats = TurnStats()
@@ -101,7 +107,7 @@ class Synthesizer:
         started = time.perf_counter()
 
         try:
-            chunks = split_for_streaming(normalize(text))
+            chunks = split_for_streaming(normalize(text, readings=readings))
             if not chunks:
                 return
 

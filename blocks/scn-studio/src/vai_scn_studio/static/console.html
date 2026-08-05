@@ -297,6 +297,38 @@
       <div class="row"><button id="ttsRun">미리듣기</button></div>
       <div id="ttsOut"></div>
     </div>
+
+    <div class="panel">
+      <h2>읽기 사전 — 고유명사·사내 용어</h2>
+      <p class="hint">
+        전처리 규칙은 숫자·날짜·단위처럼 <b>규칙으로 정해지는 것</b>만 다룬다.
+        “무배당행복플러스”를 어떻게 읽을지는 규칙이 없고 그 회사만 안다 —
+        그걸 코드로 받으면 안내 문구 하나에 공급사 배포가 필요해진다.
+      </p>
+      <table id="tlex-table">
+        <thead><tr><th style="width:32%">표기</th><th style="width:38%">읽기 (한글)</th><th>메모</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row" style="margin-top:8px">
+        <button class="act ghost" id="tlex-add">행 추가</button>
+        <button class="act ghost" id="tlex-load">불러오기</button>
+        <button class="act" id="tlex-save">저장 · 배포</button>
+      </div>
+      <div class="msg" id="tlex-msg"></div>
+      <p class="hint">
+        <b>읽기는 한글로 적는다.</b> 숫자나 영문을 남기면 전처리 규칙이 다시 손대고
+        결과가 예측 불가능해진다. 띄어쓰기는 흡수하므로
+        “무배당행복플러스”와 “무배당 행복 플러스”를 따로 등록할 필요가 없다.
+      </p>
+      <p class="hint">
+        <b>긴 표기부터 적용된다.</b> 짧은 것이 먼저 걸리면 “행복플러스”가 이겨
+        “무배당행복플러스”를 등록한 의미가 사라진다.
+      </p>
+      <p class="hint">
+        저장하면 바로 배포된다. 룰셋과 달리 초안 단계가 없다 — 읽기가 틀리면 즉시 들리고
+        즉시 되돌릴 수 있어서, 배포 절차를 두면 얻는 것보다 잃는 것이 많다.
+      </p>
+    </div>
   </section>
 
 </main>
@@ -646,13 +678,14 @@ $("ttsRun")?.addEventListener("click", async () => {
   try {
     const result = await api("/internal/v1/tts/preview", {
       method: "POST",
-      body: JSON.stringify({ text: $("ttsText").value }),
+      body: JSON.stringify({ text: $("ttsText").value, tenant_id: tenant() }),
     });
     out.innerHTML = `
       <div class="panel" style="margin:8px 0">
         <div class="hint">원문</div>
         <div style="margin:4px 0 10px">${escapeHtml(result.original ?? "")}</div>
-        <div class="hint">읽기 텍스트 — 실제로 이렇게 발음된다</div>
+        <div class="hint">읽기 텍스트 — 실제로 이렇게 발음된다${
+          result.readings_applied ? ` · 사전 ${result.readings_applied}건 적용` : " · 사전 미적용(규칙만)"}</div>
         <div style="font-size:16px;margin:4px 0">${escapeHtml(result.normalized ?? "")}</div>
         ${(result.chunks ?? []).length > 1
           ? `<div class="hint">문장 ${result.chunks.length}개로 나뉘어 순차 합성된다 —
@@ -819,6 +852,56 @@ $("scIntentsFile").addEventListener("change", async (event) => {
   } catch (error) { say($("scMsg"), error.message, "bad"); }
   event.target.value = "";
 });
+
+// ── TTS 읽기 사전 ────────────────────────────────────────────────────────────
+const tlexBody = $("tlex-table").querySelector("tbody");
+
+function tlexRow(entry = {}) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="t-surface" placeholder="무배당행복플러스" /></td>
+    <td><input class="t-reading" placeholder="무배당 행복 플러스" /></td>
+    <td><input class="t-note" placeholder="왜 이렇게 읽는지" /></td>
+    <td><button class="act danger t-del">×</button></td>`;
+  tr.querySelector(".t-surface").value = entry.surface ?? "";
+  tr.querySelector(".t-reading").value = entry.reading ?? "";
+  tr.querySelector(".t-note").value = entry.note ?? "";
+  tr.querySelector(".t-del").addEventListener("click", () => tr.remove());
+  return tr;
+}
+
+$("tlex-add").addEventListener("click", () => tlexBody.append(tlexRow()));
+
+async function loadTtsLexicon() {
+  try {
+    const lexicon = await api(`/internal/v1/tts-lexicon/${tenant()}`);
+    tlexBody.replaceChildren(...lexicon.readings.map(tlexRow));
+    if (!lexicon.readings.length) tlexBody.append(tlexRow());
+    say($("tlex-msg"), `${lexicon.readings.length}건 (버전 ${lexicon.version})`, "ok");
+  } catch (err) { say($("tlex-msg"), err.message, "err"); }
+}
+
+$("tlex-load").addEventListener("click", loadTtsLexicon);
+
+$("tlex-save").addEventListener("click", async () => {
+  const readings = [...tlexBody.querySelectorAll("tr")]
+    .map((tr) => ({
+      surface: tr.querySelector(".t-surface").value.trim(),
+      reading: tr.querySelector(".t-reading").value.trim(),
+      note: tr.querySelector(".t-note").value.trim(),
+      enabled: true,
+    }))
+    .filter((entry) => entry.surface && entry.reading);
+  try {
+    const saved = await api(`/internal/v1/tts-lexicon/${tenant()}`, {
+      method: "PUT",
+      body: JSON.stringify({ tenant_id: tenant(), readings }),
+    });
+    say($("tlex-msg"), `배포됨 — ${saved.readings.length}건 (버전 ${saved.version})`, "ok");
+  } catch (err) { say($("tlex-msg"), err.message, "err"); }
+});
+
+tlexBody.append(tlexRow());
 
 </script>
 </body>

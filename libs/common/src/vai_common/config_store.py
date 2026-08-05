@@ -42,6 +42,12 @@ class ConfigKind(StrEnum):
     RULESET = "ruleset"
     """컴플라이언스 룰셋. SCN-STUDIO 배포 → FLT-MICRO가 테넌트별로 적용."""
 
+    TTS_LEXICON = "tts_lexicon"
+    """TTS 읽기 사전. SCN-STUDIO 배포 → TTS-CORE가 합성 전에 적용.
+
+    STT 사전(:attr:`LEXICON`)과 나눈다. 방향이 반대이기 때문이다 — STT는
+    '잘못 들린 것을 정답으로', TTS는 '쓰인 것을 어떻게 읽을지'다."""
+
 
 def config_key(kind: ConfigKind, tenant_id: str) -> str:
     return f"{KEY_PREFIX}{kind.value}:{tenant_id}"

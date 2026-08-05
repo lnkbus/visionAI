@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -341,3 +342,53 @@ def test_인텐트_표를_내려받고_올릴_수_있다(studio) -> None:  # typ
     assert response.status_code == 200
     start = next(n for n in response.json()["scenario"]["nodes"] if n["node_id"] == "start")
     assert start["intents"][0]["examples"] == ["카드 재발급이요", "카드 잃어버렸어요"]
+
+
+# ── TTS 읽기 사전 ────────────────────────────────────────────────────────────
+
+
+def test_읽기_사전이_배포_채널로_나간다(studio) -> None:  # type: ignore[no-untyped-def]
+    """실시간 합성 블록이 저작 도구를 직접 부르면, 콘솔이 죽는 날 봇도
+    함께 이상해진다. 사전은 배포 채널로 흘러야 한다."""
+    from vai_common.config_store import ConfigKind
+    from vai_contracts.authoring import TtsLexicon
+
+    client, _, _ = studio
+    response = client.put(
+        f"/internal/v1/tts-lexicon/{TENANT}",
+        json={
+            "tenant_id": TENANT,
+            "readings": [{"surface": "무배당행복플러스", "reading": "무배당 행복 플러스"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["version"] == 1
+
+    async def loaded():  # type: ignore[no-untyped-def]
+        return await client.app.state.configs.load(ConfigKind.TTS_LEXICON, TENANT, TtsLexicon)
+
+    published = asyncio.run(loaded())
+    assert published is not None
+    assert published.readings[0].reading == "무배당 행복 플러스"
+
+
+def test_저장할_때마다_버전이_오른다(studio) -> None:  # type: ignore[no-untyped-def]
+    """버전이 그대로면 합성 쪽 캐시가 새 사전을 다시 만들지 않는다."""
+    client, _, _ = studio
+    body = {"tenant_id": TENANT, "readings": [{"surface": "가", "reading": "갸"}]}
+
+    client.put(f"/internal/v1/tts-lexicon/{TENANT}", json=body)
+    second = client.put(f"/internal/v1/tts-lexicon/{TENANT}", json=body)
+
+    assert second.json()["version"] == 2
+
+
+def test_사전이_없으면_빈_사전을_준다(studio) -> None:  # type: ignore[no-untyped-def]
+    """404 를 주면 저작 화면이 첫 진입에서 오류만 보여 준다."""
+    client, _, _ = studio
+
+    response = client.get("/internal/v1/tts-lexicon/never-seen")
+
+    assert response.status_code == 200
+    assert response.json()["readings"] == []

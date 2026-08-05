@@ -96,6 +96,38 @@ class Lexicon(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class TtsReading(BaseModel):
+    """쓰인 대로 읽으면 안 되는 말 하나."""
+
+    surface: str
+    """문서에 쓰이는 표기. 예: ``무배당행복플러스``"""
+
+    reading: str
+    """실제로 읽을 소리. 예: ``무배당 행복 플러스``
+
+    한글로 적는다. 엔진은 이 문자열을 그대로 소리로 바꾸므로, 여기에 숫자나
+    영문을 남기면 전처리 규칙이 다시 손대고 결과가 예측 불가능해진다."""
+
+    note: str = ""
+    """왜 이렇게 읽는지. 몇 달 뒤 다른 사람이 지우지 않게."""
+
+    enabled: bool = True
+
+
+class TtsLexicon(BaseModel):
+    """TTS 읽기 사전 한 벌.
+
+    STT 사전과 나눈 이유는 **방향이 반대**라서다. STT 사전은 '잘못 들린 것을
+    정답 표기로' 바꾸고, 이건 '쓰인 표기를 어떻게 소리 낼지'를 정한다. 하나로
+    합치면 한쪽을 고칠 때 다른 쪽이 조용히 망가진다.
+    """
+
+    tenant_id: str
+    version: int = 1
+    readings: list[TtsReading] = Field(default_factory=list)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class GoldenCase(BaseModel):
     """평가셋 1건. 검색·요약 품질의 회귀 기준이다."""
 
