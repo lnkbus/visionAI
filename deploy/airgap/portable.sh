@@ -109,3 +109,14 @@ read_into() {
 sorted_files() {
   find "${1:-.}" -type f ! -name SHA256SUMS | LC_ALL=C sort
 }
+
+# ── 아키텍처 ────────────────────────────────────────────────────────────────
+# uname -m 의 표기가 제각각이다(x86_64 / amd64 / aarch64 / arm64). docker 표기로
+# 맞춘다 — 번들의 ARCH 파일과 대조해야 하기 때문이다.
+host_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) uname -m ;;
+  esac
+}

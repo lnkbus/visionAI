@@ -113,6 +113,22 @@ for name in plan.json docker-compose.yml selftest.sh SHA256SUMS; do
   [[ -f "$HERE/$name" ]] && ok "$name" || fail "$name 이 없다"
 done
 
+# 아키텍처가 다른 번들을 적재하면 컨테이너가 "exec format error" 로 죽는다.
+# 그 문구만 보고 원인을 짚기는 어렵고, 그때는 이미 이미지를 다 푼 뒤다.
+if [[ -f "$HERE/ARCH" ]]; then
+  BUNDLE_ARCH="$(tr -d '[:space:]' < "$HERE/ARCH")"
+  HOST_ARCH="$(host_arch)"
+  if [[ "$BUNDLE_ARCH" == "$HOST_ARCH" ]]; then
+    ok "아키텍처 $BUNDLE_ARCH"
+  else
+    fail "번들은 $BUNDLE_ARCH 인데 이 서버는 $HOST_ARCH 다 — 맞는 번들을 반입한다"
+  fi
+else
+  # 구 번들에는 ARCH 파일이 없다. 막지 않되 모른다고 말한다 — "확인했다"와
+  # "확인하지 않았다"를 같은 화면에 섞으면 안 된다.
+  echo "  · 아키텍처 미표기 번들 (이 서버: $(host_arch))"
+fi
+
 step 2 "무결성 대조"
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 대조 없이 적재하면 반쯤 깨진
 # 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
