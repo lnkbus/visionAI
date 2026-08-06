@@ -46,7 +46,14 @@ services:
     # 반드시 공유 저장소가 필요하다 — memory 어댑터는 단일 프로세스 전용이다.
     image: qdrant/qdrant:v1.12.1
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6333 || exit 1"]
+      # **bash 로 부른다.** `/dev/tcp` 는 bash 전용 문법인데 이 이미지의
+      # /bin/sh 는 dash 다 — CMD-SHELL(=sh -c)로 두면 dash 가 그걸 진짜 파일
+      # 경로로 취급해 "Directory nonexistent" 로 **항상** 실패한다.
+      # 그러면 qdrant 는 멀쩡히 떠 있는데 unhealthy 로 남고, 이 컨테이너에
+      # 의존하는 블록이 통째로 기동에 실패한다.
+      #
+      # 이미지에 curl·wget·nc 가 없어서 TCP 연결 확인이 가장 가벼운 방법이다.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
       interval: 5s
       timeout: 3s
       retries: 20
