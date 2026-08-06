@@ -62,6 +62,13 @@
     <span class="status"><span class="dot" id="dot"></span><span id="state">대기</span></span>
   </div>
 
+  <p class="sub" id="invite" hidden>
+    상대방은 이 주소로 들어와 <b>다른 채널</b>을 고르고 시작하면 같은 상담에 붙는다 —
+    그래야 양쪽 발화가 한 화면에 모인다.
+    <code id="invite-url"></code>
+    <button id="invite-copy" class="secondary">복사</button>
+  </p>
+
   <section>
     <h2>실시간 자막</h2>
     <div id="captions"><p class="empty">상담을 시작하면 인식 결과가 표시된다.</p></div>
@@ -78,6 +85,7 @@ const TARGET_RATE = 16000;
 const $ = (id) => document.getElementById(id);
 const els = {
   start: $("start"), stop: $("stop"), profile: $("profile"), channel: $("channel"),
+  invite: $("invite"), inviteUrl: $("invite-url"), inviteCopy: $("invite-copy"),
   dot: $("dot"), state: $("state"), captions: $("captions"), popups: $("popups"),
 };
 
@@ -219,15 +227,27 @@ function stopMic() {
 els.start.addEventListener("click", async () => {
   els.start.disabled = true;
   try {
-    setState("세션 생성 중…");
-    const res = await fetch("/v1/sessions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ profile: els.profile.value, audio_format: "pcm_16k" }),
-    });
-    if (!res.ok) throw new Error(`세션 생성 실패 (${res.status})`);
+    // 주소에 세션이 적혀 있으면 **그 세션에 붙는다.** 상담은 두 사람이
+    // 하는데 시작 버튼이 늘 새 세션을 만들면, 두 사람이 각자 켤 때 서로 다른
+    // 상담 두 건이 되고 화면에는 늘 한쪽만 뜬다.
+    const joining = new URLSearchParams(location.search).get("session");
+    const res = joining
+      ? (setState("세션 참여 중…"),
+         await fetch(`/v1/sessions/${encodeURIComponent(joining)}/join`, { method: "POST" }))
+      : (setState("세션 생성 중…"),
+         await fetch("/v1/sessions", {
+           method: "POST",
+           headers: { "content-type": "application/json" },
+           body: JSON.stringify({ profile: els.profile.value, audio_format: "pcm_16k" }),
+         }));
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.detail || `${joining ? "세션 참여" : "세션 생성"} 실패 (${res.status})`);
+    }
     const { session, ws_token } = await res.json();
     sessionId = session.session_id;
+    els.profile.value = session.profile;
+    showInvite(sessionId);
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(`${scheme}://${location.host}/v1/audio/stream?token=${encodeURIComponent(ws_token)}`);
@@ -251,6 +271,34 @@ els.start.addEventListener("click", async () => {
     setState(err.message);
     els.start.disabled = false;
   }
+});
+
+// 참여 링크로 들어왔으면 화면부터 그렇게 말한다. 안 그러면 "시작"을 눌러
+// 놓고 왜 상대가 안 보이는지 찾게 된다 — 참여인지 새 상담인지가 안 보인다.
+{
+  const joining = new URLSearchParams(location.search).get("session");
+  if (joining) {
+    els.start.textContent = "상담 참여";
+    // 먼저 켠 쪽이 고객 채널이었을 테니 반대쪽을 기본으로 둔다. 둘 다 같은
+    // 채널이면 화자가 뭉쳐서 누가 말했는지 안 갈린다.
+    els.channel.value = "agent";
+    // 프로파일은 세션이 이미 정했다. 여기서 고르는 시늉을 하면 안 된다.
+    els.profile.disabled = true;
+    setState(`참여 대기 · ${joining}`);
+  }
+}
+
+function showInvite(id) {
+  const url = new URL(location.href);
+  url.searchParams.set("session", id);
+  els.inviteUrl.textContent = url.toString();
+  els.invite.hidden = false;
+}
+
+els.inviteCopy?.addEventListener("click", () => {
+  navigator.clipboard?.writeText(els.inviteUrl.textContent);
+  els.inviteCopy.textContent = "복사됨";
+  setTimeout(() => { els.inviteCopy.textContent = "복사"; }, 1500);
 });
 
 function teardown() {

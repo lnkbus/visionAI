@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: e8f6a8142094298d4c1d705a4fd2956abae1b3aea5d21aee6bc84cd65c0e5daa
+configuration_hash: dbe8cc2adddb67713268d2499aa43edd5604c7dc6d6f98433f687362d2bfa8ae
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 532925fe0c5abf14
+  source_hash: 84d8098de69327f9
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -19,7 +19,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: de18ce482f2d20bb
+  source_hash: 7b9ad68be27df098
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -37,7 +37,7 @@ components:
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: b3d55cebdce276d5
+  source_hash: 955a3a13e4dadc28
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -53,7 +53,7 @@ components:
   name: 암호화·감사
   version: 0.1.0
   kind: block
-  source_hash: 02623cbeb62a3579
+  source_hash: 478c154189896f89
   license_key: CORE-SEC
   capacity_unit: none
   depends_on:
@@ -82,7 +82,7 @@ components:
   name: 화자분리
   version: 0.2.0
   kind: block
-  source_hash: 284f997cef3ad5fc
+  source_hash: 1dc107ca68ed5fe9
   license_key: SPK-DIA
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -92,7 +92,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: 27525148c4ce4ff8
+  source_hash: c6cbdc87392afbca
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -102,7 +102,7 @@ components:
   name: 스마트 회의록 UI
   version: 0.2.0
   kind: block
-  source_hash: a0be8410cfc52dc5
+  source_hash: 307bfe4a9c741f8d
   license_key: UI-MEET
   capacity_unit: seats
   depends_on:
@@ -118,7 +118,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 703a1bfb69f0c7f8
+  source_hash: 6e4bdbeb16afc3cd
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

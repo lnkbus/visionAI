@@ -12,13 +12,67 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from vai_stt_core.adapters.base import BaseSTTAdapter, SttResult
+from vai_stt_core.hallucination import Evidence, HallucinationFilter, build_filter
 
 log = logging.getLogger(__name__)
+
+
+def cuda_device_count() -> int:
+    """쓸 수 있는 CUDA 장치 수. 엔진이 없으면 0으로 본다."""
+    try:
+        import ctranslate2
+    except ImportError:  # pragma: no cover - 엔진 없는 이미지
+        return 0
+    try:
+        return int(ctranslate2.get_cuda_device_count())
+    except Exception:  # 드라이버·라이브러리 문제 원인은 여러 가지다 — 가리지 않는다
+        log.warning("CUDA 조회 실패 — 없는 것으로 본다", exc_info=True)
+        return 0
+
+
+def resolve_device(requested: str) -> str:
+    """요청한 장치를 실제로 쓸 수 있는 것으로 바꾼다.
+
+    ``auto``  — 있으면 GPU, 없으면 CPU. **어느 쪽으로 갔는지 로그에 남긴다.**
+    ``cuda``  — 없으면 **거부한다.** 조용히 CPU로 내려가면 "제안서에는 GPU라고
+                썼는데 현장은 CPU"가 되고, 그 사실은 아무 데도 안 적힌다.
+    ``cpu``   — 그대로.
+
+    맥에서는 NVIDIA GPU가 꽂혀 있어도 컨테이너가 쓸 수 없다. Docker Desktop 은
+    리눅스 VM 안에서 돌고 GPU 통과 경로가 없으며, macOS 용 CUDA 도 끊겼다.
+    그래서 여기서 미리 막지 않으면 시연 자리에서 크래시 루프로 드러난다.
+    """
+    wanted = requested.strip().lower() or "cuda"
+    if wanted not in {"auto", "cpu", "cuda"}:
+        # 오타를 그대로 넘기면 엔진이 훨씬 뒤에서 알아보기 어려운 오류를 낸다.
+        raise ValueError(f'device 는 auto·cpu·cuda 중 하나다 (받은 값: "{requested}")')
+    if wanted == "cpu":
+        return "cpu"
+
+    available = cuda_device_count()
+    if wanted == "auto":
+        device = "cuda" if available else "cpu"
+        log.info(
+            "STT 장치 자동 선택",
+            extra={"device": device, "cuda_devices": available},
+        )
+        return device
+
+    if wanted == "cuda" and not available:
+        raise RuntimeError(
+            "device=cuda 인데 쓸 수 있는 CUDA 장치가 없다. "
+            "맥(Docker Desktop)에서는 NVIDIA GPU 가 꽂혀 있어도 컨테이너가 쓸 수 없다 — "
+            "VM 안에서 돌고 GPU 통과 경로가 없다. "
+            'CPU 로 돌리려면 VAI_STT_ADAPTER_CONFIG 의 device 를 "cpu" 로, '
+            '장비에 따라 자동으로 고르려면 "auto" 로 둔다.'
+        )
+    return wanted
 
 
 class FasterWhisperAdapter(BaseSTTAdapter):
@@ -28,22 +82,45 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         self._model: Any = None
         self._options: dict[str, Any] = {}
         self._language: str | None = None
+        self._filter = HallucinationFilter()
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
+        # **먼저 경로부터 본다.** 없는 경로를 그대로 넘기면 엔진이
+        # huggingface 조회 실패로 죽고, 로그에는 모델 허브 경로가 찍힌다 —
+        # 폐쇄망 담당자가 그 문구를 보고 할 수 있는 일이 없다.
+        # 디스크 조회는 스레드로 넘긴다 — 기동 중 한 번뿐이라 비용은 없지만,
+        # 이벤트 루프 안에서 블로킹 호출을 하는 습관은 남기지 않는다.
+        if not await asyncio.to_thread(Path(model_path).is_dir):
+            raise RuntimeError(
+                f"STT 모델이 없다: {model_path}\n"
+                "  네트워크가 있는 곳에서 먼저 받는다:\n"
+                "    deploy/airgap/fetch_models.sh --out models --stt small\n"
+                "  받은 디렉토리를 컨테이너에 마운트한다(VAI_MODEL_DIR).\n"
+                "  모델 없이 화면만 볼 거라면 VAI_STT_ADAPTER=fake 로 내린다 — "
+                "다만 fake 는 인식하지 않는다."
+            )
+
         from faster_whisper import WhisperModel
 
-        device = config.get("device", "cuda")
-        compute_type = config.get("compute_type", "float16" if device == "cuda" else "int8")
+        device = resolve_device(str(config.get("device", "cuda")))
+        compute_type = config.get("compute_type") or ("float16" if device == "cuda" else "int8")
         self._language = config.get("language") or None
         """None이면 자동 감지 — 다국어 요건상 기본값으로 둔다."""
+
+        # CPU 추론에서는 스레드 수가 곧 처리량이다. 0이면 엔진 기본값(코어 수)에
+        # 맡긴다. 한 장비에 워커를 여럿 띄울 때는 **나눠 줘야** 서로 코어를
+        # 뺏지 않는다 — 안 나누면 워커를 늘릴수록 느려지는 구간이 생긴다.
+        cpu_threads = int(config.get("cpu_threads", 0) or 0)
 
         self._model = await asyncio.to_thread(
             WhisperModel,
             model_path,
             device=device,
             compute_type=compute_type,
+            cpu_threads=cpu_threads,
             local_files_only=True,
         )
+        self._filter = build_filter(config)
         self._options = {
             "beam_size": int(config.get("beam_size", 1)),
             "vad_filter": False,  # 구간 분할은 AUD-VAD가 이미 했다
@@ -51,7 +128,12 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         }
         log.info(
             "Faster-Whisper 로드",
-            extra={"model_path": model_path, "device": device, "compute_type": compute_type},
+            extra={
+                "model_path": model_path,
+                "device": device,
+                "compute_type": compute_type,
+                "cpu_threads": cpu_threads or "자동",
+            },
         )
 
     async def transcribe_stream(
@@ -66,7 +148,19 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         segments, info = await asyncio.to_thread(self._run, audio, sample_rate, hint)
         for segment in segments:
             text = segment.text.strip()
-            if not text:
+            evidence = Evidence(
+                text=text,
+                no_speech_prob=float(getattr(segment, "no_speech_prob", 0.0) or 0.0),
+                avg_logprob=float(getattr(segment, "avg_logprob", 0.0) or 0.0),
+            )
+            verdict = self._filter.judge(evidence)
+            if not verdict.keep:
+                # **반드시 남긴다.** "인식이 안 된다"는 신고가 들어왔을 때
+                # 안 들린 것과 걸러 낸 것을 구분할 방법이 이것뿐이다.
+                log.info(
+                    "인식 결과를 버렸다",
+                    extra={"reason": verdict.reason, "text": text},
+                )
                 continue
             yield SttResult(
                 text=text,

@@ -3,7 +3,16 @@ name = "vai-bot-voice"
 version = "0.1.0"
 description = "BOT-VOICE — 음성봇 대화 엔진 (시나리오 진행·슬롯·사람 연결)"
 requires-python = ">=3.12"
-dependencies = ["vai-contracts", "vai-common", "fastapi>=0.115", "uvicorn[standard]>=0.30"]
+dependencies = [
+    "vai-contracts",
+    "vai-common",
+    "vai-retrieval",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    # LLM·TTS 블록을 부른다. vai-common 이 깔아 주지 않는다 — 개발
+    # 워크스페이스에서는 형제 블록 것을 빌려 쓰다가 자기 이미지에서 죽는다.
+    "httpx>=0.27",
+]
 
 [build-system]
 requires = ["hatchling"]

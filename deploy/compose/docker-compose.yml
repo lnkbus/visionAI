@@ -46,7 +46,14 @@ services:
     # 반드시 공유 저장소가 필요하다 — memory 어댑터는 단일 프로세스 전용이다.
     image: qdrant/qdrant:v1.12.1
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6333 || exit 1"]
+      # **bash 로 부른다.** `/dev/tcp` 는 bash 전용 문법인데 이 이미지의
+      # /bin/sh 는 dash 다 — CMD-SHELL(=sh -c)로 두면 dash 가 그걸 진짜 파일
+      # 경로로 취급해 "Directory nonexistent" 로 **항상** 실패한다.
+      # 그러면 qdrant 는 멀쩡히 떠 있는데 unhealthy 로 남고, 이 컨테이너에
+      # 의존하는 블록이 통째로 기동에 실패한다.
+      #
+      # 이미지에 curl·wget·nc 가 없어서 TCP 연결 확인이 가장 가벼운 방법이다.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -173,6 +180,12 @@ services:
       VAI_CONSUMER_NAME: vad-1
       # GPU가 있고 silero extra를 설치했다면 silero로 바꾼다.
       VAI_VAD_ADAPTER: energy
+      # 에너지 VAD 는 노트북 마이크의 방 소음·키보드 소리를 발화로 넘긴다.
+      # 넘어간 잡음은 STT 가 "그럴듯한 자막"으로 채워 버리므로, 시끄러운
+      # 자리에서 시연한다면 여기부터 조인다:
+      #   VAI_VAD_ADAPTER_CONFIG='{"speech_ratio":5.0,"min_rms":300}'
+      # 너무 조이면 작은 목소리가 통째로 사라진다 — 조금씩 올린다.
+      VAI_VAD_ADAPTER_CONFIG: ${VAI_VAD_ADAPTER_CONFIG:-{}}
 
   stt-core:
     <<: *block
@@ -198,7 +211,23 @@ services:
       # 기본값이 실제 엔진이다. fake 로 돌리려면 VAI_STT_ADAPTER=fake 를 준다.
       VAI_STT_ADAPTER: ${VAI_STT_ADAPTER:-faster_whisper}
       VAI_STT_MODEL_PATH: ${VAI_STT_MODEL_PATH:-/models/faster-whisper-small}
-      VAI_STT_ADAPTER_CONFIG: '{"device":"cpu","compute_type":"int8","language":"ko"}'
+      # device 는 셋 중 하나다:
+      #   auto — 있으면 GPU, 없으면 CPU. 어느 쪽으로 갔는지 로그에 남는다 (기본값)
+      #   cuda — 없으면 **기동을 거부한다.** GPU 로 견적을 낸 설치에서 쓴다 —
+      #          조용히 CPU 로 내려가면 "제안서엔 GPU, 현장은 CPU"가 된다
+      #   cpu  — 그대로
+      # 맥은 카드가 꽂혀 있어도 컨테이너가 GPU 를 못 쓴다(Docker Desktop 은 VM).
+      #
+      # 환각 필터 임계값도 여기서 조인다. Whisper 는 무음·잡음 구간을 받으면
+      # 학습 데이터(유튜브 자막)의 상용구를 뱉는다 — "감사합니다", "구독과
+      # 좋아요". 기본값은 출발점이지 측정값이 아니다:
+      #   no_speech_threshold  0.6   이보다 무음 확률이 높으면 버린다
+      #   log_prob_threshold  -1.0   이보다 디코딩 근거가 약하면 버린다
+      #   repeat_limit           4   같은 낱말만 이만큼 이어지면 버린다
+      #   boilerplate_extra     []   현장 안내 멘트를 더한다
+      # 버린 결과는 이유와 함께 로그에 남는다 — "안 들렸다"와 "걸러 냈다"를
+      # 구분할 방법이 그것뿐이다.
+      VAI_STT_ADAPTER_CONFIG: '{"device":"auto","compute_type":"","language":"ko"}'
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.
       VAI_STT_PUBLISH_UI: "false"
@@ -250,6 +279,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: rag-kb
+        # 벡터 저장소 클라이언트. 이 구성은 qdrant 를 쓰므로 함께 넣는다 —
+        # 안 넣으면 기동 순간 ModuleNotFoundError 로 죽는다.
+        EXTRAS: ${VAI_RAG_EXTRAS-qdrant}
     environment:
       <<: *block-env
       VAI_BLOCK_ID: RAG-KB
@@ -274,6 +306,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: rag-srch
+        # 벡터 저장소 클라이언트. 이 구성은 qdrant 를 쓰므로 함께 넣는다 —
+        # 안 넣으면 기동 순간 ModuleNotFoundError 로 죽는다.
+        EXTRAS: ${VAI_RAG_EXTRAS-qdrant}
     environment:
       <<: *block-env
       VAI_BLOCK_ID: RAG-SRCH
@@ -427,17 +462,18 @@ services:
     environment:
       <<: *block-env
       VAI_BLOCK_ID: SPK-DIA
-      # 기본값이 신경망 임베더다. spectral 로 내리려면 명시한다.
-      VAI_SPK_EMBEDDER: ${VAI_SPK_EMBEDDER:-speechbrain}
-      VAI_SPK_EMBEDDER_MODEL: ${VAI_SPK_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
-      VAI_SPK_EMBEDDER_CONFIG: '{"device":"cpu"}'
       VAI_CONSUMER_GROUP: dia
       VAI_CONSUMER_NAME: dia-1
-      # 운영에서는 신경망 임베더로 바꾼다. spectral은 음역이 뚜렷이 다른
-      # 화자만 가른다:
-      #   VAI_DIA_EMBEDDER: speechbrain
-      #   VAI_DIA_EMBEDDER_MODEL: /models/ecapa-tdnn
-      VAI_DIA_EMBEDDER: spectral
+      # 블록이 읽는 접두사는 VAI_DIA_ 다. 다른 이름으로 주면 조용히 무시되고
+      # 기본값(spectral)으로 도는데, 그 사실은 "비슷한 목소리를 못 가른다"로만
+      # 나타나 원인을 찾기 어렵다.
+      #
+      # 기본값이 신경망 임베더(ECAPA-TDNN)다. `fetch_models.sh --spk` 로 받은
+      # 가중치가 없으면 기동에 실패하므로, 모델 없이 돌릴 때는 spectral 로 내린다:
+      #   VAI_DIA_EMBEDDER=spectral docker compose up -d spk-dia
+      VAI_DIA_EMBEDDER: ${VAI_DIA_EMBEDDER:-speechbrain}
+      VAI_DIA_EMBEDDER_MODEL: ${VAI_DIA_EMBEDDER_MODEL:-/models/spkrec-ecapa-voxceleb}
+      VAI_DIA_EMBEDDER_CONFIG: '{"device":"cpu"}'
     ports:
       - "8093:8093"
 
@@ -453,12 +489,21 @@ services:
       VAI_BLOCK_ID: UI-MEET
       VAI_MEETUI_SUMMARY_URL: http://llm-sum:8089
       VAI_MEETUI_DIARIZATION_URL: http://spk-dia:8093
+      # 회의 시작·마이크 오디오가 이리로 나간다. **컨테이너 안에서 부르는
+      # 주소다** — 브라우저는 8094 만 보고, 게이트웨이로 나가는 일은 UI-MEET
+      # 이 대신한다(역방향 프록시 뒤에서도 그대로 동작한다).
+      VAI_MEETUI_GATEWAY_URL: http://core-gw:8080
+      # 참관 전용으로 쓰려면 false. 오디오가 PBX·회의 시스템에서 들어오는
+      # 구성에서는 화면이 마이크를 잡을 이유가 없다.
+      VAI_MEETUI_MIC_ENABLED: ${VAI_MEETUI_MIC_ENABLED:-true}
     depends_on:
       redis:
         condition: service_healthy
       llm-sum:
         condition: service_started
       spk-dia:
+        condition: service_started
+      core-gw:
         condition: service_started
     ports:
       - "8094:8094"

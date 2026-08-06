@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
+import websockets
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -30,7 +31,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from redis.asyncio import Redis
 
 from vai_common.bus import EventBus, RedisEventBus, build_bus
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_contracts.events import SpeakerLabel
 from vai_contracts.summary import Summary
@@ -49,6 +50,29 @@ class MeetUiSettings(BaseSettings):
     summary_url: str = "http://localhost:8089"
     diarization_url: str = "http://localhost:8093"
 
+    gateway_url: str = "http://localhost:8080"
+    """CORE-GW 주소. 회의 시작과 마이크 오디오가 이리로 간다.
+
+    **브라우저가 아니라 이 프로세스가 부르는 주소다.** 화면은 늘 UI-MEET 만
+    보고, 게이트웨이로 나가는 일은 여기서 대신한다. 브라우저가 직접 8080 을
+    부르게 하면 포트가 둘로 늘어나고, 역방향 프록시 뒤나 다른 호스트에서
+    바로 깨진다 — 그 사실은 고객사 망에서야 드러난다.
+    """
+
+    gateway_token: str = ""
+    """CORE-GW 액세스 토큰. 게이트웨이가 dev_auth 면 비워 둔다.
+
+    운영에서는 게이트웨이가 인증을 요구하므로 서비스 토큰이 필요하다.
+    안 넣으면 회의 시작이 401 로 막힌다 — 화면에 그대로 보인다.
+    """
+
+    mic_enabled: bool = True
+    """회의 화면에서 마이크로 직접 회의를 시작할 수 있게 한다.
+
+    끄면 참관 전용 화면이 된다. 오디오가 PBX·회의 시스템에서 들어오는
+    구성에서는 화면이 마이크를 잡을 이유가 없다.
+    """
+
 
 class SpeakerName(BaseModel):
     """화자 ID → 실명 매핑."""
@@ -66,6 +90,7 @@ def create_app(
     bus: EventBus | None = None,
     summary_client: httpx.AsyncClient | None = None,
     diarization_client: httpx.AsyncClient | None = None,
+    gateway_client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
     common = get_settings()
     cfg = MeetUiSettings()
@@ -80,6 +105,11 @@ def create_app(
         )
         application.state.diarization = diarization_client or httpx.AsyncClient(
             base_url=cfg.diarization_url.rstrip("/"), timeout=5.0
+        )
+        application.state.gateway = gateway_client or httpx.AsyncClient(
+            base_url=cfg.gateway_url.rstrip("/"),
+            timeout=10.0,
+            headers=({"authorization": f"Bearer {cfg.gateway_token}"} if cfg.gateway_token else {}),
         )
         # 참석자 실명은 **사람이 직접 입력한 데이터**다. 프로세스 메모리에 두면
         # 재기동으로 사라지고, 복제본이 둘이면 입력한 화면과 조회하는 화면이
@@ -99,6 +129,7 @@ def create_app(
             if not injected:
                 await application.state.summary.aclose()
                 await application.state.diarization.aclose()
+                await application.state.gateway.aclose()
                 await application.state.bus.close()
 
     app = create_block_app(
@@ -183,9 +214,73 @@ def create_app(
         )
         return payload
 
+    if cfg.mic_enabled:
+        # 회의록 화면이 **회의를 시작할 수 있어야 한다.**
+        #
+        # 원래는 참관 전용이었다. 세션 ID 를 받아 자막만 흘려보는 화면이라,
+        # 회의를 시작하려면 게이트웨이 데모 페이지를 먼저 열어 세션을 만들고
+        # 그 ID 를 여기에 옮겨 적어야 했다. 고객사 담당자가 그 경로를 알 리
+        # 없고, 실제로 회의 이름을 적어 넣고 "안 된다"로 끝났다.
+        #
+        # 게이트웨이는 이 프로세스가 대신 부른다. 화면은 UI-MEET 만 본다 —
+        # 브라우저가 8080 을 직접 부르게 하면 역방향 프록시 뒤에서 깨진다.
+
+        @app.post("/v1/meet/sessions", tags=["meeting"])
+        async def open_meeting(request: Request) -> dict[str, str]:
+            """회의 세션을 연다(회의록 프로파일 고정)."""
+            client: httpx.AsyncClient = request.app.state.gateway
+            try:
+                response = await client.post(
+                    "/v1/sessions",
+                    json={"profile": "meeting", "audio_format": "pcm_16k", "language": "ko"},
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="게이트웨이에 연결할 수 없다 — CORE-GW 가 떠 있는지 본다",
+                ) from exc
+            return _gateway_session(response)
+
+        @app.post("/v1/meet/sessions/{session_id}/join", tags=["meeting"])
+        async def join_meeting(session_id: str, request: Request) -> dict[str, str]:
+            """이미 도는 회의에 마이크를 하나 더 붙인다.
+
+            회의는 여러 사람이 한다. 참여 길이 없으면 각자 켤 때마다 회의가
+            새로 만들어지고, 회의록이 사람 수만큼 쪼개진다.
+            """
+            client: httpx.AsyncClient = request.app.state.gateway
+            try:
+                response = await client.post(f"/v1/sessions/{session_id}/join")
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE, detail="게이트웨이에 연결할 수 없다"
+                ) from exc
+            return _gateway_session(response)
+
+        @app.websocket("/v1/meet/mic")
+        async def mic(websocket: WebSocket, token: str = "") -> None:
+            """브라우저 마이크를 게이트웨이 오디오 소켓으로 중계한다.
+
+            한 홉을 더 타는 대신 화면이 포트 하나만 보게 된다. 회의 오디오는
+            초당 32KB 남짓이라 이 홉이 문제 되는 규모가 아니고, 대신
+            역방향 프록시·다른 호스트·HTTPS 구성에서 그냥 동작한다.
+            """
+            if not token:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="token 필요")
+                return
+            await websocket.accept()
+            await _relay_audio(cfg.gateway_url, token, websocket)
+
     @app.get("/minutes", include_in_schema=False)
     async def minutes() -> FileResponse:
         return FileResponse(STATIC_DIR / "minutes.html")
+
+    @app.get("/v1/meet/capabilities", tags=["meeting"])
+    async def capabilities() -> dict[str, bool]:
+        """화면이 무엇을 할 수 있는지. 없는 버튼을 그려 놓고 눌리게 하지 않는다."""
+        return {"mic": cfg.mic_enabled}
+
+    set_landing(app, "/minutes")
 
     return app
 
@@ -279,3 +374,44 @@ async def _relay_labels(bus: EventBus, websocket: WebSocket, session_id: str) ->
         # "누가 말했는가"가 통째로 비는 상태이고, 화면은 정상으로 보인다.
         log.exception("화자 라벨 중계 중단", extra={"session_id": session_id})
         raise
+
+
+def _gateway_session(response: httpx.Response) -> dict[str, str]:
+    """게이트웨이 응답을 화면이 쓸 두 값으로 줄인다.
+
+    실패하면 **게이트웨이가 말한 이유를 그대로 올린다.** 여기서 "회의를
+    시작할 수 없다"로 뭉개면, 끝난 세션이라 막힌 것인지 인증이 없어 막힌
+    것인지 화면에서 구분할 수 없다.
+    """
+    if response.status_code >= httpx.codes.BAD_REQUEST:
+        detail = "회의를 시작할 수 없다"
+        with contextlib.suppress(Exception):
+            detail = response.json().get("detail") or detail
+        raise HTTPException(response.status_code, detail=detail)
+
+    payload = response.json()
+    return {
+        "session_id": str(payload["session"]["session_id"]),
+        "ws_token": str(payload["ws_token"]),
+    }
+
+
+async def _relay_audio(gateway_url: str, token: str, browser: WebSocket) -> None:
+    """브라우저 → 게이트웨이 오디오 중계.
+
+    되돌아오는 자막은 여기로 흘리지 않는다. 회의 화면은 이미 관찰 소켓으로
+    자막을 받고 있어서, 양쪽으로 보내면 같은 줄이 두 번 그려진다.
+    """
+    target = gateway_url.replace("https://", "wss://").replace("http://", "ws://").rstrip("/")
+    try:
+        async with websockets.connect(f"{target}/v1/audio/stream?token={token}") as upstream:
+            while True:
+                frame = await browser.receive_text()
+                await upstream.send(frame)
+    except WebSocketDisconnect:
+        log.info("회의 마이크 종료")
+    except Exception:
+        # 조용히 끊기면 화면은 "연결됨"인데 자막이 영영 안 나온다.
+        log.exception("마이크 중계 중단")
+        with contextlib.suppress(Exception):
+            await browser.close(code=status.WS_1011_INTERNAL_ERROR, reason="게이트웨이 연결 끊김")

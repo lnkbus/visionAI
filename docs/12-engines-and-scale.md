@@ -13,7 +13,7 @@
 | 블록 | 환경변수 | 값 |
 |---|---|---|
 | STT-CORE | `VAI_STT_ADAPTER` | `fake` · `faster_whisper` |
-| SPK-DIA | `VAI_SPK_EMBEDDER` | `spectral` · `speechbrain` |
+| SPK-DIA | `VAI_DIA_EMBEDDER` | `spectral` · `speechbrain` |
 | LLM-GW | `VAI_LLM_ADAPTER` | `echo` · `openai_compatible` · `anthropic` |
 | TTS-CORE | `VAI_TTS_ADAPTER` | `fake` · `neural` |
 
@@ -32,15 +32,31 @@ deploy/airgap/fetch_models.sh --out models --stt large-v3-turbo
 | `large-v3-turbo` | 1.6 GB | **품질/속도 균형이 가장 좋다** |
 | `large-v3` | 3.1 GB | 최고 품질 |
 
+받아 오는 저장소는 `fetch_models.sh` 안에 표로 적혀 있습니다(`--list` 로 봅니다).
+이름에서 만들어 내지 않습니다 — **`large-v3-turbo` 만 Systran 이 아니라 제3자가
+CTranslate2 로 변환해 올린 것**이기 때문입니다. 반입 심사에서 배포처를 묻는
+현장이면 `large-v3`(Systran) 를 쓰십시오. 품질은 더 좋고, 대신 3.1GB 에 느립니다.
+
 ```yaml
 VAI_STT_ADAPTER: faster_whisper
 VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3-turbo
-VAI_STT_ADAPTER_CONFIG: '{"device":"cuda","compute_type":"float16","language":"ko"}'
+VAI_STT_ADAPTER_CONFIG: '{"device":"auto","compute_type":"","language":"ko"}'
 ```
 
-`device` 를 `cpu` → `cuda` 로 바꾸는 것이 **GPU 추론 전환의 전부**다. 지연이
-문제면 여기부터 본다. Apple Silicon 에서는 `cpu` 로 두되 `compute_type` 을
-`int8` 로 — CTranslate2 는 Metal 백엔드가 없어 `mps` 를 받지 않는다.
+`device` 가 GPU 추론 전환의 전부다. 지연이 문제면 여기부터 본다.
+
+| 값 | 뜻 |
+|---|---|
+| `auto` (기본) | 있으면 GPU, 없으면 CPU. **어느 쪽으로 갔는지 로그에 남는다** |
+| `cuda` | 없으면 **기동을 거부한다.** GPU 로 견적을 낸 설치에서 쓴다 — 조용히 CPU 로 내려가면 "제안서엔 GPU, 현장은 CPU"가 되고 아무 데도 안 적힌다 |
+| `cpu` | 그대로 |
+
+**맥에서는 어떤 GPU 도 못 쓴다.** Apple Silicon 은 CTranslate2 에 Metal 백엔드가
+없고(`mps` 를 받지 않는다), 인텔 맥은 NVIDIA 카드가 꽂혀 있어도 Docker Desktop 이
+VM 안에서 돌아 GPU 통과 경로가 없다. 둘 다 `compute_type` 을 `int8` 로 둔다.
+
+CPU 추론에서는 스레드 수가 곧 처리량이다. 한 장비에 워커를 여럿 띄우면
+`cpu_threads` 로 나눠 준다 — 안 나누면 워커를 늘릴수록 느려지는 구간이 생긴다.
 
 ### 2.2 유료 API (구글 STT 등)
 
@@ -76,14 +92,13 @@ torch 가 딸려 온다(이미지가 커진다 — 끄려면 `VAI_SPK_EXTRAS=`).
 > 자동으로 실명을 알아내지 않는다. 성문 등록 없이는 불가능하고, 등록은 그 자체가
 > 생체정보 수집이라 별도 동의 절차가 필요하다.
 
-## 4. 요약 sLLM — 맥 GPU 포함
+## 4. 요약 sLLM
 
 LLM-GW 의 `openai_compatible` 어댑터가 **OpenAI 호환 엔드포인트면 무엇이든**
-받는다. Ollama·LM Studio·vLLM 이 모두 그 형식이므로, 맥 GPU 는 별도 어댑터가
-필요 없다.
+받는다. Ollama·LM Studio·vLLM 이 모두 그 형식이므로 별도 어댑터가 필요 없다.
 
 ```bash
-# 맥에서 (Metal 가속)
+# 맥에서 (Apple Silicon 은 Metal 가속, 인텔 맥은 CPU)
 ollama serve
 ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
@@ -99,6 +114,7 @@ VAI_LLM_MODEL: qwen2.5:7b-instruct-q4_K_M
 **16GB 맥 주의**: STT 와 sLLM 을 동시에 올리면 스왑이 난다. 그러면 측정한 지연이
 모델 성능이 아니라 메모리 압박을 재게 된다. 데모에서는 **요약을 회의 종료 후**에
 돌리므로 겹치지 않지만, 동시 실행이 필요하면 STT 를 `small` 로 내린다.
+32GB 면 이 제약이 없다 — `large-v3-turbo` + 7B 를 함께 올려도 된다.
 
 > `echo` 어댑터로 두면 **요약이 프롬프트를 그대로 돌려준다.** 콘솔의 LLM-GW
 > 직접 호출 시험에서 그 사실이 즉시 보인다.

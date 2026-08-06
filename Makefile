@@ -33,6 +33,9 @@ eval:  ## 골든셋 평가 (검색·PII·TTS) — 실패 사례까지
 eval-gate:  ## 기준선 대비 품질 회귀 판정 (회귀 시 exit 1)
 	uv run evalctl compare --root . -v
 
+# helm lint 는 "렌더링이 되는가"까지만 본다. 필드 이름을 오타 내도 통과하므로
+# kubeconform 으로 쿠버네티스 스키마까지 대조한다. 오버레이는 **전부** 돌린다 —
+# 하나만 빼도 그 패키지에서만 깨지는 값이 끝까지 안 잡힌다.
 chart:  ## Helm 차트 렌더링 + 쿠버네티스 스키마 검증 (kubeconform 필요)
 	@cd deploy/charts/visionai && helm lint . && \
 	for o in "" "-f values-aicc.yaml" "-f values-meeting.yaml" "-f values-voicebot.yaml" "-f values-avatar.yaml"; do \
@@ -64,6 +67,9 @@ down:  ## compose 환경 정리
 logs:  ## compose 로그 추적
 	docker compose -f deploy/compose/docker-compose.yml logs -f
 
+smoke:  ## compose 스택을 **띄운 채로** 실제 배선 확인 (up 이후)
+	uv run --with websockets python deploy/compose/smoke.py
+
 demo:  ## 화면 주소 안내 (up 이후)
 	@echo "고객 데모(마이크→자막) : http://localhost:8080/demo"
 	@echo "상담원 워크스페이스     : http://localhost:8091/workspace"
@@ -77,13 +83,6 @@ bundle:  ## 에어갭 반입 번들 생성 (LICENSE=customer.lic 또는 BLOCKS="
 bundle-plan:  ## 반입 계획만 계산 (docker 없이 확인)
 	uv run blockctl bundle-plan $(if $(LICENSE),--license $(LICENSE),) \
 		$(foreach b,$(BLOCKS),--block $(b))
-
-chart:  ## Helm 차트 검증 (lint + 기본값·패키지 오버레이 렌더링)
-	cd deploy/charts/visionai && helm lint . && \
-		helm template visionai . > /dev/null && \
-		helm template visionai . -f values-aicc.yaml > /dev/null && \
-		helm template visionai . -f values-meeting.yaml > /dev/null && \
-		echo "✓ 차트 검증 통과"
 
 release:  ## 온프렘 릴리스 빌드 (PUBLIC_KEY=... 필수, OBFUSCATE=1 로 난독화)
 	@test -n "$(PUBLIC_KEY)" || (echo "PUBLIC_KEY=경로 가 필요하다"; exit 1)

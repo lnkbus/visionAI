@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 18a249ac782e99fd7a0e3d972d367f1844242405f8b6824f3744cd2ea16c1fba
+configuration_hash: 136acd5774be7356607e5be1b82ef14cbf753c39193ddb49a760445d1e9414cf
 component_count: 23
 components:
 - id: AUD-RTP
@@ -19,7 +19,7 @@ components:
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 532925fe0c5abf14
+  source_hash: 84d8098de69327f9
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -28,7 +28,7 @@ components:
   name: 음성봇 대화 엔진
   version: 0.1.0
   kind: block
-  source_hash: 2ba0bb66935f291a
+  source_hash: 4130248c57109261
   license_key: BOT-VOICE
   capacity_unit: concurrent_channels
   depends_on:
@@ -38,7 +38,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: de18ce482f2d20bb
+  source_hash: 7b9ad68be27df098
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -56,7 +56,7 @@ components:
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: b3d55cebdce276d5
+  source_hash: 955a3a13e4dadc28
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -72,7 +72,7 @@ components:
   name: 암호화·감사
   version: 0.1.0
   kind: block
-  source_hash: 02623cbeb62a3579
+  source_hash: 478c154189896f89
   license_key: CORE-SEC
   capacity_unit: none
   depends_on:
@@ -111,7 +111,7 @@ components:
   name: 지식베이스 수집기
   version: 0.3.0
   kind: block
-  source_hash: 7722a872d044126d
+  source_hash: c3b3472d01a076a4
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:
@@ -120,7 +120,7 @@ components:
   name: 하이브리드 검색 & 리랭킹
   version: 0.3.0
   kind: block
-  source_hash: d82ade6ecf9ecbe9
+  source_hash: eaac8aaead940db1
   license_key: RAG-SRCH
   capacity_unit: index_chunks
   depends_on:
@@ -130,7 +130,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 0e85d679452c04e2
+  source_hash: 007e373dc118bcb4
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:
@@ -141,7 +141,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: 27525148c4ce4ff8
+  source_hash: c6cbdc87392afbca
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -151,7 +151,7 @@ components:
   name: 실시간 Agent Assist
   version: 0.2.0
   kind: block
-  source_hash: 4812d471f7410bde
+  source_hash: 7594b90a54bcdfdf
   license_key: TA-ASSIST
   capacity_unit: concurrent_channels
   depends_on:
@@ -163,7 +163,7 @@ components:
   name: 음성 합성
   version: 0.1.0
   kind: block
-  source_hash: 31d0c0a0e43ae9ff
+  source_hash: ecf008218061f730
   license_key: TTS-CORE
   capacity_unit: concurrent_channels
   depends_on:
@@ -172,7 +172,7 @@ components:
   name: 상담원 워크스페이스
   version: 0.1.0
   kind: block
-  source_hash: cef7ef0011396d52
+  source_hash: 9a4bb613a38086b8
   license_key: UI-AGENT
   capacity_unit: seats
   depends_on:
@@ -188,7 +188,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 703a1bfb69f0c7f8
+  source_hash: 6e4bdbeb16afc3cd
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

@@ -36,7 +36,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common.audit import emit as emit_audit
 from vai_common.auth import AuthError, Principal, verify_access_token
 from vai_common.bus import EventBus, build_bus
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_common.worker import BlockWorker, SessionReaper
 from vai_contracts.analytics import CallRecord, FallbackUtterance, RankEntry, StatsOverview
@@ -499,6 +499,8 @@ def create_app(client: httpx.AsyncClient | None = None, bus: EventBus | None = N
     @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:
         return FileResponse(STATIC_DIR / "console.html")
+
+    set_landing(app, "/console")
 
     return app
 

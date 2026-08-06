@@ -379,10 +379,21 @@ visionAI/
 make install          # uv 워크스페이스 동기화
 make check            # 린트 + 블록 경계 + 타입 + 테스트 + 카탈로그 검증
 make up && make demo  # compose 기동 후 http://localhost:8080/demo
+make smoke            # 띄운 스택이 **실제로 도는지** (up 이후)
 ```
 
 `make test`는 Redis도 GPU도 요구하지 않는다(인메모리 버스 + fake 어댑터).
 Redis가 떠 있으면 실프로세스 스택 스모크 테스트까지 함께 돈다.
+
+`make smoke`는 그 위의 한 겹이다. **`make check`가 검증하는 것은 코드고,
+`make smoke`가 검증하는 것은 그 코드가 그 이미지에 들어 있는가다.** 개발
+워크스페이스는 모든 패키지 의존성이 한 venv 에 섞여 있어서, 자기 의존성을
+선언하지 않은 블록도 개발 중에는 잘 돈다 — 형제 것을 빌려 쓰기 때문이다.
+그 사실은 `uv sync --package` 로 만든 자기 이미지에서 기동 순간에만 드러난다.
+
+같은 계열 결함이 열두 번 났다(누락된 uvicorn·vai_retrieval·qdrant_client,
+마운트 볼륨 chmod 실패, sh 에서 안 도는 헬스체크). 전부 빌드는 통과했다.
+CI 의 `compose 실기동` 잡이 같은 것을 돌린다.
 
 ### 블록 개발 규칙
 

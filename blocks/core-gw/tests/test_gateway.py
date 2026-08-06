@@ -234,3 +234,56 @@ async def test_broken_ui_forwarder_tells_the_client_and_closes() -> None:
 
     codes = [item.get("code") for item in websocket.sent if item.get("event") == "error"]
     assert "stream_broken" in codes, "클라이언트가 재접속해야 한다는 것을 알아야 한다"
+
+
+# ── 세션 참여 ────────────────────────────────────────────────────────────────
+#
+# 상담도 회의도 여러 사람이 한다. 그런데 세션을 **만드는** 길만 있으면 화면
+# 하나가 곧 세션 하나가 된다 — 두 사람이 각자 마이크를 켜면 서로 다른 상담
+# 두 건이 되고, 화면에는 늘 한쪽만 뜬다. 맥 데모에서 그렇게 보였다:
+# 두 사람이 말하는데 자막의 화자가 전부 "고객"이었다.
+
+
+def test_join_keeps_the_same_session(client: TestClient) -> None:
+    """토큰은 새로 나오되 **세션은 그대로**여야 한다. 그래야 두 마이크가 한
+    타임라인에 모이고, 요약도 한 벌만 나온다."""
+    session_id = start_session(client)["session"]["session_id"]
+
+    joined = client.post(f"/v1/sessions/{session_id}/join", headers=auth_header())
+
+    assert joined.status_code == 200, joined.text
+    assert joined.json()["session"]["session_id"] == session_id, "새 세션이 생겼다"
+    assert joined.json()["ws_token"], "붙을 토큰을 줘야 한다"
+
+
+def test_join_requires_authentication(client: TestClient) -> None:
+    session_id = start_session(client)["session"]["session_id"]
+
+    assert client.post(f"/v1/sessions/{session_id}/join").status_code == 401
+
+
+def test_join_hides_other_tenants_sessions(client: TestClient) -> None:
+    """존재 여부 자체가 정보다 — 남의 세션은 "권한 없음"이 아니라 "없음"이다."""
+    session_id = start_session(client, tenant="t1")["session"]["session_id"]
+
+    response = client.post(f"/v1/sessions/{session_id}/join", headers=auth_header("t2"))
+
+    assert response.status_code == 404
+
+
+def test_join_rejects_unknown_session(client: TestClient) -> None:
+    response = client.post("/v1/sessions/sess_없음/join", headers=auth_header())
+
+    assert response.status_code == 404
+
+
+def test_join_rejects_a_closed_session(client: TestClient) -> None:
+    """끝난 세션에 붙으면 소켓은 열리는데 자막은 영영 안 나온다. 그 조용한
+    실패보다 여기서 이유를 말하고 막는 편이 낫다."""
+    session_id = start_session(client)["session"]["session_id"]
+    client.post(f"/v1/sessions/{session_id}/close", headers=auth_header())
+
+    response = client.post(f"/v1/sessions/{session_id}/join", headers=auth_header())
+
+    assert response.status_code == 409
+    assert "끝난 세션" in response.json()["detail"]

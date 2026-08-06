@@ -20,6 +20,8 @@
   header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
   h1 { font-size:18px; margin:0; }
   .sub { color:var(--muted); font-size:12px; }
+  .hint { color:var(--muted); font-size:12px; }
+  code { background:var(--card,#f4f5f7); padding:1px 5px; border-radius:4px; font-size:12px; }
   .bar { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
   label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
   input { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:7px;
@@ -64,11 +66,23 @@
   </header>
 
   <div class="bar">
+    <button id="start">회의 시작</button>
+    <button id="finish" class="ghost" disabled>회의 종료</button>
+    <span class="hint">이 기기의 마이크로 회의를 연다</span>
+  </div>
+
+  <p class="sub" id="invite" hidden>
+    다른 참석자는 이 주소로 들어와 <b>회의 시작</b>을 누르면 같은 회의에 붙는다.
+    <code id="invite-url"></code>
+    <button id="invite-copy" class="ghost">복사</button>
+  </p>
+
+  <div class="bar">
     <div>
       <label for="session">세션 ID</label>
       <input id="session" placeholder="sess_20260805_ab12cd34" size="30" />
     </div>
-    <button id="connect">회의 참관</button>
+    <button id="connect" class="ghost">회의 참관</button>
     <button id="disconnect" class="ghost" disabled>중지</button>
     <button id="load" class="ghost">회의록 불러오기</button>
     <span class="status"><span class="dot" id="dot"></span><span id="state">대기</span></span>
@@ -77,7 +91,7 @@
   <div class="grid">
     <section>
       <h2>실시간 자막</h2>
-      <div id="transcript"><p class="empty">세션 ID를 넣고 참관을 시작한다.</p></div>
+      <div id="transcript"><p class="empty">회의를 시작하면 자막이 여기에 흐른다. 이미 도는 회의를 보려면 아래에 세션 ID를 넣는다.</p></div>
     </section>
 
     <div>
@@ -101,6 +115,8 @@ const els = {
   session: $("session"), connect: $("connect"), disconnect: $("disconnect"),
   dot: $("dot"), state: $("state"), transcript: $("transcript"),
   roster: $("roster"), minutes: $("minutes"), rosterMsg: $("roster-msg"),
+  start: $("start"), finish: $("finish"),
+  invite: $("invite"), inviteUrl: $("invite-url"), inviteCopy: $("invite-copy"),
 };
 
 let ws = null;
@@ -341,9 +357,7 @@ async function loadSummary() {
 }
 
 // ── 연결 ─────────────────────────────────────────────────────────────────────
-els.connect.addEventListener("click", () => {
-  const sessionId = els.session.value.trim();
-  if (!sessionId) { setState("세션 ID가 필요하다"); return; }
+function observe(sessionId) {
 
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${scheme}://${location.host}/v1/meet/stream?session_id=${encodeURIComponent(sessionId)}`);
@@ -365,7 +379,203 @@ els.connect.addEventListener("click", () => {
   });
   ws.addEventListener("close", () => { setState("연결 종료"); reset(); });
   ws.addEventListener("error", () => setState("연결 오류"));
+}
+
+els.connect.addEventListener("click", () => {
+  const sessionId = els.session.value.trim();
+  if (!sessionId) { setState("세션 ID가 필요하다"); return; }
+  observe(sessionId);
 });
+
+// ── 마이크 ───────────────────────────────────────────────────────────────────
+// 이 화면은 원래 참관 전용이었다. 회의를 시작하려면 게이트웨이 데모 페이지를
+// 먼저 열어 세션을 만들고 그 ID 를 여기 옮겨 적어야 했다 — 고객사 담당자가
+// 그 경로를 알 리 없다. 여기서 바로 연다.
+//
+// 오디오는 UI-MEET 이 게이트웨이로 중계한다. 화면은 포트 하나만 본다.
+const TARGET_RATE = 16000;
+let micWs = null, audioCtx = null, micStream = null, micNode = null;
+
+const WORKLET = `
+class Capture extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = []; this.filled = 0; }
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (!ch) return true;
+    this.buf.push(new Float32Array(ch));
+    this.filled += ch.length;
+    // 20ms(48k 기준 960샘플)보다 잘게 보내면 소켓 프레임만 늘어난다.
+    if (this.filled >= 4096) {
+      const merged = new Float32Array(this.filled);
+      let at = 0;
+      for (const part of this.buf) { merged.set(part, at); at += part.length; }
+      this.port.postMessage(merged);
+      this.buf = []; this.filled = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('capture', Capture);
+`;
+
+function resample(input, from, to) {
+  if (from === to) return input;
+  const ratio = from / to;
+  const out = new Float32Array(Math.floor(input.length / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const at = i * ratio;
+    const low = Math.floor(at);
+    const high = Math.min(low + 1, input.length - 1);
+    out[i] = input[low] + (input[high] - input[low]) * (at - low);
+  }
+  return out;
+}
+
+function toPcm16(frames) {
+  const out = new Int16Array(frames.length);
+  for (let i = 0; i < frames.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, frames[i]));
+    out[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+  }
+  return out;
+}
+
+function base64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function startMic(sessionId) {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+  audioCtx = new AudioContext({ sampleRate: TARGET_RATE });
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await audioCtx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+
+  micNode = new AudioWorkletNode(audioCtx, "capture");
+  micNode.port.onmessage = (ev) => {
+    if (micWs?.readyState !== WebSocket.OPEN) return;
+    const frames = resample(ev.data, audioCtx.sampleRate, TARGET_RATE);
+    micWs.send(JSON.stringify({
+      event: "audio_data",
+      session_id: sessionId,
+      format: "pcm_16k",
+      // 회의는 채널로 사람을 가르지 않는다. 누가 말했는지는 화자분리가 낸다.
+      channel: "customer",
+      audio_base64: base64(new Uint8Array(toPcm16(frames).buffer)),
+    }));
+  };
+  audioCtx.createMediaStreamSource(micStream).connect(micNode);
+  // 목적지에 안 붙이면 브라우저가 그래프를 놀리는 경우가 있다. 무음 게인으로 붙인다.
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  micNode.connect(mute).connect(audioCtx.destination);
+}
+
+function stopMic() {
+  micNode?.disconnect();
+  micStream?.getTracks().forEach((track) => track.stop());
+  audioCtx?.close();
+  micNode = audioCtx = micStream = null;
+}
+
+function showInvite(sessionId) {
+  const url = new URL(location.href);
+  url.searchParams.set("session", sessionId);
+  els.inviteUrl.textContent = url.toString();
+  els.invite.hidden = false;
+}
+
+els.inviteCopy?.addEventListener("click", () => {
+  navigator.clipboard?.writeText(els.inviteUrl.textContent);
+  els.inviteCopy.textContent = "복사됨";
+  setTimeout(() => { els.inviteCopy.textContent = "복사"; }, 1500);
+});
+
+async function openMeeting() {
+  // 주소에 회의가 적혀 있으면 그 회의에 붙는다. 참여 길이 없으면 사람마다
+  // 회의가 새로 생기고 회의록이 인원수만큼 쪼개진다.
+  const joining = new URLSearchParams(location.search).get("session");
+  const path = joining
+    ? `/v1/meet/sessions/${encodeURIComponent(joining)}/join`
+    : "/v1/meet/sessions";
+  const response = await fetch(path, { method: "POST" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `회의를 열지 못했다 (${response.status})`);
+  }
+  return response.json();
+}
+
+els.start.addEventListener("click", async () => {
+  els.start.disabled = true;
+  try {
+    setState("회의 여는 중…");
+    const { session_id: sessionId, ws_token: token } = await openMeeting();
+    els.session.value = sessionId;
+    showInvite(sessionId);
+
+    // 자막은 참관 소켓으로 받는다 — 마이크 소켓과 경로를 나눠야 참관만 하는
+    // 사람과 똑같은 화면을 본다.
+    observe(sessionId);
+
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    micWs = new WebSocket(`${scheme}://${location.host}/v1/meet/mic?token=${encodeURIComponent(token)}`);
+    micWs.addEventListener("open", async () => {
+      try {
+        await startMic(sessionId);
+        setState(`회의 중 · ${sessionId}`, true);
+        els.finish.disabled = false;
+      } catch (err) {
+        // 마이크 거부가 여기로 온다. 소켓은 열렸는데 소리는 안 가는 상태라
+        // 화면이 "회의 중"으로 보이면 안 된다.
+        setState(`마이크를 쓸 수 없다: ${err.message}`);
+        micWs.close();
+      }
+    });
+    micWs.addEventListener("close", () => { stopMic(); els.start.disabled = false; els.finish.disabled = true; });
+    micWs.addEventListener("error", () => setState("마이크 연결 오류"));
+  } catch (err) {
+    setState(err.message);
+    els.start.disabled = false;
+  }
+});
+
+els.finish.addEventListener("click", () => {
+  // 요약은 세션이 닫혀야 돈다. 소켓만 끊으면 회의록이 영영 안 나온다.
+  if (micWs?.readyState === WebSocket.OPEN) {
+    micWs.send(JSON.stringify({ event: "close_session", session_id: els.session.value.trim() }));
+  }
+  micWs?.close();
+  stopMic();
+  els.finish.disabled = true;
+  els.start.disabled = false;
+  setState("회의 종료 — 회의록 생성 중. 잠시 후 [회의록 불러오기]");
+});
+
+// 마이크를 못 쓰는 구성(PBX·회의 시스템에서 오디오가 들어오는 곳)에서는
+// 버튼을 지운다. 눌리는데 아무 일도 안 나는 버튼보다 없는 편이 낫다.
+void (async () => {
+  const response = await fetch("/v1/meet/capabilities").catch(() => null);
+  const able = response?.ok ? (await response.json()).mic : false;
+  if (!able) {
+    els.start.hidden = els.finish.hidden = true;
+    document.querySelector(".hint").textContent = "이 배포는 참관 전용이다 — 오디오는 회의 시스템에서 들어온다";
+  }
+})();
+
+// 참여 링크로 들어왔으면 세션 칸을 미리 채워 둔다.
+{
+  const joining = new URLSearchParams(location.search).get("session");
+  if (joining) {
+    els.session.value = joining;
+    els.start.textContent = "회의 참여";
+    setState(`참여 대기 · ${joining}`);
+  }
+}
 
 function reset() {
   els.connect.disabled = false;

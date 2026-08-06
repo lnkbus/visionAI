@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vai_common.bus import EventBus, build_bus
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_contracts.authoring import PopupFeedback
 from vai_contracts.summary import Summary
@@ -143,5 +143,7 @@ def create_app(
     @app.get("/workspace", include_in_schema=False)
     async def workspace() -> FileResponse:
         return FileResponse(STATIC_DIR / "workspace.html")
+
+    set_landing(app, "/workspace")
 
     return app

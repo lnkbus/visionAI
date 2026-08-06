@@ -72,14 +72,30 @@ read_into PLAN_BLOCKS < <(python3 -c '
 import json, sys
 print("\n".join(json.load(open(sys.argv[1]))["blocks"]))' "$STAGE/plan.json")
 
+# 엔진이 선택 의존성인 블록. **번들 빌드에서 이걸 빠뜨리면** 이미지에 엔진이
+# 없는 채로 반입되고, 고객사에서 컨테이너가 ModuleNotFoundError 로 크래시
+# 루프에 빠진다. compose 기본값과 같은 값을 쓴다 — 두 곳이 갈라지면 개발에서는
+# 되고 납품본만 죽는다.
+block_extras() {
+  case "$1" in
+    stt-core) echo "whisper" ;;   # faster-whisper
+    spk-dia)  echo "neural" ;;    # speechbrain(ECAPA-TDNN)
+    rag-kb)   echo "qdrant" ;;   # 벡터 저장소 클라이언트
+    rag-srch) echo "qdrant" ;;
+    *)        echo "" ;;
+  esac
+}
+
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   echo "▸ 블록 이미지 빌드 (${#PLAN_BLOCKS[@]}개)"
   for block_id in "${PLAN_BLOCKS[@]}"; do
     dir="$(echo "$block_id" | tr '[:upper:]' '[:lower:]')"
-    echo "  - $dir"
+    extras="$(block_extras "$dir")"
+    [[ -n "$extras" ]] && echo "  - $dir (엔진: $extras)" || echo "  - $dir"
     docker build -q -f "$REPO_ROOT/deploy/docker/Dockerfile" \
       --platform "linux/$ARCH" \
-      --build-arg "BLOCK=$dir" -t "visionai/$dir:$TAG" "$REPO_ROOT" >/dev/null
+      --build-arg "BLOCK=$dir" --build-arg "EXTRAS=$extras" \
+      -t "visionai/$dir:$TAG" "$REPO_ROOT" >/dev/null
   done
 fi
 
@@ -100,7 +116,11 @@ cp "$REPO_ROOT/deploy/airgap/install.sh" "$REPO_ROOT/deploy/airgap/selftest.sh" 
 cp -r "$REPO_ROOT/deploy/airgap/installer" "$STAGE/"
 # 이식 계층. install.sh·selftest.sh 가 source 하므로 함께 들어가야 한다.
 cp "$REPO_ROOT/deploy/airgap/portable.sh" "$STAGE/"
-cp "$REPO_ROOT/deploy/compose/docker-compose.yml" "$STAGE/"
+# compose 를 **적재된 이미지로 고정**해서 넣는다. 원본을 그대로 넣으면
+# 폐쇄망에서 `docker compose up` 이 빌드를 시도하다 컨텍스트가 없어 죽는다.
+python3 "$REPO_ROOT/deploy/airgap/pin_compose.py" \
+  --compose "$REPO_ROOT/deploy/compose/docker-compose.yml" \
+  --plan "$STAGE/plan.json" --out "$STAGE/docker-compose.yml"
 cp "$REPO_ROOT/deploy/compose/compliance-rules.json" "$STAGE/" 2>/dev/null || true
 chmod +x "$STAGE/install.sh" "$STAGE/selftest.sh"
 printf '%s\n' "$TAG" > "$STAGE/VERSION"

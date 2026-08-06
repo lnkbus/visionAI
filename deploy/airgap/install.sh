@@ -129,6 +129,25 @@ else
   echo "  · 아키텍처 미표기 번들 (이 서버: $(host_arch))"
 fi
 
+# GPU 를 **컨테이너가** 쓸 수 있는지 본다. 호스트에 카드가 꽂혀 있는 것과
+# 컨테이너가 쓸 수 있는 것은 다른 문제이고, 그 차이는 시연 자리에서 드러난다.
+#
+#   · 맥(Docker Desktop): 리눅스 VM 안에서 돌고 GPU 통과 경로가 없다.
+#     NVIDIA 카드가 꽂힌 인텔 맥이라도 컨테이너는 CPU 만 쓴다.
+#   · 리눅스 + NVIDIA Container Toolkit: 쓸 수 있다.
+#
+# 막지 않는다 — CPU 로도 돈다. 다만 **어느 쪽인지 말해 준다.**
+if [[ "$DRY_RUN" -eq 0 ]] || command -v docker >/dev/null 2>&1; then
+  if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q nvidia; then
+    ok "GPU 사용 가능 (nvidia 런타임) — device=cuda 로 둘 수 있다"
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    echo "  · GPU 없음: 맥은 컨테이너에 GPU 를 넘기지 못한다 → CPU 추론"
+    echo "    (VAI_STT_ADAPTER_CONFIG 의 device 를 \"cpu\" 또는 \"auto\" 로 둔다)"
+  else
+    echo "  · GPU 없음 (nvidia 런타임 미설치) → CPU 추론"
+  fi
+fi
+
 step 2 "무결성 대조"
 # 반입 매체는 손상되거나 바꿔치기될 수 있다. 대조 없이 적재하면 반쯤 깨진
 # 이미지를 로드하고 원인 모를 장애를 쫓게 된다.
