@@ -46,8 +46,30 @@ LABEL ai.visionai.extras="${EXTRAS}"
 RUN printf 'vai_%s' "$(echo "$BLOCK" | tr '-' '_')" > /app/.block-module
 
 # 비루트 실행 — 고객사 보안 심사의 기본 점검 항목이다.
-RUN useradd --system --uid 10001 visionai && chown -R visionai /app
+#
+# **집 디렉토리를 만들어 준다.** `useradd --system` 은 안 만든다. 그러면 캐시
+# 자리를 찾는 라이브러리가 전부 이렇게 죽는다:
+#
+#     PermissionError: [Errno 13] Permission denied: '/home/visionai'
+#
+# 그 경로는 우리 코드 어디에도 안 나오므로, 로그를 받은 사람이 무엇을 하라는
+# 말인지 알 수 없다. speechbrain 이 실제로 그렇게 죽었다.
+RUN useradd --system --uid 10001 --create-home --home-dir /home/visionai visionai \
+    && mkdir -p /home/visionai/.cache \
+    && chown -R visionai /app /home/visionai
 USER visionai
+
+ENV HOME=/home/visionai \
+    XDG_CACHE_HOME=/home/visionai/.cache \
+    HF_HOME=/home/visionai/.cache/huggingface
+
+# **컨테이너는 기동 중에 밖으로 나가지 않는다.** 폐쇄망 제품의 전제이고,
+# 어댑터들은 이미 local_files_only 로 모델을 연다. 다만 그건 우리가 부르는
+# 자리에서만 참이다 — 라이브러리가 자기 판단으로 허브를 부르면 그 전제가
+# 조용히 깨지고, 그 사실은 **인터넷이 있는 개발 장비에서는 드러나지 않는다.**
+# 여기서 한 겹 더 막아, 나가려는 시도가 고객사 망이 아니라 우리 CI 에서
+# 실패하게 한다. 온라인으로 시험할 일이 있으면 compose 에서 덮는다.
+ENV HF_HUB_OFFLINE=1
 
 EXPOSE 8080
 CMD ["sh", "-c", "exec python -m $(cat /app/.block-module).main"]

@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: dbe8cc2adddb67713268d2499aa43edd5604c7dc6d6f98433f687362d2bfa8ae
+configuration_hash: 9d333177699c6b0e166240f803b7a68948558cdb418e8795cb7962ec7f7c7d57
 component_count: 15
 components:
 - id: AUD-VAD
@@ -82,7 +82,7 @@ components:
   name: 화자분리
   version: 0.2.0
   kind: block
-  source_hash: 1dc107ca68ed5fe9
+  source_hash: a1826319d0d44df5
   license_key: SPK-DIA
   capacity_unit: audio_hours_monthly
   depends_on:
