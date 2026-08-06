@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 99e8ae57a08715659df5fa9cc60137edc80b0c584e3a18d1691fe027cf650360
+configuration_hash: f0d4fd06573dd8de797ac812b73c9a8e1ea1970b3278e44b96d416d3e027b956
 component_count: 23
 components:
 - id: AUD-VAD
@@ -189,7 +189,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 703a1bfb69f0c7f8
+  source_hash: 73603def0f40d39e
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

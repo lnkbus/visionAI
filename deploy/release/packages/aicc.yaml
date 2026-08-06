@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 4ea03be6510f27ad80d436d9ae05126ee5bdcbb3562a1fa0bdef847e898a80f3
+configuration_hash: 40caa5412c8c1e9f28c957d45c77b00f6dddb0cdd9a9257073ff876023167bcb
 component_count: 21
 components:
 - id: AUD-RTP
@@ -169,7 +169,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 703a1bfb69f0c7f8
+  source_hash: 73603def0f40d39e
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0
