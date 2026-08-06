@@ -180,6 +180,12 @@ services:
       VAI_CONSUMER_NAME: vad-1
       # GPU가 있고 silero extra를 설치했다면 silero로 바꾼다.
       VAI_VAD_ADAPTER: energy
+      # 에너지 VAD 는 노트북 마이크의 방 소음·키보드 소리를 발화로 넘긴다.
+      # 넘어간 잡음은 STT 가 "그럴듯한 자막"으로 채워 버리므로, 시끄러운
+      # 자리에서 시연한다면 여기부터 조인다:
+      #   VAI_VAD_ADAPTER_CONFIG='{"speech_ratio":5.0,"min_rms":300}'
+      # 너무 조이면 작은 목소리가 통째로 사라진다 — 조금씩 올린다.
+      VAI_VAD_ADAPTER_CONFIG: ${VAI_VAD_ADAPTER_CONFIG:-{}}
 
   stt-core:
     <<: *block
@@ -211,6 +217,16 @@ services:
       #          조용히 CPU 로 내려가면 "제안서엔 GPU, 현장은 CPU"가 된다
       #   cpu  — 그대로
       # 맥은 카드가 꽂혀 있어도 컨테이너가 GPU 를 못 쓴다(Docker Desktop 은 VM).
+      #
+      # 환각 필터 임계값도 여기서 조인다. Whisper 는 무음·잡음 구간을 받으면
+      # 학습 데이터(유튜브 자막)의 상용구를 뱉는다 — "감사합니다", "구독과
+      # 좋아요". 기본값은 출발점이지 측정값이 아니다:
+      #   no_speech_threshold  0.6   이보다 무음 확률이 높으면 버린다
+      #   log_prob_threshold  -1.0   이보다 디코딩 근거가 약하면 버린다
+      #   repeat_limit           4   같은 낱말만 이만큼 이어지면 버린다
+      #   boilerplate_extra     []   현장 안내 멘트를 더한다
+      # 버린 결과는 이유와 함께 로그에 남는다 — "안 들렸다"와 "걸러 냈다"를
+      # 구분할 방법이 그것뿐이다.
       VAI_STT_ADAPTER_CONFIG: '{"device":"auto","compute_type":"","language":"ko"}'
       # FLT-MICRO가 붙었으므로 STT의 UI 직송은 끈다.
       # 켜 두면 마스킹 전 텍스트가 화면에 스친다.

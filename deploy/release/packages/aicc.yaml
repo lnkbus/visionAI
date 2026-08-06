@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 867cab2a632233228724e4a8c4bc7d8c4347256dfbf557491feddba50143c09a
+configuration_hash: d8f1cd45af4a53638196717b151875179ac811345066dd5ebaa516bbafd1250f
 component_count: 21
 components:
 - id: AUD-RTP
@@ -131,7 +131,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: 642bb8ebef6c6806
+  source_hash: c6cbdc87392afbca
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:

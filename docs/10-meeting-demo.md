@@ -209,6 +209,43 @@ http://localhost:8094/minutes
 | `ModuleNotFoundError: faster_whisper` | 이미지에 엔진이 없다. `docker compose build --no-cache stt-core` |
 | 모델을 못 찾는다 | `VAI_STT_MODEL_PATH`와 마운트 경로가 맞는지. 컨테이너 안 경로는 `/models/...` 다 |
 | 인식이 영어로 나온다 | `VAI_STT_ADAPTER_CONFIG` 의 `language: ko` 확인 |
+| **말한 적 없는 자막이 뜬다** | 아래 §6.1 |
+| 말했는데 자막이 안 뜬다 | `docker compose logs stt-core \| grep 버렸다` — 환각 필터가 걸렀는지 먼저 본다 |
+
+### 6.1 말한 적 없는 자막
+
+이런 것이 뜬다:
+
+```
+고객  감사합니다.
+고객  네, 네, 네, 네, 네.
+고객  달려!
+```
+
+**엔진 고장이 아니다.** Whisper 는 유튜브 자막으로 학습됐고, 무음이나 잡음
+구간을 받으면 그 자막의 상용구를 만들어 낸다. 원인은 그 앞에 있다 — 에너지
+VAD 가 방 소음·키보드 소리를 발화로 넘겼고, STT 는 넘어온 것을 채웠다.
+
+STT 쪽에 필터가 붙어 있어서 대부분은 걸러진다. 걸러진 것은 이유와 함께
+로그에 남는다:
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml logs stt-core | grep 버렸다
+# ... 인식 결과를 버렸다 · reason='무음일 확률이 높다 (0.87)' text=감사합니다.
+```
+
+그래도 새면 **VAD 부터** 조인다. 잡음을 애초에 안 넘기는 쪽이 순서상 먼저다:
+
+```bash
+VAI_VAD_ADAPTER_CONFIG='{"speech_ratio":5.0,"min_rms":300}' \
+  docker compose -f deploy/compose/docker-compose.yml up -d aud-vad
+```
+
+너무 조이면 작은 목소리가 통째로 사라진다. 조금씩 올리고, 올릴 때마다
+자기 목소리가 여전히 잡히는지 확인한다.
+
+콜센터처럼 배경소음이 상시 있는 곳은 에너지 VAD 로 버티지 않는다 —
+Silero 어댑터(`VAI_VAD_ADAPTER=silero`)를 쓴다.
 | 회의록이 비어 있다 | 세션이 실제로 종료됐는지(`session.closed`). 콘솔 → LLM-GW 직접 호출로 모델 연결 확인 |
 
 ## 7. 설치 화면까지 시연하려면 (고객사 설치 경로)

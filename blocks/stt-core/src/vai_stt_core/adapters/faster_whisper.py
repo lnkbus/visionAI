@@ -18,6 +18,7 @@ from typing import Any
 import numpy as np
 
 from vai_stt_core.adapters.base import BaseSTTAdapter, SttResult
+from vai_stt_core.hallucination import Evidence, HallucinationFilter, build_filter
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         self._model: Any = None
         self._options: dict[str, Any] = {}
         self._language: str | None = None
+        self._filter = HallucinationFilter()
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
         # **먼저 경로부터 본다.** 없는 경로를 그대로 넘기면 엔진이
@@ -118,6 +120,7 @@ class FasterWhisperAdapter(BaseSTTAdapter):
             cpu_threads=cpu_threads,
             local_files_only=True,
         )
+        self._filter = build_filter(config)
         self._options = {
             "beam_size": int(config.get("beam_size", 1)),
             "vad_filter": False,  # 구간 분할은 AUD-VAD가 이미 했다
@@ -145,7 +148,19 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         segments, info = await asyncio.to_thread(self._run, audio, sample_rate, hint)
         for segment in segments:
             text = segment.text.strip()
-            if not text:
+            evidence = Evidence(
+                text=text,
+                no_speech_prob=float(getattr(segment, "no_speech_prob", 0.0) or 0.0),
+                avg_logprob=float(getattr(segment, "avg_logprob", 0.0) or 0.0),
+            )
+            verdict = self._filter.judge(evidence)
+            if not verdict.keep:
+                # **반드시 남긴다.** "인식이 안 된다"는 신고가 들어왔을 때
+                # 안 들린 것과 걸러 낸 것을 구분할 방법이 이것뿐이다.
+                log.info(
+                    "인식 결과를 버렸다",
+                    extra={"reason": verdict.reason, "text": text},
+                )
                 continue
             yield SttResult(
                 text=text,
