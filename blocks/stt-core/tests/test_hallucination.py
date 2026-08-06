@@ -86,7 +86,7 @@ def test_서로_다른_낱말이면_반복이_아니다(guard: HallucinationFilt
 
 
 def test_무음_확률이_높으면_문구와_무관하게_버린다(guard: HallucinationFilter) -> None:
-    """"달려!" 처럼 목록에 없는 말도 지어낸다. 목록으로는 절대 다 못 막는다 —
+    """ "달려!" 처럼 목록에 없는 말도 지어낸다. 목록으로는 절대 다 못 막는다 —
     근거로 막아야 한다."""
     verdict = guard.judge(Evidence("달려!", no_speech_prob=0.9, avg_logprob=-0.3))
 
@@ -125,9 +125,11 @@ def test_현장에서_임계값을_조일_수_있다() -> None:
     strict = build_filter({"no_speech_threshold": 0.1})
 
     assert not strict.judge(Evidence("감사합니다", no_speech_prob=0.2, avg_logprob=-0.1)).keep
-    assert HallucinationFilter().judge(
-        Evidence("감사합니다", no_speech_prob=0.2, avg_logprob=-0.1)
-    ).keep
+    assert (
+        HallucinationFilter()
+        .judge(Evidence("감사합니다", no_speech_prob=0.2, avg_logprob=-0.1))
+        .keep
+    )
 
 
 def test_현장_상용구를_더할_수_있다() -> None:

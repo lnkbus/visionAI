@@ -123,8 +123,7 @@ def test_화면이_부르는_경로가_서버에_있다(screen: str, path: Path)
     routes = {re.sub(r"\{[^}]+\}", "{p}", r.path) for r in app.routes if hasattr(r, "path")}
 
     called = {
-        re.sub(r"\$\{[^}]+\}", "{p}", raw)
-        for raw in re.findall(r'["`](/v1/[^"`\s?]*)', html)
+        re.sub(r"\$\{[^}]+\}", "{p}", raw) for raw in re.findall(r'["`](/v1/[^"`\s?]*)', html)
     }
     assert called, f"{screen}: 화면이 어떤 API도 부르지 않는다 — 정규식이 낡았다"
 

@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: c9b80b0312619153cd4c12ab0b2e5fa651ef1e7903172c3dd2af94b5878779ca
+configuration_hash: 9560814869c1b1bad2c5c94257d0a937e54be00ff8834e8cb9b22abbe1a8304c
 component_count: 23
 components:
 - id: AUD-VAD
@@ -164,7 +164,7 @@ components:
   name: 음성 합성
   version: 0.1.0
   kind: block
-  source_hash: 830d7d9a0bea9e19
+  source_hash: ecf008218061f730
   license_key: TTS-CORE
   capacity_unit: concurrent_channels
   depends_on:

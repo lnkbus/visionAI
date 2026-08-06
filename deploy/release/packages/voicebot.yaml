@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 5969d1735ddcd5ffd88e42cce2990397a4b5931e3d00e04571ed845266f0a445
+configuration_hash: 136acd5774be7356607e5be1b82ef14cbf753c39193ddb49a760445d1e9414cf
 component_count: 23
 components:
 - id: AUD-RTP
@@ -163,7 +163,7 @@ components:
   name: 음성 합성
   version: 0.1.0
   kind: block
-  source_hash: 830d7d9a0bea9e19
+  source_hash: ecf008218061f730
   license_key: TTS-CORE
   capacity_unit: concurrent_channels
   depends_on:

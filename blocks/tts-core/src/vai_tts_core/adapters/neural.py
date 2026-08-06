@@ -94,9 +94,7 @@ class KokoroAdapter(BaseTTSAdapter):
         self._pipeline: Any = None
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
-        KPipeline = _engine(
-            "kokoro", "KPipeline", adapter="kokoro", package="kokoro"
-        )
+        KPipeline = _engine("kokoro", "KPipeline", adapter="kokoro", package="kokoro")
         self._pipeline = await asyncio.to_thread(
             KPipeline, lang_code=config.get("lang_code", "k"), repo_id=model_path
         )

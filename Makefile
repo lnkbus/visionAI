@@ -67,6 +67,9 @@ down:  ## compose 환경 정리
 logs:  ## compose 로그 추적
 	docker compose -f deploy/compose/docker-compose.yml logs -f
 
+smoke:  ## compose 스택을 **띄운 채로** 실제 배선 확인 (up 이후)
+	uv run --with websockets python deploy/compose/smoke.py
+
 demo:  ## 화면 주소 안내 (up 이후)
 	@echo "고객 데모(마이크→자막) : http://localhost:8080/demo"
 	@echo "상담원 워크스페이스     : http://localhost:8091/workspace"
