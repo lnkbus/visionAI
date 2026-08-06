@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -51,3 +52,34 @@ def test_화자분리_임베더도_같은_안내를_한다() -> None:
     message = str(caught.value)
     assert "fetch_models.sh" in message
     assert "spectral" in message, "모델 없이 내려가는 길을 알려 줘야 한다"
+
+
+def test_옆에_무엇이_있는지_말해_준다(tmp_path: Path) -> None:
+    """없는 경로만 말하면 부족하다.
+
+    모델을 제대로 받아 놓고 이름이 한 칸 어긋난 경우가 가장 흔하다 —
+    compose 기본값은 `small` 인데 32GB 안내를 따라 `large-v3-turbo` 를 받아
+    두는 식이다. 답은 바로 옆 디렉토리에 있는데, 안 적어 주면 그것을 찾느라
+    로그와 문서 사이를 왕복하게 된다. 실제로 세 번 왕복했다.
+    """
+    (tmp_path / "faster-whisper-large-v3-turbo").mkdir()
+
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(FasterWhisperAdapter().initialize(str(tmp_path / "faster-whisper-small"), {}))
+
+    message = str(caught.value)
+    assert "faster-whisper-large-v3-turbo" in message, f"옆에 있는 것을 안 알려 준다: {message}"
+    assert "VAI_STT_MODEL_PATH" in message, "고칠 방법을 안 알려 준다"
+
+
+def test_마운트_자체가_없으면_그것부터_말한다(tmp_path: Path) -> None:
+    """디렉토리를 아예 안 붙인 것과, 붙였는데 이름이 다른 것은 할 일이 다르다."""
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(FasterWhisperAdapter().initialize(str(tmp_path / "없다" / "모델"), {}))
+
+    assert "VAI_MODEL_DIR" in str(caught.value)
+
+
+def test_비어_있으면_비었다고_말한다(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="비어 있다"):
+        asyncio.run(FasterWhisperAdapter().initialize(str(tmp_path / "faster-whisper-small"), {}))

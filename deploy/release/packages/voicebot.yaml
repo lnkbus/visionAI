@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 136acd5774be7356607e5be1b82ef14cbf753c39193ddb49a760445d1e9414cf
+configuration_hash: 31ddb494cba162ff9c2c1fe44418a8e8584b064096a74c62979c2a243c6ff660
 component_count: 23
 components:
 - id: AUD-RTP
@@ -141,7 +141,7 @@ components:
   name: STT 어댑터 프레임워크
   version: 0.2.0
   kind: block
-  source_hash: c6cbdc87392afbca
+  source_hash: e362b00497f8220a
   license_key: STT-CORE
   capacity_unit: concurrent_channels
   depends_on:

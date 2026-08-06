@@ -75,6 +75,30 @@ def resolve_device(requested: str) -> str:
     return wanted
 
 
+def _whats_there(model_path: str) -> str:
+    """마운트 자리에 **무엇이 있는지** 적는다.
+
+    없는 경로만 말하면 부족하다. 모델을 제대로 받아 놓고 이름이 한 칸
+    어긋난 경우가 가장 흔한데(`small` 기본값 ↔ 받아 둔 `large-v3-turbo`),
+    그때 답은 바로 옆 디렉토리에 있다. 안 적어 주면 그걸 찾느라 왕복한다.
+    """
+    parent = Path(model_path).parent
+    try:
+        found = sorted(entry.name for entry in parent.iterdir() if entry.is_dir())
+    except OSError:
+        return f"  {parent} 를 열지 못했다 — 모델 디렉토리가 마운트되지 않았다(VAI_MODEL_DIR).\n"
+
+    if not found:
+        return f"  {parent} 가 비어 있다 — 아직 아무것도 반입되지 않았다.\n"
+
+    listing = "\n".join(f"    - {name}" for name in found)
+    return (
+        f"  {parent} 에는 이것이 있다:\n{listing}\n"
+        "  쓰려는 것이 위에 있으면 경로를 맞춘다:\n"
+        f"    VAI_STT_MODEL_PATH={parent}/{found[0]}\n"
+    )
+
+
 class FasterWhisperAdapter(BaseSTTAdapter):
     name = "faster_whisper"
 
@@ -93,7 +117,8 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         if not await asyncio.to_thread(Path(model_path).is_dir):
             raise RuntimeError(
                 f"STT 모델이 없다: {model_path}\n"
-                "  네트워크가 있는 곳에서 먼저 받는다:\n"
+                + await asyncio.to_thread(_whats_there, model_path)
+                + "  네트워크가 있는 곳에서 먼저 받는다:\n"
                 "    deploy/airgap/fetch_models.sh --out models --stt small\n"
                 "  받은 디렉토리를 컨테이너에 마운트한다(VAI_MODEL_DIR).\n"
                 "  모델 없이 화면만 볼 거라면 VAI_STT_ADAPTER=fake 로 내린다 — "
