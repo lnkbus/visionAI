@@ -54,6 +54,10 @@ uv run --with huggingface_hub bash deploy/airgap/fetch_models.sh --out models --
 | `medium` | 1.5 GB | 상담 녹취 |
 | `large-v3-turbo` | 1.6 GB | 품질/속도 균형이 가장 좋다 |
 
+`large-v3-turbo` 만 Systran 이 아니라 제3자가 변환해 올린 저장소에서 받습니다
+(`--list` 에 저장소가 찍힙니다). 사내에서 배포처를 따지는 상황이면
+`--stt large-v3` 를 쓰십시오.
+
 ### 1.0.1 인텔 맥 (NVIDIA GPU, 32GB) — 먼저 읽을 것
 
 **그 NVIDIA GPU 는 못 씁니다.** 카드가 꽂혀 있어도 컨테이너는 CPU 만 씁니다.

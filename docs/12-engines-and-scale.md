@@ -32,6 +32,11 @@ deploy/airgap/fetch_models.sh --out models --stt large-v3-turbo
 | `large-v3-turbo` | 1.6 GB | **품질/속도 균형이 가장 좋다** |
 | `large-v3` | 3.1 GB | 최고 품질 |
 
+받아 오는 저장소는 `fetch_models.sh` 안에 표로 적혀 있습니다(`--list` 로 봅니다).
+이름에서 만들어 내지 않습니다 — **`large-v3-turbo` 만 Systran 이 아니라 제3자가
+CTranslate2 로 변환해 올린 것**이기 때문입니다. 반입 심사에서 배포처를 묻는
+현장이면 `large-v3`(Systran) 를 쓰십시오. 품질은 더 좋고, 대신 3.1GB 에 느립니다.
+
 ```yaml
 VAI_STT_ADAPTER: faster_whisper
 VAI_STT_MODEL_PATH: /models/faster-whisper-large-v3-turbo
