@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: aae8a3caa95b4cbac633b16214116351cc5406535d86d173a9740eace21cecdd
+configuration_hash: 3f51f82b232a3ade42705cb8e0081f7d7c0d77c934fa97dbcbbc01a450306220
 component_count: 15
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 84d8098de69327f9
+  source_hash: 6f753aeb88750e3d
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -82,7 +82,7 @@ components:
   name: 화자분리
   version: 0.2.0
   kind: block
-  source_hash: a1826319d0d44df5
+  source_hash: 739b25557c246f94
   license_key: SPK-DIA
   capacity_unit: audio_hours_monthly
   depends_on:
@@ -113,7 +113,7 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: f5a627d054c16767
+  source_hash: 4ea22cde7c96b61d
 - id: lib:common
   name: vai_common
   version: 0.2.0

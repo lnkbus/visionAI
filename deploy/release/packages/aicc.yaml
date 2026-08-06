@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 85c1e6eb95169faed02ff3bce960bf53dc930da7b8ee5da8227284fad9758ab6
+configuration_hash: af2d344d2fab8bea66503532b235ce21023f9d9a22e56cf78016c1483e78edbd
 component_count: 21
 components:
 - id: AUD-RTP
@@ -19,7 +19,7 @@ components:
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 84d8098de69327f9
+  source_hash: 6f753aeb88750e3d
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -164,7 +164,7 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: f5a627d054c16767
+  source_hash: 4ea22cde7c96b61d
 - id: lib:common
   name: vai_common
   version: 0.2.0

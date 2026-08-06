@@ -67,7 +67,15 @@ class DiarizationWorker(BlockWorker[AudioSegment]):
             # 참석자가 생긴다.
             return
 
-        assignment = self.diarizer(event.session_id).assign(embedding, event.duration_ms)
+        # **말한 길이로 판정한다.** duration_ms 에는 앞뒤 패딩(200ms)과
+        # 행오버(400ms)가 붙어 있어서, 실제 발화가 50ms 인 기침도 660ms 로
+        # 보인다 — 그 값으로 "짧아서 새 화자로 안 친다"를 판정하면 조건이
+        # 한 번도 안 걸린다. 회의 시작 몇 초 만에 잡음에서 화자가 일곱 명
+        # 생겼고, 각각 "1초·1회" 였다.
+        #
+        # 0 이면 옛 AUD-VAD 가 안 채운 것이다. 그때만 물러선다.
+        speech_ms = event.speech_ms or event.duration_ms
+        assignment = self.diarizer(event.session_id).assign(embedding, speech_ms)
         if assignment is None:
             return
 

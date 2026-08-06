@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 31ddb494cba162ff9c2c1fe44418a8e8584b064096a74c62979c2a243c6ff660
+configuration_hash: b7644b3699c43de39ce55b131a9f86a6aae970660853b4137cd24c38690b53e7
 component_count: 23
 components:
 - id: AUD-RTP
@@ -19,7 +19,7 @@ components:
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 84d8098de69327f9
+  source_hash: 6f753aeb88750e3d
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:
@@ -183,7 +183,7 @@ components:
   name: vai_contracts
   version: 0.1.0
   kind: library
-  source_hash: f5a627d054c16767
+  source_hash: 4ea22cde7c96b61d
 - id: lib:common
   name: vai_common
   version: 0.2.0

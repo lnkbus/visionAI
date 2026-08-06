@@ -89,6 +89,10 @@ class VadWorker(BlockWorker[AudioChunk]):
                     profile=event.profile,
                     start_ms=segment.start_ms,
                     duration_ms=segment.duration_ms,
+                    # 계산해 놓고 안 실으면 받는 쪽은 없는 줄 모른다. SPK-DIA 가
+                    # 실제로 duration_ms 로 걸렀고, 그건 패딩·행오버 때문에
+                    # 아무것도 안 걸러진다 — 잡음마다 새 화자가 생겼다.
+                    speech_ms=segment.speech_ms,
                     is_final=segment.is_final,
                 ),
             )

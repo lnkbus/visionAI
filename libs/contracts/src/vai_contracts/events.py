@@ -53,8 +53,27 @@ class AudioSegment(BaseEvent):
     profile: SessionProfile
     start_ms: int
     duration_ms: int
+    """구간의 실제 길이(패딩·행오버 포함). 타임라인 정렬은 이 값을 쓴다."""
+
     is_final: bool = True
     """False면 발화가 계속 중인 중간 구간(부분 인식용)."""
+
+    speech_ms: int = 0
+    """이 구간에서 **음성으로 판정된 프레임만** 합친 길이.
+
+    ``duration_ms``와 나눠 둔 이유가 이 계약에서 가장 중요한 구분이다.
+    앞뒤로 패딩(200ms)과 행오버(400ms)가 붙으므로, **실제 발화가 50ms 여도
+    구간 길이는 660ms 가 된다.** 그 값으로 "너무 짧아서 잡음"을 거르면
+    아무것도 안 걸러진다.
+
+    AUD-VAD 는 이 값을 계산해 놓고 이벤트에 안 실었고, SPK-DIA 는 없는 줄
+    모르고 ``duration_ms`` 로 걸렀다. 그래서 회의 시작 몇 초 만에 잡음에서
+    화자가 일곱 명 생겼다 — 각각 "1초·1회", "2초·1회" 였다. 회의록에
+    참석하지 않은 사람이 생기고, 그 사실은 아무도 못 알아본다.
+
+    0 이면 "producer 가 안 채웠다"는 뜻이다. 받는 쪽은 그때만 ``duration_ms``
+    로 물러선다 — 옛 producer 와 섞여 도는 구간을 위해서다.
+    """
 
 
 class SttDelta(BaseEvent):
