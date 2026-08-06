@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 55bf125f9fa8542b607ee51f487a481b824ecd78fc7f2f25b832775d1f18fb72
+configuration_hash: dbe8cc2adddb67713268d2499aa43edd5604c7dc6d6f98433f687362d2bfa8ae
 component_count: 15
 components:
 - id: AUD-VAD
@@ -37,7 +37,7 @@ components:
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: 75e0533598b90b92
+  source_hash: 955a3a13e4dadc28
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -102,7 +102,7 @@ components:
   name: 스마트 회의록 UI
   version: 0.2.0
   kind: block
-  source_hash: dbf4ef16c70fbed9
+  source_hash: 307bfe4a9c741f8d
   license_key: UI-MEET
   capacity_unit: seats
   depends_on:

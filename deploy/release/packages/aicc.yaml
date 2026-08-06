@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 10fa2d4ba24bd1c302799b79c901d48ab69801fa542919b6efc04ba71db1ddc3
+configuration_hash: c8772561d92f63bcef801049930502e2763649bcb15551998c1bb78ed1075fec
 component_count: 21
 components:
 - id: AUD-RTP
@@ -46,7 +46,7 @@ components:
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: 75e0533598b90b92
+  source_hash: 955a3a13e4dadc28
   license_key: CORE-GW
   capacity_unit: none
   depends_on:

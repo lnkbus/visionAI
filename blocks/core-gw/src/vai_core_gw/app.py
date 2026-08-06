@@ -151,6 +151,55 @@ def create_app(
             ws_token=issue_session_token(session.session_id, tenant_id, gw_cfg.jwt_secret),
         )
 
+    @app.post(
+        "/v1/sessions/{session_id}/join",
+        response_model=StartSessionResponse,
+        tags=["sessions"],
+    )
+    async def join_session(
+        session_id: str,
+        principal: Principal = Depends(authenticate),
+        core_bus: CoreBusClient = Depends(get_core_bus),
+    ) -> StartSessionResponse:
+        """이미 도는 세션에 **입력을 하나 더** 붙인다.
+
+        상담도 회의도 여러 사람이 한다. 그런데 세션을 만드는 길만 있으면
+        화면 하나가 곧 세션 하나가 된다 — 상담원과 고객이 각자 마이크를 켜면
+        서로 다른 상담 두 건이 되고, 화면에는 늘 한쪽만 뜬다. 실제로 그렇게
+        보였다: 두 사람이 말하는데 자막의 화자가 전부 "고객"이었다.
+
+        토큰은 새로 발급하되 **세션은 그대로**다. 그래야 두 마이크가 한
+        타임라인에 모이고, 요약도 한 벌만 나온다.
+        """
+        try:
+            principal.require_scope("session:create")
+        except AuthError as exc:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+        try:
+            session = await core_bus.get_session(session_id)
+        except CoreBusError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, detail="세션 서비스에 연결할 수 없다"
+            ) from exc
+
+        if session is None or session.tenant_id != principal.tenant_id:
+            # 다른 테넌트의 세션은 "권한 없음"이 아니라 "없음"으로 답한다.
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="세션을 찾을 수 없다")
+
+        if session.state is not SessionState.ACTIVE:
+            # 끝난 세션에 붙으면 소켓은 열리는데 자막은 영영 안 나온다.
+            # 그 조용한 실패보다 여기서 이유를 말하고 막는 편이 낫다.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"이미 끝난 세션이다 (상태: {session.state}) — 새 세션을 시작한다",
+            )
+
+        return StartSessionResponse(
+            session=session,
+            ws_token=issue_session_token(session.session_id, session.tenant_id, gw_cfg.jwt_secret),
+        )
+
     @app.post("/v1/sessions/{session_id}/close", response_model=Session, tags=["sessions"])
     async def close_session(
         session_id: str,

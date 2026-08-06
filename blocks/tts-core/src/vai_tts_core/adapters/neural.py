@@ -21,6 +21,29 @@ from vai_tts_core.adapters.base import BaseTTSAdapter
 log = logging.getLogger(__name__)
 
 
+def _engine(module: str, symbol: str, *, adapter: str, package: str) -> Any:
+    """선택 엔진을 늦게 불러온다. 없으면 **무엇을 해야 하는지** 말한다.
+
+    엔진은 이미지 기본에 안 들어간다(무겁고, 고객사마다 고른다). 그래서 "엔진이
+    아직 없는 상태"는 예외가 아니라 설치 중 정상 경로다. 그때 맨 ImportError 가
+    나면 로그에는 이렇게만 남는다:
+
+        ModuleNotFoundError: No module named 'cosyvoice'
+
+    폐쇄망 담당자가 그 문구를 보고 할 수 있는 일이 없다. 어느 어댑터가 무엇을
+    필요로 하는지, 없이 돌리려면 어디로 내려가는지까지 적어 준다.
+    """
+    try:
+        return getattr(__import__(module, fromlist=[symbol]), symbol)
+    except ImportError as exc:
+        raise RuntimeError(
+            f"TTS 엔진이 없다: {adapter}\n"
+            f"  이미지에 {package} 가 들어 있어야 한다.\n"
+            "  소리 없이 화면만 볼 거라면 VAI_TTS_ADAPTER=fake 로 내린다 — "
+            "다만 fake 는 합성하지 않는다."
+        ) from exc
+
+
 class CosyVoiceAdapter(BaseTTSAdapter):
     """CosyVoice 계열. 화자 복제(zero-shot)를 지원해 고객사 전용 목소리를 만든다."""
 
@@ -32,8 +55,10 @@ class CosyVoiceAdapter(BaseTTSAdapter):
         self._prompts: dict[str, Any] = {}
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
-        from cosyvoice.cli.cosyvoice import CosyVoice
-
+        # 엔진 클래스 이름을 그대로 쓴다 — 바꾸면 원본 API 와 대조하기 어려워진다.
+        CosyVoice = _engine(
+            "cosyvoice.cli.cosyvoice", "CosyVoice", adapter="cosyvoice", package="cosyvoice"
+        )
         self._model = await asyncio.to_thread(CosyVoice, model_path)
         self.native_sample_rate = int(config.get("sample_rate", self.native_sample_rate))
         log.info("CosyVoice 로드", extra={"model_path": model_path})
@@ -69,8 +94,9 @@ class KokoroAdapter(BaseTTSAdapter):
         self._pipeline: Any = None
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
-        from kokoro import KPipeline
-
+        KPipeline = _engine(
+            "kokoro", "KPipeline", adapter="kokoro", package="kokoro"
+        )
         self._pipeline = await asyncio.to_thread(
             KPipeline, lang_code=config.get("lang_code", "k"), repo_id=model_path
         )
