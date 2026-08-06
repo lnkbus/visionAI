@@ -3,14 +3,14 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: edbd4a1f1f479a0ed8451c77e10b529318de08a6cd9578688a6172083b1cfdc3
+configuration_hash: 3246c89b869e5bf9be770f1f0735156db6e9bfcda3b4d3ea9756b371c0a2aa53
 component_count: 23
 components:
 - id: AUD-VAD
   name: 오디오 라우터 & 스트리밍 버퍼
   version: 0.2.0
   kind: block
-  source_hash: 6f753aeb88750e3d
+  source_hash: 7c0ed192ad66396a
   license_key: AUD-VAD
   capacity_unit: concurrent_channels
   depends_on:

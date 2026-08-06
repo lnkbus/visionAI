@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
+
 from vai_aud_vad.adapters.base import BaseVadAdapter
-from vai_aud_vad.segmenter import SegmenterConfig, SpeechSegmenter
+from vai_aud_vad.segmenter import Segment, SegmenterConfig, SpeechSegmenter
 from vai_common.bus import EventBus
 from vai_common.worker import BlockWorker
 from vai_contracts.events import AudioChunk, AudioSegment
@@ -48,6 +50,8 @@ class VadWorker(BlockWorker[AudioChunk]):
         self._segmenters: dict[tuple[str, int], SpeechSegmenter] = {}
         self._seq: dict[str, int] = {}
         self._barge_in = barge_in
+        self._level_reported: set[str] = set()
+        """소리 크기를 이미 보고한 세션. 구간마다 찍으면 로그가 못 쓰게 된다."""
         self._speaking: set[str] = set()
 
     def _segmenter(
@@ -77,6 +81,7 @@ class VadWorker(BlockWorker[AudioChunk]):
         for segment in segmenter.push(stream_key, event.pcm):
             if not segmenter.is_meaningful(segment):
                 continue
+            self._report_level(event.session_id, segment)
             await self.bus.publish(
                 Topic.AUDIO_SEGMENT,
                 AudioSegment(
@@ -96,6 +101,37 @@ class VadWorker(BlockWorker[AudioChunk]):
                     is_final=segment.is_final,
                 ),
             )
+
+    def _report_level(self, session_id: str, segment: Segment) -> None:
+        """세션의 **첫 구간에서 소리 크기를 남긴다.**
+
+        "자막이 안 나온다"는 신고에서 가장 먼저 갈라야 하는 것이 마이크냐
+        인식이냐인데, 지금까지 그걸 알 방법이 없었다. 한 줄이면 갈린다.
+
+        구간마다 찍으면 로그가 못 쓰게 되므로 세션당 한 번만 남긴다 — 마이크
+        상태는 통화 중에 잘 바뀌지 않는다.
+        """
+        if session_id in self._level_reported:
+            return
+        self._level_reported.add(session_id)
+
+        rms, peak = _level(segment.pcm)
+        detail = {
+            "session_id": session_id,
+            "rms": round(rms),
+            "peak": peak,
+            "speech_ms": segment.speech_ms,
+        }
+        if rms < LOW_LEVEL_RMS:
+            log.warning(
+                "마이크 소리가 너무 작다 — 인식이 안 되거나 없는 말이 나올 수 있다",
+                extra={
+                    **detail,
+                    "확인": "OS 입력 장치·입력 볼륨, 브라우저가 고른 마이크, 말하는 거리",
+                },
+            )
+        else:
+            log.info("마이크 입력 확인", extra=detail)
 
     async def _notify_barge_in(
         self, event: AudioChunk, stream_key: str, segmenter: SpeechSegmenter
@@ -133,3 +169,23 @@ class VadWorker(BlockWorker[AudioChunk]):
             del self._segmenters[key]
         self._seq.pop(session_id, None)
         self._speaking -= {k for k in self._speaking if k.startswith(f"{session_id}:")}
+
+
+LOW_LEVEL_RMS = 300.0
+"""이보다 조용하면 **마이크가 목소리를 안 담고 있다**고 본다(int16 기준).
+
+사람 목소리를 보통 거리에서 받으면 RMS 가 1000~5000 대다. 300 아래는 방
+소음이나 무음에 가깝고, 그런 구간을 받은 Whisper 는 학습 데이터의 상용구를
+지어낸다 — "감사합니다" 가 30초에 한 번씩 나오는 모습이 그것이었다.
+
+이 값을 몰라서 열 번을 헤맸다. 화면에는 "자막이 안 나온다"로만 보이고,
+원인이 마이크인지 인식인지 구분할 방법이 없었다.
+"""
+
+
+def _level(pcm: bytes) -> tuple[float, int]:
+    """(RMS, 최대 진폭). 둘 다 int16 스케일이다."""
+    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+    if samples.size == 0:
+        return 0.0, 0
+    return float(np.sqrt(np.mean(np.square(samples)))), int(np.abs(samples).max())
