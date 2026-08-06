@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: voicebot
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 3f9345c53f0d3f57510e058d481d95cc4fb442592a9d4e2f380b410e2eeabdf9
+configuration_hash: 78d9703853c0d002d883f1ad96ee5a919a4d10e3041aa665be35dbdf7fc6f0fc
 component_count: 23
 components:
 - id: AUD-RTP
@@ -188,7 +188,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 7d72108403419a24
+  source_hash: 6e4bdbeb16afc3cd
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0

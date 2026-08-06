@@ -103,3 +103,24 @@ def test_두_포맷이_같은_것을_담는다(as_json: bool) -> None:
         line = TextFormatter("STT-CORE").format(record)
         assert "device=cpu" in line
         assert "session_id=s-1" in line
+
+
+def test_uvicorn_의_색깔_복사본은_안_붙인다() -> None:
+    """uvicorn 은 모든 줄에 ANSI 색이 박힌 같은 메시지를 extra 로 함께 보낸다.
+
+    그대로 승격하면 기동 로그의 모든 줄이 두 배로 길어진다 — 뒤쪽 절반은
+    앞쪽과 똑같은 말에 색 코드만 박힌 것이다. 진단 정보가 아니라 복사본이고,
+    정작 봐야 할 필드가 그 안에 묻힌다.
+    """
+    line = TextFormatter("UI-MEET").format(
+        _record("Started server process [1]", color_message="Started \x1b[36m%d\x1b[0m")
+    )
+
+    assert "color_message" not in line, f"색깔 복사본이 붙었다: {line}"
+    assert line.endswith("Started server process [1]")
+
+
+def test_색깔_복사본은_JSON_에도_안_들어간다() -> None:
+    line = JsonFormatter("UI-MEET").format(_record("기동", color_message="\x1b[36m기동"))
+
+    assert "color_message" not in json.loads(line)

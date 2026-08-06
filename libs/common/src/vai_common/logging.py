@@ -24,6 +24,10 @@ _RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) 
     "message",
     "asctime",
     "taskName",
+    # uvicorn 은 모든 줄에 ANSI 색이 박힌 같은 메시지를 extra 로 함께 보낸다.
+    # 진단 정보가 아니라 같은 말의 복사본이라, 그대로 승격하면 기동 로그가
+    # 두 배로 길어지고 정작 봐야 할 필드가 묻힌다.
+    "color_message",
 }
 
 

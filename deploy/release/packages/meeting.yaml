@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: meeting
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 9c299d134bbc47668f0dfd29ae9c4474af56c4c4be98617c59da1d80e24e958a
+configuration_hash: 55bf125f9fa8542b607ee51f487a481b824ecd78fc7f2f25b832775d1f18fb72
 component_count: 15
 components:
 - id: AUD-VAD
@@ -118,7 +118,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 7d72108403419a24
+  source_hash: 6e4bdbeb16afc3cd
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0
