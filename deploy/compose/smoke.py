@@ -28,6 +28,11 @@ CI 는 이미지를 빌드만 하고 한 번도 돌려 보지 않았다. 그래�
 
     docker compose -f deploy/compose/docker-compose.yml up -d
     uv run --with websockets python deploy/compose/smoke.py
+
+진짜 엔진(faster_whisper)으로 떠 있는 스택에 돌리면 **자막 검사만 판정을
+보류한다.** 여기서 넣는 것은 220Hz 사인파고, Whisper 는 그걸 말로 듣지
+않는다 — 환각 필터가 걸러 내는 것이 오히려 정상이다. 배선까지 단정하려면
+CI 와 같은 구성(`VAI_STT_ADAPTER=fake`)으로 돌린다.
 """
 
 from __future__ import annotations
@@ -72,6 +77,23 @@ def ok(what: str) -> None:
 
 def compose(*args: str) -> str:
     return subprocess.run([*COMPOSE, *args], capture_output=True, text=True, check=False).stdout
+
+
+def stt_adapter() -> str:
+    """STT-CORE 가 실제로 무엇으로 돌고 있는지.
+
+    **합성음으로는 진짜 엔진의 결과를 단정할 수 없다.** 이 스크립트가 넣는
+    것은 220Hz 사인파고, Whisper 는 그걸 말로 듣지 않는다 — 환각 필터가
+    걸러 내면 자막이 안 오는 것이 오히려 정상이다. 그때 "끊겼다"고 하면
+    멀쩡한 스택을 두고 원인을 찾게 된다.
+    """
+    result = subprocess.run(
+        [*COMPOSE, "exec", "-T", "stt-core", "printenv", "VAI_STT_ADAPTER"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() or "faster_whisper"
 
 
 def logs_of(service: str, lines: int = 40) -> str:
@@ -248,6 +270,16 @@ async def check_pipeline() -> None:
             text = await _await_caption(ws, seconds=30)
         ok(f"자막 도착 — {text[:40]}")
     except TimeoutError:
+        adapter = stt_adapter()
+        if adapter != "fake":
+            # 여기서 단정하지 않는다. 넣은 것이 사인파라 진짜 엔진이 아무것도
+            # 못 알아듣는 것이 정상이고, 그것을 실패로 세면 이 스크립트를
+            # 아무도 믿지 않게 된다.
+            print(f"  ⚠ 자막이 안 왔다 — 다만 지금 엔진이 {adapter} 다")
+            print("    합성음(사인파)으로는 진짜 엔진의 결과를 단정할 수 없다.")
+            print("    배선만 보려면 CI 와 같은 구성으로 돌린다:")
+            print("      VAI_STT_ADAPTER=fake docker compose ... up -d stt-core")
+            return
         fail(
             "30초 안에 자막이 안 왔다 — 어딘가에서 끊겼다",
             "\n".join(logs_of(name, 15) for name in ("aud-vad", "stt-core", "flt-micro")),
@@ -311,6 +343,10 @@ async def check_meeting() -> None:
                 text = await _await_caption(observer, seconds=30)
         ok(f"회의 자막 도착 — {text[:40]}")
     except TimeoutError:
+        adapter = stt_adapter()
+        if adapter != "fake":
+            print(f"  ⚠ 회의 자막이 안 왔다 — 다만 지금 엔진이 {adapter} 다 (위와 같은 이유)")
+            return
         fail(
             "회의 자막이 30초 안에 안 왔다",
             "\n".join(logs_of(name, 15) for name in ("ui-meet", "core-gw", "stt-core")),
