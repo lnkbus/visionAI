@@ -29,7 +29,7 @@ from vai_common.auth import (
     verify_session_token,
 )
 from vai_common.bus import EventBus, build_bus
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_contracts.session import AudioFormat, Session, SessionCreate, SessionProfile, SessionState
 from vai_core_gw.bus_client import CoreBusClient, CoreBusError
@@ -207,5 +207,7 @@ def create_app(
         @app.get("/demo", include_in_schema=False)
         async def demo_page() -> FileResponse:
             return FileResponse(STATIC_DIR / "demo.html")
+
+        set_landing(app, "/demo")
 
     return app

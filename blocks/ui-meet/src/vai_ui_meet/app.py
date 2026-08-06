@@ -30,7 +30,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from redis.asyncio import Redis
 
 from vai_common.bus import EventBus, RedisEventBus, build_bus
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_contracts.events import SpeakerLabel
 from vai_contracts.summary import Summary
@@ -186,6 +186,8 @@ def create_app(
     @app.get("/minutes", include_in_schema=False)
     async def minutes() -> FileResponse:
         return FileResponse(STATIC_DIR / "minutes.html")
+
+    set_landing(app, "/minutes")
 
     return app
 

@@ -32,7 +32,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from vai_common import audit
 from vai_common.bus import RedisEventBus, build_bus
 from vai_common.config_store import ConfigKind, ConfigStore, InMemoryConfigStore, RedisConfigStore
-from vai_common.service import create_block_app
+from vai_common.service import create_block_app, set_landing
 from vai_common.settings import get_settings
 from vai_contracts.audit import AuditAction
 from vai_contracts.authoring import (
@@ -615,6 +615,8 @@ def create_app(
         @app.get("/console", include_in_schema=False)
         async def console() -> FileResponse:
             return FileResponse(STATIC_DIR / "console.html")
+
+        set_landing(app, "/console")
 
     return app
 

@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 40caa5412c8c1e9f28c957d45c77b00f6dddb0cdd9a9257073ff876023167bcb
+configuration_hash: 867cab2a632233228724e4a8c4bc7d8c4347256dfbf557491feddba50143c09a
 component_count: 21
 components:
 - id: AUD-RTP
@@ -28,7 +28,7 @@ components:
   name: 운영 콘솔
   version: 0.1.0
   kind: block
-  source_hash: de18ce482f2d20bb
+  source_hash: 7b9ad68be27df098
   license_key: CORE-ADM
   capacity_unit: seats
   depends_on:
@@ -46,7 +46,7 @@ components:
   name: API / WebSocket 게이트웨이
   version: 0.2.0
   kind: block
-  source_hash: b3d55cebdce276d5
+  source_hash: 75e0533598b90b92
   license_key: CORE-GW
   capacity_unit: none
   depends_on:
@@ -120,7 +120,7 @@ components:
   name: 시나리오·룰 스튜디오
   version: 0.2.0
   kind: block
-  source_hash: 0e85d679452c04e2
+  source_hash: 007e373dc118bcb4
   license_key: SCN-STUDIO
   capacity_unit: seats
   depends_on:
@@ -153,7 +153,7 @@ components:
   name: 상담원 워크스페이스
   version: 0.1.0
   kind: block
-  source_hash: cef7ef0011396d52
+  source_hash: 9a4bb613a38086b8
   license_key: UI-AGENT
   capacity_unit: seats
   depends_on:
@@ -169,7 +169,7 @@ components:
   name: vai_common
   version: 0.2.0
   kind: library
-  source_hash: 73603def0f40d39e
+  source_hash: 7d72108403419a24
 - id: lib:retrieval
   name: vai_retrieval
   version: 0.3.0
