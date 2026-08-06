@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: avatar
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: bdbffba080a7cb44027ccf7f6aa01cb68fa82c24fce92b5b39ca539936893779
+configuration_hash: 99e8ae57a08715659df5fa9cc60137edc80b0c584e3a18d1691fe027cf650360
 component_count: 23
 components:
 - id: AUD-VAD
@@ -29,7 +29,7 @@ components:
   name: 음성봇 대화 엔진
   version: 0.1.0
   kind: block
-  source_hash: 2ba0bb66935f291a
+  source_hash: b3e4e84a656cfe90
   license_key: BOT-VOICE
   capacity_unit: concurrent_channels
   depends_on:
@@ -73,7 +73,7 @@ components:
   name: 암호화·감사
   version: 0.1.0
   kind: block
-  source_hash: 02623cbeb62a3579
+  source_hash: 478c154189896f89
   license_key: CORE-SEC
   capacity_unit: none
   depends_on:
@@ -112,7 +112,7 @@ components:
   name: 지식베이스 수집기
   version: 0.3.0
   kind: block
-  source_hash: 7722a872d044126d
+  source_hash: c3b3472d01a076a4
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:
@@ -121,7 +121,7 @@ components:
   name: 하이브리드 검색 & 리랭킹
   version: 0.3.0
   kind: block
-  source_hash: d82ade6ecf9ecbe9
+  source_hash: eaac8aaead940db1
   license_key: RAG-SRCH
   capacity_unit: index_chunks
   depends_on:
@@ -152,7 +152,7 @@ components:
   name: 실시간 Agent Assist
   version: 0.2.0
   kind: block
-  source_hash: 4812d471f7410bde
+  source_hash: 7594b90a54bcdfdf
   license_key: TA-ASSIST
   capacity_unit: concurrent_channels
   depends_on:

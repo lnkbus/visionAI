@@ -16,6 +16,13 @@ dependencies = [
     "pypdf>=5.0",                # PDF 텍스트 레이어
 ]
 
+[project.optional-dependencies]
+# 벡터 저장소 클라이언트. 기본 이미지에는 안 넣는다 — memory 어댑터로도
+# 단일 프로세스에서는 돌기 때문이다. 다만 compose·운영은 qdrant 를 쓰므로
+# 그 구성으로 빌드할 때 EXTRAS=qdrant 를 준다. 안 주면 기동 순간
+# ModuleNotFoundError 로 죽고, 그 사실은 컨테이너 로그에만 남는다.
+qdrant = ["vai-retrieval[qdrant]"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -3,7 +3,7 @@ _comment: 패키지 형상 명세 — blockctl freeze가 생성한다. 손으로
 package: aicc
 chart_version: 0.1.0
 app_version: 0.1.0
-configuration_hash: 094ca99bf1b8451a3870cfdce18095233041e08c7cb589ce2d9afe905e692ece
+configuration_hash: 4ea03be6510f27ad80d436d9ae05126ee5bdcbb3562a1fa0bdef847e898a80f3
 component_count: 21
 components:
 - id: AUD-RTP
@@ -62,7 +62,7 @@ components:
   name: 암호화·감사
   version: 0.1.0
   kind: block
-  source_hash: 02623cbeb62a3579
+  source_hash: 478c154189896f89
   license_key: CORE-SEC
   capacity_unit: none
   depends_on:
@@ -101,7 +101,7 @@ components:
   name: 지식베이스 수집기
   version: 0.3.0
   kind: block
-  source_hash: 7722a872d044126d
+  source_hash: c3b3472d01a076a4
   license_key: RAG-KB
   capacity_unit: index_chunks
   depends_on:
@@ -110,7 +110,7 @@ components:
   name: 하이브리드 검색 & 리랭킹
   version: 0.3.0
   kind: block
-  source_hash: d82ade6ecf9ecbe9
+  source_hash: eaac8aaead940db1
   license_key: RAG-SRCH
   capacity_unit: index_chunks
   depends_on:
@@ -141,7 +141,7 @@ components:
   name: 실시간 Agent Assist
   version: 0.2.0
   kind: block
-  source_hash: 4812d471f7410bde
+  source_hash: 7594b90a54bcdfdf
   license_key: TA-ASSIST
   capacity_unit: concurrent_channels
   depends_on:

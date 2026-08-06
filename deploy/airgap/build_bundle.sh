@@ -80,6 +80,8 @@ block_extras() {
   case "$1" in
     stt-core) echo "whisper" ;;   # faster-whisper
     spk-dia)  echo "neural" ;;    # speechbrain(ECAPA-TDNN)
+    rag-kb)   echo "qdrant" ;;   # 벡터 저장소 클라이언트
+    rag-srch) echo "qdrant" ;;
     *)        echo "" ;;
   esac
 }

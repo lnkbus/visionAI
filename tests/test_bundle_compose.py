@@ -111,7 +111,12 @@ def _compose_extras() -> dict[str, str]:
 
 def test_엔진이_필요한_블록을_찾았다() -> None:
     """정규식이 낡으면 아래 대조가 조용히 통과한다."""
-    assert _compose_extras() == {"stt-core": "whisper", "spk-dia": "neural"}
+    assert _compose_extras() == {
+        "stt-core": "whisper",
+        "spk-dia": "neural",
+        "rag-kb": "qdrant",
+        "rag-srch": "qdrant",
+    }
 
 
 @pytest.mark.parametrize("block,extras", sorted(_compose_extras().items()))

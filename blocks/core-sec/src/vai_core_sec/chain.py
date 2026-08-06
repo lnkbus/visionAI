@@ -80,6 +80,25 @@ class AuditChain:
     def count(self) -> int:
         return self._seq_no
 
+    def _restrict_permissions(self) -> None:
+        """감사 디렉토리를 소유자만 보게 조인다. 열려 있으면 그 자체가 유출 경로다.
+
+        **조이지 못해도 기동은 계속한다.** 마운트된 볼륨의 소유자가 다르면
+        chmod 가 거부되는데(맥의 Docker Desktop 이 그렇다), 그때 죽어 버리면
+        감사 블록이 통째로 안 뜨고 **감사 로그가 아예 안 남는다.** 권한이 넓은
+        것보다 기록이 없는 쪽이 나쁘다.
+
+        대신 **조용히 넘어가지 않는다.** 이건 보안 태세의 문제라 로그에
+        남아야 하고, 운영자가 호스트 쪽에서 권한을 잡을 수 있어야 한다.
+        """
+        try:
+            os.chmod(self._dir, 0o700)
+        except OSError as exc:
+            log.warning(
+                "감사 디렉토리 권한을 조이지 못했다 — 호스트에서 직접 확인한다",
+                extra={"dir": str(self._dir), "reason": str(exc)},
+            )
+
     def load(self) -> None:
         """기존 세그먼트를 훑어 체인의 끝을 찾는다.
 
@@ -87,8 +106,7 @@ class AuditChain:
         가볍게 유지한다. 검증은 별도 API에서 한다.
         """
         self._dir.mkdir(parents=True, exist_ok=True)
-        # 감사 로그 디렉토리는 소유자만 본다. 열려 있으면 그 자체가 유출 경로다.
-        os.chmod(self._dir, 0o700)
+        self._restrict_permissions()
 
         last: AuditRecord | None = None
         for record in self._iter_records():

@@ -263,6 +263,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: rag-kb
+        # 벡터 저장소 클라이언트. 이 구성은 qdrant 를 쓰므로 함께 넣는다 —
+        # 안 넣으면 기동 순간 ModuleNotFoundError 로 죽는다.
+        EXTRAS: ${VAI_RAG_EXTRAS-qdrant}
     environment:
       <<: *block-env
       VAI_BLOCK_ID: RAG-KB
@@ -287,6 +290,9 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         BLOCK: rag-srch
+        # 벡터 저장소 클라이언트. 이 구성은 qdrant 를 쓰므로 함께 넣는다 —
+        # 안 넣으면 기동 순간 ModuleNotFoundError 로 죽는다.
+        EXTRAS: ${VAI_RAG_EXTRAS-qdrant}
     environment:
       <<: *block-env
       VAI_BLOCK_ID: RAG-SRCH
