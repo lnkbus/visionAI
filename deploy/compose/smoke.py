@@ -79,21 +79,34 @@ def compose(*args: str) -> str:
     return subprocess.run([*COMPOSE, *args], capture_output=True, text=True, check=False).stdout
 
 
-def stt_adapter() -> str:
-    """STT-CORE 가 실제로 무엇으로 돌고 있는지.
+def excused_by_real_engine() -> str:
+    """자막이 안 온 것을 **봐줘도 되는 상황인가.** 아니면 빈 문자열.
 
-    **합성음으로는 진짜 엔진의 결과를 단정할 수 없다.** 이 스크립트가 넣는
-    것은 220Hz 사인파고, Whisper 는 그걸 말로 듣지 않는다 — 환각 필터가
-    걸러 내면 자막이 안 오는 것이 오히려 정상이다. 그때 "끊겼다"고 하면
-    멀쩡한 스택을 두고 원인을 찾게 된다.
+    합성음으로는 진짜 엔진의 결과를 단정할 수 없다. 이 스크립트가 넣는 것은
+    220Hz 사인파고, Whisper 는 그걸 말로 듣지 않는다 — 환각 필터가 걸러 내면
+    자막이 안 오는 것이 오히려 정상이다.
+
+    **다만 STT-CORE 가 살아 있을 때만 그렇다.** 죽어 있는데 "진짜 엔진이라
+    그렇다"고 적으면 그건 변명이 아니라 거짓말이다. 실제로 그렇게 나왔다 —
+    모델이 없어 크래시 루프에 빠진 컨테이너를 두고 화면은 엔진 탓을 했다.
     """
+    running = subprocess.run(
+        [*COMPOSE, "ps", "--status", "running", "--services"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if "stt-core" not in running.stdout.split():
+        return ""
+
     result = subprocess.run(
         [*COMPOSE, "exec", "-T", "stt-core", "printenv", "VAI_STT_ADAPTER"],
         capture_output=True,
         text=True,
         check=False,
     )
-    return result.stdout.strip() or "faster_whisper"
+    adapter = result.stdout.strip() or "faster_whisper"
+    return "" if adapter == "fake" else adapter
 
 
 def logs_of(service: str, lines: int = 40) -> str:
@@ -270,8 +283,8 @@ async def check_pipeline() -> None:
             text = await _await_caption(ws, seconds=30)
         ok(f"자막 도착 — {text[:40]}")
     except TimeoutError:
-        adapter = stt_adapter()
-        if adapter != "fake":
+        adapter = excused_by_real_engine()
+        if adapter:
             # 여기서 단정하지 않는다. 넣은 것이 사인파라 진짜 엔진이 아무것도
             # 못 알아듣는 것이 정상이고, 그것을 실패로 세면 이 스크립트를
             # 아무도 믿지 않게 된다.
@@ -343,8 +356,8 @@ async def check_meeting() -> None:
                 text = await _await_caption(observer, seconds=30)
         ok(f"회의 자막 도착 — {text[:40]}")
     except TimeoutError:
-        adapter = stt_adapter()
-        if adapter != "fake":
+        adapter = excused_by_real_engine()
+        if adapter:
             print(f"  ⚠ 회의 자막이 안 왔다 — 다만 지금 엔진이 {adapter} 다 (위와 같은 이유)")
             return
         fail(
