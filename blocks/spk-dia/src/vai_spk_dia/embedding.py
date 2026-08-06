@@ -116,6 +116,21 @@ class SpeechBrainEmbedder(BaseSpeakerEmbedder):
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
         import asyncio
+        from pathlib import Path
+
+        # **먼저 경로부터 본다.** 없는 경로를 넘기면 speechbrain 이 모델 허브로
+        # 나가려다 죽고, 로그에는 그 URL 이 찍힌다 — 폐쇄망 담당자가 그 문구를
+        # 보고 할 수 있는 일이 없다.
+        # 디스크 조회는 스레드로 넘긴다 — 기동 중 한 번뿐이지만, 이벤트 루프
+        # 안에서 블로킹 호출을 하는 습관은 남기지 않는다.
+        if not await asyncio.to_thread(Path(model_path).is_dir):
+            raise RuntimeError(
+                f"화자분리 임베더 모델이 없다: {model_path}\n"
+                "  네트워크가 있는 곳에서 먼저 받는다:\n"
+                "    deploy/airgap/fetch_models.sh --out models --spk --no-stt\n"
+                "  모델 없이 돌리려면 VAI_DIA_EMBEDDER=spectral 로 내린다 — "
+                "다만 spectral 은 음역이 뚜렷이 다른 화자만 가른다."
+            )
 
         from speechbrain.inference.speaker import EncoderClassifier
 

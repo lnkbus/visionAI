@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -82,6 +83,21 @@ class FasterWhisperAdapter(BaseSTTAdapter):
         self._language: str | None = None
 
     async def initialize(self, model_path: str, config: dict[str, Any]) -> None:
+        # **먼저 경로부터 본다.** 없는 경로를 그대로 넘기면 엔진이
+        # huggingface 조회 실패로 죽고, 로그에는 모델 허브 경로가 찍힌다 —
+        # 폐쇄망 담당자가 그 문구를 보고 할 수 있는 일이 없다.
+        # 디스크 조회는 스레드로 넘긴다 — 기동 중 한 번뿐이라 비용은 없지만,
+        # 이벤트 루프 안에서 블로킹 호출을 하는 습관은 남기지 않는다.
+        if not await asyncio.to_thread(Path(model_path).is_dir):
+            raise RuntimeError(
+                f"STT 모델이 없다: {model_path}\n"
+                "  네트워크가 있는 곳에서 먼저 받는다:\n"
+                "    deploy/airgap/fetch_models.sh --out models --stt small\n"
+                "  받은 디렉토리를 컨테이너에 마운트한다(VAI_MODEL_DIR).\n"
+                "  모델 없이 화면만 볼 거라면 VAI_STT_ADAPTER=fake 로 내린다 — "
+                "다만 fake 는 인식하지 않는다."
+            )
+
         from faster_whisper import WhisperModel
 
         device = resolve_device(str(config.get("device", "cuda")))
